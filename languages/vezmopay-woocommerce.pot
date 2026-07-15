@@ -420,3 +420,21 @@ msgstr ""
 #: assets/js/blocks.js:35
 msgid "(Test mode)"
 msgstr ""
+
+#: includes/class-vezmopay-plugin.php
+msgid "Every 5 minutes (VezmoPay)"
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php
+msgid "Check VezmoPay payment status"
+msgstr ""
+
+#. translators: %s: error message
+#: includes/class-vezmopay-plugin.php
+msgid "VezmoPay status check failed: %s"
+msgstr ""
+
+#. translators: %s: payment status reported by VezmoPay
+#: includes/class-vezmopay-plugin.php
+msgid "VezmoPay status check: %s"
+msgstr ""
