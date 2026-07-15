@@ -86,6 +86,21 @@ Not yet. VezmoPay has no saved-payment-method or off-session charging API, which
 
 Enable **Debug logging** in the gateway settings, then look under WooCommerce → Status → Logs, source `vezmopay`. API keys, secrets, bearer tokens and webhook secrets are redacted before anything is written.
 
+== External services ==
+
+This plugin connects your store to the VezmoPay payment platform, operated by ACCEPT GLOBAL LIMITED. It communicates with the following services:
+
+**VezmoPay API** (`https://api.vezmo.com`, or `https://api.dev.vezmo.com` in Test mode)
+
+* Used to authenticate your merchant API key, create payment sessions and payment links, and verify payment status.
+* Data sent: your API credentials (server-to-server only), the order amount, currency, an order reference/title, and — if provided at checkout — the customer's billing name, email, phone, company and country. Sent when a customer starts a VezmoPay payment and whenever the plugin verifies a payment's status.
+
+**VezmoPay hosted checkout and payment element** (`https://user.vezmo.com` / `https://dev.vezmo.com`, and the `vezmo.js` script plus payment iframe served from the API host)
+
+* The customer's browser loads VezmoPay-hosted payment pages/scripts so that card details are entered directly with VezmoPay and never touch your store. Loaded on the pay page (element/iframe modes) or after redirect (hosted mode).
+
+VezmoPay is operated by ACCEPT GLOBAL LIMITED: [https://vezmo.com](https://vezmo.com) — see the site for terms of service and privacy policy.
+
 == Changelog ==
 
 = 0.1.0 =

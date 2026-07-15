@@ -395,6 +395,9 @@ class Gateway extends \WC_Payment_Gateway {
 		if ( is_wp_error( $data ) && in_array( $data->get_error_code(), array( 'vezmopay_http_409', 'vezmopay_http_422' ), true ) ) {
 			$attempt++;
 			$order->update_meta_data( '_vezmopay_attempt', $attempt );
+			// Persist the bump immediately: if the retry below also fails, the next
+			// request must not collide with the same terminal idempotency key again.
+			$order->save_meta_data();
 			$idempotency_key = 'wc-' . $order->get_order_key() . '-a' . $attempt;
 			$data            = $this->api_client()->create_secure_payment( $payload, $idempotency_key );
 		}
@@ -468,6 +471,7 @@ class Gateway extends \WC_Payment_Gateway {
 				'failed'     => __( 'Payment failed. Please try again or use a different payment method.', 'vezmopay-woocommerce' ),
 				'expired'    => __( 'This payment session expired. Reloading…', 'vezmopay-woocommerce' ),
 				'error'      => __( 'Something went wrong. Please try again.', 'vezmopay-woocommerce' ),
+				'review'     => __( 'We received your payment, but this order needs a quick manual review before it is confirmed. Please contact us — do not pay again.', 'vezmopay-woocommerce' ),
 			),
 		);
 

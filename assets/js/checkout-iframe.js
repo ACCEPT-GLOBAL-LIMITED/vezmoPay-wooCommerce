@@ -58,6 +58,10 @@
 					window.location = res.data.redirect;
 				} else if ( 'FAILED' === res.data.status ) {
 					setMessage( params.i18n.failed );
+				} else if ( 'MISMATCH' === res.data.status ) {
+					// Manual review required — polling will never resolve this.
+					done = true;
+					setMessage( params.i18n.review );
 				}
 			} )
 			.catch( function () {

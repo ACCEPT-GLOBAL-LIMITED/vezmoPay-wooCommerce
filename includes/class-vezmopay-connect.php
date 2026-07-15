@@ -34,7 +34,7 @@ class Connect {
 			wp_send_json_error( array( 'message' => __( 'You are not allowed to do that.', 'vezmopay-woocommerce' ) ), 403 );
 		}
 
-		$environment = isset( $_POST['environment'] ) && 'live' === $_POST['environment'] ? 'live' : 'test';
+		$environment = isset( $_POST['environment'] ) && 'live' === sanitize_key( wp_unslash( $_POST['environment'] ) ) ? 'live' : 'test';
 		$gateway     = Plugin::instance()->gateway();
 		if ( ! $gateway ) {
 			wp_send_json_error( array( 'message' => __( 'Gateway not available.', 'vezmopay-woocommerce' ) ), 500 );

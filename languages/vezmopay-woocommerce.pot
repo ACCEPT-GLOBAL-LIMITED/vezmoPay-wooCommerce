@@ -438,3 +438,7 @@ msgstr ""
 #: includes/class-vezmopay-plugin.php
 msgid "VezmoPay status check: %s"
 msgstr ""
+
+#: includes/class-vezmopay-gateway.php
+msgid "We received your payment, but this order needs a quick manual review before it is confirmed. Please contact us — do not pay again."
+msgstr ""
