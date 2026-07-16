@@ -136,11 +136,12 @@ class Gateway extends \WC_Payment_Gateway {
 	}
 
 	/**
-	 * Hosted checkout page base for the active environment.
+	 * Hosted checkout / dashboard app base for the active environment
+	 * (also hosts the Connect-with-VezmoPay consent page).
 	 *
 	 * @return string
 	 */
-	private function checkout_base() {
+	public function checkout_base() {
 		$environment = $this->environment();
 		return untrailingslashit( $this->get_option( $environment . '_checkout_base', 'live' === $environment ? Settings::DEFAULT_LIVE_CHECKOUT : Settings::DEFAULT_TEST_CHECKOUT ) );
 	}
@@ -173,6 +174,7 @@ class Gateway extends \WC_Payment_Gateway {
 	 * Settings screen with an unmistakable environment banner.
 	 */
 	public function admin_options() {
+		Connect::maybe_render_connect_notices( $this );
 		if ( $this->is_test_mode() ) {
 			echo '<div class="notice notice-warning inline"><p><strong>';
 			echo esc_html__( 'VezmoPay is in TEST mode.', 'vezmopay-woocommerce' );
@@ -190,6 +192,42 @@ class Gateway extends \WC_Payment_Gateway {
 			echo '</p></div>';
 		}
 		parent::admin_options();
+	}
+
+	/**
+	 * Render the "Connect with VezmoPay" settings row.
+	 *
+	 * @param string $key  Field key.
+	 * @param array  $data Field definition.
+	 * @return string
+	 */
+	public function generate_vezmopay_connect_html( $key, $data ) {
+		$connected = $this->api_client()->is_configured();
+		ob_start();
+		?>
+		<tr valign="top">
+			<th scope="row" class="titledesc">
+				<label><?php echo esc_html( $data['title'] ); ?></label>
+			</th>
+			<td class="forminp">
+				<a href="<?php echo esc_url( Connect::connect_url( $this ) ); ?>" class="button button-primary">
+					<?php esc_html_e( 'Connect with VezmoPay', 'vezmopay-woocommerce' ); ?>
+				</a>
+				<?php if ( $connected ) : ?>
+					<span style="margin-left:8px;color:#2ea44f;font-weight:600;">
+						<?php
+						/* translators: %s: environment name */
+						echo esc_html( sprintf( __( '● Credentials saved (%s environment)', 'vezmopay-woocommerce' ), $this->environment() ) );
+						?>
+					</span>
+				<?php endif; ?>
+				<p class="description">
+					<?php esc_html_e( 'Log in to your VezmoPay account and your API credentials will be created and filled in automatically. Connecting deactivates any previous API key on your account. Prefer manual setup? Paste a key and secret below instead.', 'vezmopay-woocommerce' ); ?>
+				</p>
+			</td>
+		</tr>
+		<?php
+		return ob_get_clean();
 	}
 
 	/**

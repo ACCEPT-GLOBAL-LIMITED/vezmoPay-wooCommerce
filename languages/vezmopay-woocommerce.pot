@@ -456,3 +456,57 @@ msgstr ""
 #: includes/class-vezmopay-gateway.php
 msgid "VezmoPay (visible to store managers only): %s"
 msgstr ""
+
+#: includes/class-vezmopay-connect.php
+msgid "VezmoPay gateway is not available."
+msgstr ""
+
+#: includes/class-vezmopay-connect.php
+msgid "The connect token could not be exchanged. It may have expired — try connecting again."
+msgstr ""
+
+#. translators: %s: environment name
+#: includes/class-vezmopay-connect.php
+msgid "Connected with VezmoPay! Your %s API credentials were created and saved automatically."
+msgstr ""
+
+#: includes/class-vezmopay-connect.php
+msgid "Note: connecting deactivates any previous API key for your VezmoPay account."
+msgstr ""
+
+#: includes/class-vezmopay-connect.php
+msgid "Connection cancelled — no changes were made."
+msgstr ""
+
+#: includes/class-vezmopay-connect.php
+msgid "The connect request could not be verified (it may have expired). Please try again."
+msgstr ""
+
+#: includes/class-vezmopay-connect.php
+msgid "VezmoPay did not return a connect token. Please try again."
+msgstr ""
+
+#: includes/class-vezmopay-connect.php
+msgid "The connect token could not be exchanged for credentials. It may have expired — please try again."
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php
+msgid "Connect with VezmoPay"
+msgstr ""
+
+#. translators: %s: environment name
+#: includes/class-vezmopay-gateway.php
+msgid "● Credentials saved (%s environment)"
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php
+msgid "Log in to your VezmoPay account and your API credentials will be created and filled in automatically. Connecting deactivates any previous API key on your account. Prefer manual setup? Paste a key and secret below instead."
+msgstr ""
+
+#: includes/class-vezmopay-settings.php
+msgid "Connect"
+msgstr ""
+
+#: includes/class-vezmopay-settings.php
+msgid "Recommended: click \"Connect with VezmoPay\" to log in and have your API credentials created and saved automatically. Or create an API key manually in the VezmoPay dashboard (Settings → API Keys) with the secure-payment.create, paylink.create, paylink.read and payment.read permissions and paste it below. Either way, creating a new key deactivates your previous key."
+msgstr ""

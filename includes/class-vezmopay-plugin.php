@@ -65,8 +65,9 @@ final class Plugin {
 		add_action( 'wc_ajax_vezmopay_confirm', array( $this, 'ajax_confirm' ) );
 		add_action( 'wc_ajax_vezmopay_status', array( $this, 'ajax_status' ) );
 
-		// Admin: "Test connection" button.
+		// Admin: "Test connection" button + Connect-with-VezmoPay callback.
 		add_action( 'wp_ajax_vezmopay_test_connection', array( Connect::class, 'ajax_test_connection' ) );
+		add_action( 'admin_post_vezmopay_connect_callback', array( Connect::class, 'handle_connect_callback' ) );
 
 		// Background reconciliation (webhook safety net; sole automatic path for hosted mode).
 		add_filter( 'cron_schedules', array( $this, 'cron_schedules' ) ); // phpcs:ignore WordPress.WP.CronInterval.CronSchedulesInterval -- 5 min is required to settle hosted-checkout orders promptly.

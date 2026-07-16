@@ -82,7 +82,11 @@ class Settings {
 			'connection'          => array(
 				'title'       => __( 'Connection', 'vezmopay-woocommerce' ),
 				'type'        => 'title',
-				'description' => __( 'Create an API key in your VezmoPay dashboard (Settings → API Keys) and paste the key and secret below. The key needs the secure-payment.create, paylink.create, paylink.read and payment.read permissions. Note: creating a new key in the dashboard deactivates your previous key.', 'vezmopay-woocommerce' ),
+				'description' => __( 'Recommended: click "Connect with VezmoPay" to log in and have your API credentials created and saved automatically. Or create an API key manually in the VezmoPay dashboard (Settings → API Keys) with the secure-payment.create, paylink.create, paylink.read and payment.read permissions and paste it below. Either way, creating a new key deactivates your previous key.', 'vezmopay-woocommerce' ),
+			),
+			'connect'             => array(
+				'title' => __( 'Connect', 'vezmopay-woocommerce' ),
+				'type'  => 'vezmopay_connect',
 			),
 			'test_api_key'        => array(
 				'title'             => __( 'Test API key', 'vezmopay-woocommerce' ),
