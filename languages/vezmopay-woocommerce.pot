@@ -442,3 +442,17 @@ msgstr ""
 #: includes/class-vezmopay-gateway.php
 msgid "We received your payment, but this order needs a quick manual review before it is confirmed. Please contact us — do not pay again."
 msgstr ""
+
+#. translators: %s: error detail from the VezmoPay API
+#: includes/class-vezmopay-gateway.php
+msgid "VezmoPay could not start the payment: %s"
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php
+msgid "Your VezmoPay API key is missing a required permission: element/iframe modes need secure-payment.create, hosted mode needs paylink.create. Assign it to the key in the VezmoPay admin."
+msgstr ""
+
+#. translators: %s: technical error detail (shown to store managers only)
+#: includes/class-vezmopay-gateway.php
+msgid "VezmoPay (visible to store managers only): %s"
+msgstr ""

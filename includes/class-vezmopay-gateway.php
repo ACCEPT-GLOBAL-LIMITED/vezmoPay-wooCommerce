@@ -269,8 +269,7 @@ class Gateway extends \WC_Payment_Gateway {
 
 		$result = $this->ensure_secure_payment( $order );
 		if ( is_wp_error( $result ) ) {
-			$this->logger->error( 'Secure payment creation failed for order #' . $order->get_id() . ': ' . $result->get_error_message() );
-			wc_add_notice( $this->customer_facing_error( $result ), 'error' );
+			$this->handle_start_failure( $order, $result );
 			return array( 'result' => 'failure' );
 		}
 
@@ -304,8 +303,7 @@ class Gateway extends \WC_Payment_Gateway {
 
 			$paylink = $this->api_client()->create_paylink( $payload );
 			if ( is_wp_error( $paylink ) ) {
-				$this->logger->error( 'Paylink creation failed for order #' . $order->get_id() . ': ' . $paylink->get_error_message() );
-				wc_add_notice( $this->customer_facing_error( $paylink ), 'error' );
+				$this->handle_start_failure( $order, $paylink );
 				return array( 'result' => 'failure' );
 			}
 
@@ -674,6 +672,44 @@ class Gateway extends \WC_Payment_Gateway {
 			0,
 			120
 		);
+	}
+
+	/**
+	 * Record a payment-start failure so the merchant can actually diagnose it:
+	 * always logged, always an order note, and — for store managers testing
+	 * checkout themselves — an extra notice with the real API error.
+	 *
+	 * @param \WC_Order $order Order.
+	 * @param \WP_Error $error API error.
+	 */
+	private function handle_start_failure( $order, $error ) {
+		$this->logger->error( 'Payment start failed for order #' . $order->get_id() . ': ' . $error->get_error_message() );
+
+		$order->add_order_note(
+			sprintf(
+				/* translators: %s: error detail from the VezmoPay API */
+				__( 'VezmoPay could not start the payment: %s', 'vezmopay-woocommerce' ),
+				$error->get_error_message()
+			)
+		);
+		$order->save();
+
+		wc_add_notice( $this->customer_facing_error( $error ), 'error' );
+
+		if ( current_user_can( 'manage_woocommerce' ) ) {
+			$detail = $error->get_error_message();
+			if ( 'vezmopay_http_403' === $error->get_error_code() ) {
+				$detail .= ' — ' . __( 'Your VezmoPay API key is missing a required permission: element/iframe modes need secure-payment.create, hosted mode needs paylink.create. Assign it to the key in the VezmoPay admin.', 'vezmopay-woocommerce' );
+			}
+			wc_add_notice(
+				sprintf(
+					/* translators: %s: technical error detail (shown to store managers only) */
+					__( 'VezmoPay (visible to store managers only): %s', 'vezmopay-woocommerce' ),
+					$detail
+				),
+				'notice'
+			);
+		}
 	}
 
 	/**
