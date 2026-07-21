@@ -58,6 +58,14 @@
 	display: inline-block;
 }
 
+.vezmopay-prod-button {
+	margin-left: 10px !important;
+	border-radius: 10px !important;
+	border-color: #c3c8f5 !important;
+	color: #3d4dff !important;
+	font-weight: 600 !important;
+}
+
 /* ── Account settings panel (mirrors the VezmoPay console Settings page) ── */
 
 .vezmopay-account-panel,

@@ -189,7 +189,7 @@ class Settings {
 				'type'        => 'title',
 				'description' => sprintf(
 					/* translators: %s: webhook URL */
-					__( 'In your VezmoPay dashboard, register a webhook endpoint pointing at %s subscribed to the payment.success and payment.failed events, then paste the whsec_ secret below (it is shown only once). Webhooks are the source of truth for order completion — the plugin also independently verifies every event against the VezmoPay API before updating an order.', 'vezmopay-woocommerce' ),
+					__( 'When you use "Connect with VezmoPay", your webhook (URL %s, events payment.success / payment.failed) is registered automatically and its secret is filled in below. For manual setup, register that endpoint in your VezmoPay dashboard and paste the whsec_ secret (shown once). Either way, webhooks drive order completion — and the plugin independently re-verifies every event against the VezmoPay API before updating an order.', 'vezmopay-woocommerce' ),
 					'<code>' . esc_html( $webhook_url ) . '</code>'
 				),
 			),
@@ -198,7 +198,7 @@ class Settings {
 				'type'              => 'password',
 				'default'           => '',
 				'custom_attributes' => array( 'autocomplete' => 'new-password' ),
-				'description'       => __( 'whsec_… value from the VezmoPay dashboard. Used to verify webhook signatures when VezmoPay sends them.', 'vezmopay-woocommerce' ),
+				'description'       => __( 'Filled in automatically when you use "Connect with VezmoPay". Only needed for manual setup: paste the whsec_… value shown once when you register a webhook in the VezmoPay dashboard.', 'vezmopay-woocommerce' ),
 			),
 			'auto_update'         => array(
 				'title'       => __( 'Automatic updates', 'vezmopay-woocommerce' ),

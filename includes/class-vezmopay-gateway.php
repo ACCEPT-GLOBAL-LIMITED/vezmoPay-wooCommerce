@@ -242,8 +242,13 @@ class Gateway extends \WC_Payment_Gateway {
 						?>
 					</span>
 				<?php endif; ?>
+				<a href="<?php echo esc_url( $this->checkout_base() . '/vezmopay/activate' ); ?>" class="button vezmopay-prod-button" target="_blank" rel="noopener noreferrer">
+					<?php esc_html_e( 'Request production access', 'vezmopay-woocommerce' ); ?>
+				</a>
 				<p class="description">
-					<?php esc_html_e( 'Log in to your VezmoPay account and your API credentials will be created and filled in automatically. Connecting deactivates any previous API key on your account. Prefer manual setup? Paste a key and secret below instead.', 'vezmopay-woocommerce' ); ?>
+					<?php esc_html_e( 'Log in to your VezmoPay account and your API credentials — and your webhook — are created and filled in automatically. Connecting deactivates any previous API key on your account. Prefer manual setup? Paste a key and secret below instead.', 'vezmopay-woocommerce' ); ?>
+					<br />
+					<?php esc_html_e( 'Going live: click "Request production access" to complete VezmoPay account verification. Once approved, switch Environment to Live and connect again to get your live credentials.', 'vezmopay-woocommerce' ); ?>
 				</p>
 			</td>
 		</tr>

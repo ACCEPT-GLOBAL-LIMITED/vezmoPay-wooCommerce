@@ -720,3 +720,15 @@ msgstr ""
 #: includes/class-vezmopay-settings.php
 msgid "Updates are published on GitHub and appear on your Plugins screen like any other plugin update. When enabled, WordPress installs them automatically in the background. When disabled, you can still update with one click from the Plugins screen (or use its own \"Enable auto-updates\" toggle)."
 msgstr ""
+
+#: includes/class-vezmopay-connect.php
+msgid "Your webhook was registered automatically too — no copy-paste needed."
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php
+msgid "Request production access"
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php
+msgid "Going live: click \"Request production access\" to complete VezmoPay account verification. Once approved, switch Environment to Live and connect again to get your live credentials."
+msgstr ""

@@ -44,6 +44,8 @@ class Connect {
 				'redirect_uri' => admin_url( 'admin-post.php?action=vezmopay_connect_callback' ),
 				'state'        => $state,
 				'environment'  => $gateway->environment(),
+				// So VezmoPay can auto-register our webhook and return its secret.
+				'webhook_uri'  => Webhook::url(),
 			)
 		);
 	}
@@ -100,7 +102,20 @@ class Connect {
 		$gateway->update_option( $key_env . '_api_secret', (string) $credentials['secret'] );
 		$gateway->update_option( 'environment', $key_env );
 
-		self::back_to_settings( array( 'vezmopay_connected' => $key_env ) );
+		// Auto-registered webhook: save the signing secret so verification is on
+		// with zero manual copy-paste.
+		$webhook_saved = false;
+		if ( ! empty( $credentials['webhookSecret'] ) ) {
+			$gateway->update_option( 'webhook_secret', (string) $credentials['webhookSecret'] );
+			$webhook_saved = true;
+		}
+
+		self::back_to_settings(
+			array(
+				'vezmopay_connected' => $key_env,
+				'vezmopay_webhook'   => $webhook_saved ? '1' : '0',
+			)
+		);
 	}
 
 	/**
@@ -167,7 +182,11 @@ class Connect {
 			echo '<div class="notice notice-success inline"><p><strong>';
 			/* translators: %s: environment name */
 			echo esc_html( sprintf( __( 'Connected with VezmoPay! Your %s API credentials were created and saved automatically.', 'vezmopay-woocommerce' ), $env ) );
-			echo '</strong> ' . esc_html__( 'Note: connecting deactivates any previous API key for your VezmoPay account.', 'vezmopay-woocommerce' ) . '</p></div>';
+			echo '</strong> ';
+			if ( isset( $_GET['vezmopay_webhook'] ) && '1' === $_GET['vezmopay_webhook'] ) {
+				echo esc_html__( 'Your webhook was registered automatically too — no copy-paste needed.', 'vezmopay-woocommerce' ) . ' ';
+			}
+			echo esc_html__( 'Note: connecting deactivates any previous API key for your VezmoPay account.', 'vezmopay-woocommerce' ) . '</p></div>';
 		}
 
 		if ( isset( $_GET['vezmopay_connect_error'] ) ) {
