@@ -39,15 +39,24 @@ class Connect {
 		$state = wp_generate_password( 32, false, false );
 		set_transient( 'vezmopay_connect_state_' . $state, get_current_user_id(), self::STATE_TTL );
 
-		return $gateway->checkout_base() . '/integrations/woocommerce/connect?' . http_build_query(
-			array(
-				'redirect_uri' => admin_url( 'admin-post.php?action=vezmopay_connect_callback' ),
-				'state'        => $state,
-				'environment'  => $gateway->environment(),
-				// So VezmoPay can auto-register our webhook and return its secret.
-				'webhook_uri'  => Webhook::url(),
-			)
+		$args = array(
+			'redirect_uri' => admin_url( 'admin-post.php?action=vezmopay_connect_callback' ),
+			'state'        => $state,
+			'environment'  => $gateway->environment(),
 		);
+
+		// So VezmoPay can auto-register our webhook and return its secret. The
+		// consent page only accepts an https URL (or http on localhost), so omit
+		// it otherwise — a webhook detail must never block onboarding.
+		$webhook_url = Webhook::url();
+		$host        = wp_parse_url( $webhook_url, PHP_URL_HOST );
+		$is_https    = 0 === strpos( (string) $webhook_url, 'https://' );
+		$is_local    = in_array( $host, array( 'localhost', '127.0.0.1', '::1' ), true );
+		if ( $is_https || $is_local ) {
+			$args['webhook_url'] = $webhook_url;
+		}
+
+		return $gateway->checkout_base() . '/integrations/woocommerce/connect?' . http_build_query( $args );
 	}
 
 	/**
