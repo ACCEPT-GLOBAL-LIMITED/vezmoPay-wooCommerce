@@ -120,3 +120,9 @@ VezmoPay is operated by ACCEPT GLOBAL LIMITED: [https://vezmo.com](https://vezmo
 * Webhook receiver with signature verification (when available), event deduplication, and mandatory API re-verification of every event.
 * HPOS and Cart & Checkout Blocks compatibility.
 * Idempotent payment creation, amount-mismatch guard, zero-decimal currency guard, redacted debug logging.
+
+= Updates =
+
+New releases are published on GitHub and appear on your WordPress Plugins screen like any other update — one-click update, or enable automatic background updates in the plugin settings (or via the Plugins screen's own "Enable auto-updates" toggle).
+
+Distribution note: the plugin checks the GitHub Releases API. If the source repository is private, set a read-only token via the `VEZMOPAY_GITHUB_TOKEN` constant in wp-config.php (or the `vezmopay_github_token` filter) so update checks can authenticate; a public repository needs no token.

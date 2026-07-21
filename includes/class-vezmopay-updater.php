@@ -83,15 +83,23 @@ class Updater {
 			return $cached ? $cached : null; // Empty array = cached "no release".
 		}
 
+		$headers = array(
+			'Accept'     => 'application/vnd.github+json',
+			'User-Agent' => 'VezmoPay-WooCommerce/' . VEZMOPAY_WC_VERSION,
+		);
+		// Private repos (and higher rate limits) need a token. Provide one via the
+		// VEZMOPAY_GITHUB_TOKEN constant in wp-config.php or the filter below.
+		$token = $this->token();
+		if ( '' !== $token ) {
+			$headers['Authorization'] = 'Bearer ' . $token;
+		}
+
 		$response = wp_remote_get(
 			'https://api.github.com/repos/' . self::REPO . '/releases/latest',
 			array(
 				'timeout'   => 15,
 				'sslverify' => true,
-				'headers'   => array(
-					'Accept'     => 'application/vnd.github+json',
-					'User-Agent' => 'VezmoPay-WooCommerce/' . VEZMOPAY_WC_VERSION,
-				),
+				'headers'   => $headers,
 			)
 		);
 
@@ -127,6 +135,18 @@ class Updater {
 
 		set_transient( self::CACHE_KEY, $release, self::CACHE_TTL );
 		return $release;
+	}
+
+	/**
+	 * GitHub token for API reads (only needed while the repo is private, or to
+	 * raise the anonymous rate limit). Prefer a wp-config.php constant.
+	 *
+	 * @return string
+	 */
+	private function token() {
+		$token = defined( 'VEZMOPAY_GITHUB_TOKEN' ) ? (string) constant( 'VEZMOPAY_GITHUB_TOKEN' ) : '';
+		/** Filter the GitHub token used for update checks. */
+		return (string) apply_filters( 'vezmopay_github_token', $token );
 	}
 
 	/**
