@@ -200,6 +200,13 @@ class Settings {
 				'custom_attributes' => array( 'autocomplete' => 'new-password' ),
 				'description'       => __( 'whsec_… value from the VezmoPay dashboard. Used to verify webhook signatures when VezmoPay sends them.', 'vezmopay-woocommerce' ),
 			),
+			'auto_update'         => array(
+				'title'       => __( 'Automatic updates', 'vezmopay-woocommerce' ),
+				'type'        => 'checkbox',
+				'label'       => __( 'Automatically install new VezmoPay plugin releases', 'vezmopay-woocommerce' ),
+				'default'     => 'yes',
+				'description' => __( 'Updates are published on GitHub and appear on your Plugins screen like any other plugin update. When enabled, WordPress installs them automatically in the background. When disabled, you can still update with one click from the Plugins screen (or use its own "Enable auto-updates" toggle).', 'vezmopay-woocommerce' ),
+			),
 			'debug'               => array(
 				'title'       => __( 'Debug logging', 'vezmopay-woocommerce' ),
 				'type'        => 'checkbox',

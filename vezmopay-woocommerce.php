@@ -13,6 +13,7 @@
  * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain:       vezmopay-woocommerce
  * Domain Path:       /languages
+ * Update URI:        https://github.com/ACCEPT-GLOBAL-LIMITED/vezmoPay-wooCommerce
  *
  * WC requires at least: 8.0
  * WC tested up to:      9.9

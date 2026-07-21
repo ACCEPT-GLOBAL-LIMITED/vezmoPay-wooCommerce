@@ -691,3 +691,32 @@ msgstr ""
 #: includes/class-vezmopay-settings.php
 msgid "Theme for the VezmoPay payment page frame (header, footer, background and messages). The secure card form itself is hosted by VezmoPay and always renders in light mode. Applies to the inline element and iframe modes."
 msgstr ""
+
+#: includes/class-vezmopay-updater.php
+msgid "See the GitHub release notes for details."
+msgstr ""
+
+#. translators: %s: version
+#: includes/class-vezmopay-updater.php
+msgid "Version %s"
+msgstr ""
+
+#: includes/class-vezmopay-updater.php
+msgid "View full release on GitHub"
+msgstr ""
+
+#: includes/class-vezmopay-updater.php
+msgid "Could not prepare the VezmoPay update package."
+msgstr ""
+
+#: includes/class-vezmopay-settings.php
+msgid "Automatic updates"
+msgstr ""
+
+#: includes/class-vezmopay-settings.php
+msgid "Automatically install new VezmoPay plugin releases"
+msgstr ""
+
+#: includes/class-vezmopay-settings.php
+msgid "Updates are published on GitHub and appear on your Plugins screen like any other plugin update. When enabled, WordPress installs them automatically in the background. When disabled, you can still update with one click from the Plugins screen (or use its own \"Enable auto-updates\" toggle)."
+msgstr ""

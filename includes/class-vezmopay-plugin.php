@@ -34,6 +34,13 @@ final class Plugin {
 	public $webhook;
 
 	/**
+	 * Self-hosted updater (GitHub releases).
+	 *
+	 * @var Updater
+	 */
+	public $updater;
+
+	/**
 	 * Get (and lazily create) the singleton.
 	 *
 	 * @return Plugin
@@ -56,6 +63,7 @@ final class Plugin {
 	 */
 	private function __construct() {
 		$this->webhook = new Webhook();
+		$this->updater = new Updater();
 
 		add_filter( 'woocommerce_payment_gateways', array( $this, 'register_gateway' ) );
 		add_action( 'rest_api_init', array( $this->webhook, 'register_routes' ) );
