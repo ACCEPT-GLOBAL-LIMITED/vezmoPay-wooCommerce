@@ -30,6 +30,16 @@ VezmoPay for WooCommerce connects your store to the VezmoPay payment platform. C
 * Optional debug logging to WooCommerce → Status → Logs with API keys, secrets and tokens redacted.
 * API credentials can be kept out of the database entirely via `wp-config.php` constants.
 
+= Pricing =
+
+VezmoPay uses transparent per-transaction pricing — no monthly fee, no setup fee, no minimum volume, no lock-in ([full pricing](https://vezmo.com/pricing/vezmopay)):
+
+* **Cards:** 2.79% + $0.29 per successful charge (American Express 2.89% + $0.49; international cards +1%; currency conversion +1%)
+* **Bank payments (ACH):** 0.9% + $1.00 per successful payment, capped at $10.00
+* **Payouts:** 0.1% + $0.30 per withdrawal
+* Fraud screening / 3-D Secure: $0.10 per card charge; disputed payments $20.00 (refunded if you win); returned bank payments $5.00
+* Refunds return your processing fee proportionally. Custom rates are available for higher volumes; exact rates are confirmed at account approval.
+
 = Current limitations =
 
 These reflect the VezmoPay platform as it exists today (verified against the platform API — see the plugin's `docs/VEZMOPAY-API-CONTRACT.md`), not missing plugin work:

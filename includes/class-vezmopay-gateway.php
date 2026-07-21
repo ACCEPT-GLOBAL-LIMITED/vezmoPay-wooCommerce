@@ -523,7 +523,7 @@ class Gateway extends \WC_Payment_Gateway {
 			wp_localize_script( 'vezmopay-iframe', 'vezmopay_params', $params );
 		}
 
-		$logo_url = VEZMOPAY_WC_PLUGIN_URL . 'assets/img/vezmo.svg';
+		$logo_url = VEZMOPAY_WC_PLUGIN_URL . 'assets/img/vezmopay.svg';
 		$lock_svg = '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 10V8a5 5 0 0 1 10 0v2m-11 0h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1Z" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
 		echo '<div id="vezmopay-checkout" class="vezmopay-checkout" data-mode="' . esc_attr( $mode ) . '">';
@@ -552,7 +552,7 @@ class Gateway extends \WC_Payment_Gateway {
 		echo '<noscript><p class="vezmopay-message is-info" style="display:block;">' . esc_html__( 'JavaScript is disabled. After paying in the secure form above, your order will be confirmed by email once VezmoPay notifies us.', 'vezmopay-woocommerce' ) . '</p></noscript>';
 
 		echo '<div class="vezmopay-footer">';
-		echo '<span class="vezmopay-powered">' . esc_html__( 'Powered by', 'vezmopay-woocommerce' ) . ' <img src="' . esc_url( $logo_url ) . '" alt="Vezmo" /></span>';
+		echo '<span class="vezmopay-powered">' . esc_html__( 'Powered by', 'vezmopay-woocommerce' ) . ' <img src="' . esc_url( $logo_url ) . '" alt="VezmoPay" /></span>';
 		echo '<span class="vezmopay-trust"><span>' . esc_html__( 'PCI DSS', 'vezmopay-woocommerce' ) . '</span><span>' . esc_html__( '3-D Secure', 'vezmopay-woocommerce' ) . '</span></span>';
 		echo '</div>';
 

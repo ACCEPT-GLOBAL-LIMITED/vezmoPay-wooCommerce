@@ -192,6 +192,22 @@ sequenceDiagram
 
 Every ⛔ is a **platform** limitation verified against the VezmoPay API source — the full audit lives in [`docs/FEATURE-MAPPING.md`](docs/FEATURE-MAPPING.md) and [`docs/VEZMOPAY-API-CONTRACT.md`](docs/VEZMOPAY-API-CONTRACT.md). The plugin is structured so each one can light up the moment the API ships it.
 
+## 💸 Pricing
+
+Transparent per-transaction pricing — **no monthly fee, no setup fee, no minimum, no lock-in** ([full pricing →](https://vezmo.com/pricing/vezmopay))
+
+| | Rate |
+|---|---|
+| 💳 Cards | **2.79% + $0.29** per successful charge |
+| 🏦 Bank payments (ACH) | **0.9% + $1.00**, capped at $10.00 |
+| 🌍 International cards / currency conversion | +1% each |
+| 💼 American Express | 2.89% + $0.49 |
+| 📤 Payouts | 0.1% + $0.30 per withdrawal |
+| 🛡️ Fraud screening / 3-D Secure | $0.10 per card charge |
+| ⚖️ Disputes | $20.00 (refunded if you win) · returned bank payments $5.00 |
+
+Refunds return your processing fee proportionally. Custom rates available for higher volumes — exact rates are confirmed at account approval.
+
 ## ❓ FAQ
 
 <details>

@@ -530,3 +530,8 @@ msgstr ""
 #: includes/class-vezmopay-gateway.php
 msgid "3-D Secure"
 msgstr ""
+
+#. translators: 1: card rate, 2: ACH rate, 3: opening anchor tag to the pricing page, 4: closing anchor tag
+#: includes/class-vezmopay-settings.php
+msgid "Pricing: %1$s per successful card charge, %2$s per bank (ACH) payment, capped at $10. No monthly fee, no setup fee, no minimum. %3$sSee full VezmoPay pricing%4$s."
+msgstr ""
