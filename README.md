@@ -75,7 +75,7 @@ wp plugin activate vezmopay-woocommerce
 In the **VezmoPay dashboard → Settings → API Keys**, create a key with these permissions:
 
 ```
-secure-payment.create   paylink.create   paylink.read   payment.read
+secure-payment.create   paylink.create   paylink.read   payment.read   account.read   account.update
 ```
 
 > ⚠️ Copy the key (`vzm_…`) **and** secret immediately — the secret is shown only once, and creating a new key deactivates your previous one.

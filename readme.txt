@@ -55,7 +55,7 @@ These reflect the VezmoPay platform as it exists today (verified against the pla
 == Installation ==
 
 1. Upload the plugin to `/wp-content/plugins/` (or install via Plugins → Add New) and activate it. WooCommerce 8.0+ must be active.
-2. In your **VezmoPay dashboard**, create an API key (Settings → API Keys) with these permissions: `secure-payment.create`, `paylink.create`, `paylink.read`, `payment.read`. Note that creating a new key deactivates your previous key.
+2. In your **VezmoPay dashboard**, create an API key (Settings → API Keys) with these permissions: `secure-payment.create`, `paylink.create`, `paylink.read`, `payment.read`, plus `account.read` and `account.update` for the in-plugin account settings panel. Note that creating a new key deactivates your previous key.
 3. In WordPress, go to **WooCommerce → Settings → Payments → VezmoPay**. Choose your environment (Test or Live), paste the API key and secret, save, and click **Test connection**.
    * Alternatively, define `VEZMOPAY_TEST_API_KEY`, `VEZMOPAY_TEST_API_SECRET`, `VEZMOPAY_LIVE_API_KEY` and `VEZMOPAY_LIVE_API_SECRET` in `wp-config.php` to keep secrets out of the database.
 4. In the VezmoPay dashboard, register a **webhook endpoint** pointing at `https://your-store.example/wp-json/vezmopay/v1/webhook`, subscribed to the `payment.success` and `payment.failed` events. Copy the `whsec_…` secret (shown only once) into the plugin's **Webhook secret** field and save.

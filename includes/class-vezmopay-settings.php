@@ -82,7 +82,7 @@ class Settings {
 			'connection'          => array(
 				'title'       => __( 'Connection', 'vezmopay-woocommerce' ),
 				'type'        => 'title',
-				'description' => __( 'Recommended: click "Connect with VezmoPay" to log in and have your API credentials created and saved automatically. Or create an API key manually in the VezmoPay dashboard (Settings → API Keys) with the secure-payment.create, paylink.create, paylink.read and payment.read permissions and paste it below. Either way, creating a new key deactivates your previous key.', 'vezmopay-woocommerce' )
+				'description' => __( 'Recommended: click "Connect with VezmoPay" to log in and have your API credentials created and saved automatically. Or create an API key manually in the VezmoPay dashboard (Settings → API Keys) with the secure-payment.create, paylink.create, paylink.read, payment.read, account.read and account.update permissions and paste it below. Either way, creating a new key deactivates your previous key.', 'vezmopay-woocommerce' )
 					. '<br />'
 					. sprintf(
 						/* translators: 1: card rate, 2: ACH rate, 3: opening anchor tag to the pricing page, 4: closing anchor tag */
