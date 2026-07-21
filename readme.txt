@@ -105,7 +105,7 @@ This plugin connects your store to the VezmoPay payment platform, operated by AC
 * Used to authenticate your merchant API key, create payment sessions and payment links, and verify payment status.
 * Data sent: your API credentials (server-to-server only), the order amount, currency, an order reference/title, and — if provided at checkout — the customer's billing name, email, phone, company and country. Sent when a customer starts a VezmoPay payment and whenever the plugin verifies a payment's status.
 
-**VezmoPay hosted checkout and payment element** (`https://user.vezmo.com` / `https://dev.vezmo.com`, and the `vezmo.js` script plus payment iframe served from the API host)
+**VezmoPay hosted checkout and payment element** (`https://user.vezmo.com` / `https://user.dev.vezmo.com`, and the `vezmo.js` script plus payment iframe served from the API host)
 
 * The customer's browser loads VezmoPay-hosted payment pages/scripts so that card details are entered directly with VezmoPay and never touch your store. Loaded on the pay page (element/iframe modes) or after redirect (hosted mode).
 

@@ -9,7 +9,7 @@ platform today — the plugin stubs or omits them (see `docs/FEATURE-MAPPING.md`
 | Role | Live | Test/Staging |
 |---|---|---|
 | API | `https://api.vezmo.com` | `https://api.dev.vezmo.com` |
-| Hosted checkout (vezmo-user app) | `https://user.vezmo.com` | `https://dev.vezmo.com` |
+| Hosted checkout (vezmo-user app) | `https://user.vezmo.com` | `https://user.dev.vezmo.com` |
 
 - Global route prefix: `/api/v1` (no other versioning).
 - ⚠️ The public docs page inside vezmo-user references `api.vezmo.app`; all real configs use

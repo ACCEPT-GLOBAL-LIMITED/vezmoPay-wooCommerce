@@ -19,8 +19,11 @@ class Settings {
 	 */
 	const DEFAULT_LIVE_API      = 'https://api.vezmo.com';
 	const DEFAULT_TEST_API      = 'https://api.dev.vezmo.com';
+	// Merchant app host (serves the hosted checkout + the Connect consent page).
+	// NOTE: dev.vezmo.com is the marketing site; the merchant app dev host is
+	// user.dev.vezmo.com (confirmed against the API CORS allowlist).
 	const DEFAULT_LIVE_CHECKOUT = 'https://user.vezmo.com';
-	const DEFAULT_TEST_CHECKOUT = 'https://dev.vezmo.com';
+	const DEFAULT_TEST_CHECKOUT = 'https://user.dev.vezmo.com';
 
 	/**
 	 * Currencies Stripe treats as zero-decimal. The VezmoPay platform multiplies all

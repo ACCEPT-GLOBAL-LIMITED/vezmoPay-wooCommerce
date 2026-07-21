@@ -154,7 +154,16 @@ class Gateway extends \WC_Payment_Gateway {
 	 */
 	public function checkout_base() {
 		$environment = $this->environment();
-		return untrailingslashit( $this->get_option( $environment . '_checkout_base', 'live' === $environment ? Settings::DEFAULT_LIVE_CHECKOUT : Settings::DEFAULT_TEST_CHECKOUT ) );
+		$base        = untrailingslashit( $this->get_option( $environment . '_checkout_base', 'live' === $environment ? Settings::DEFAULT_LIVE_CHECKOUT : Settings::DEFAULT_TEST_CHECKOUT ) );
+
+		// Self-heal installs that persisted the earlier wrong default: dev.vezmo.com
+		// is the marketing site, not the merchant app — the app dev host is
+		// user.dev.vezmo.com. Never a legitimate checkout host, so safe to correct.
+		if ( 'https://dev.vezmo.com' === $base || 'http://dev.vezmo.com' === $base ) {
+			$base = Settings::DEFAULT_TEST_CHECKOUT;
+		}
+
+		return $base;
 	}
 
 	/**
