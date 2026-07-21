@@ -671,3 +671,23 @@ msgstr ""
 #: includes/class-vezmopay-plugin.php
 msgid "The change could not be saved: "
 msgstr ""
+
+#: includes/class-vezmopay-settings.php
+msgid "Checkout appearance"
+msgstr ""
+
+#: includes/class-vezmopay-settings.php
+msgid "Light"
+msgstr ""
+
+#: includes/class-vezmopay-settings.php
+msgid "Dark"
+msgstr ""
+
+#: includes/class-vezmopay-settings.php
+msgid "Auto (match the shopper's device)"
+msgstr ""
+
+#: includes/class-vezmopay-settings.php
+msgid "Theme for the VezmoPay payment page frame (header, footer, background and messages). The secure card form itself is hosted by VezmoPay and always renders in light mode. Applies to the inline element and iframe modes."
+msgstr ""

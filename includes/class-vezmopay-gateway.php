@@ -109,6 +109,16 @@ class Gateway extends \WC_Payment_Gateway {
 	}
 
 	/**
+	 * Selected checkout theme for the pay-page frame.
+	 *
+	 * @return string 'light'|'dark'|'auto'
+	 */
+	public function checkout_theme() {
+		$theme = $this->get_option( 'checkout_theme', 'light' );
+		return in_array( $theme, array( 'light', 'dark', 'auto' ), true ) ? $theme : 'light';
+	}
+
+	/**
 	 * Credential for an environment, preferring wp-config constants over saved options
 	 * so secrets can be kept out of the database entirely.
 	 *
@@ -562,7 +572,7 @@ class Gateway extends \WC_Payment_Gateway {
 		$logo_url = VEZMOPAY_WC_PLUGIN_URL . 'assets/img/vezmopay.svg';
 		$lock_svg = '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 10V8a5 5 0 0 1 10 0v2m-11 0h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1Z" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
-		echo '<div id="vezmopay-checkout" class="vezmopay-checkout" data-mode="' . esc_attr( $mode ) . '">';
+		echo '<div id="vezmopay-checkout" class="vezmopay-checkout" data-mode="' . esc_attr( $mode ) . '" data-theme="' . esc_attr( $this->checkout_theme() ) . '">';
 
 		echo '<div class="vezmopay-header">';
 		echo '<img class="vezmopay-logo" src="' . esc_url( $logo_url ) . '" alt="VezmoPay" />';

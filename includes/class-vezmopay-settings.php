@@ -79,6 +79,17 @@ class Settings {
 				),
 				'description' => __( 'VezmoPay marks keys as Test or Live when you create them in the dashboard. Use a Test-environment key here while testing.', 'vezmopay-woocommerce' ),
 			),
+			'checkout_theme'      => array(
+				'title'       => __( 'Checkout appearance', 'vezmopay-woocommerce' ),
+				'type'        => 'select',
+				'default'     => 'light',
+				'options'     => array(
+					'light' => __( 'Light', 'vezmopay-woocommerce' ),
+					'dark'  => __( 'Dark', 'vezmopay-woocommerce' ),
+					'auto'  => __( 'Auto (match the shopper\'s device)', 'vezmopay-woocommerce' ),
+				),
+				'description' => __( 'Theme for the VezmoPay payment page frame (header, footer, background and messages). The secure card form itself is hosted by VezmoPay and always renders in light mode. Applies to the inline element and iframe modes.', 'vezmopay-woocommerce' ),
+			),
 			'connection'          => array(
 				'title'       => __( 'Connection', 'vezmopay-woocommerce' ),
 				'type'        => 'title',
