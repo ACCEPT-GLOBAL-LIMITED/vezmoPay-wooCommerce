@@ -1,7 +1,105 @@
-/* VezmoPay checkout styles. */
+/**
+ * VezmoPay checkout styles — mirrors the vezmo-user checkout design system
+ * (vp-card anatomy, brand gradient, Plus Jakarta Sans, light-only like all
+ * VezmoPay customer payment surfaces).
+ */
 
 .vezmopay-checkout {
-	margin: 1.5em 0;
+	--vz-brand: #3d4dff;
+	--vz-brand-2: #5b6bff;
+	--vz-brand-ink: #1b2bb8;
+	--vz-brand-soft: #eef0ff;
+	--vz-ink: #0b1020;
+	--vz-ink-2: #1a1f36;
+	--vz-muted: #6b7280;
+	--vz-muted-2: #9aa3b2;
+	--vz-line: #e6e8ee;
+	--vz-line-2: #eff1f6;
+	--vz-success: #15803d;
+	--vz-success-2: #22c55e;
+	--vz-danger: #b91c1c;
+	--vz-warn: #b45309;
+
+	max-width: 760px;
+	margin: 2em auto;
+	background: #fff;
+	border: 1px solid var(--vz-line);
+	border-radius: 18px;
+	box-shadow: 0 30px 60px -30px rgba(20, 30, 80, 0.25), 0 12px 24px -16px rgba(20, 30, 80, 0.12);
+	overflow: hidden;
+	color: var(--vz-ink);
+	font-family: "Plus Jakarta Sans", "Geist", "Inter", system-ui, -apple-system, sans-serif;
+}
+
+/* Header — merchant strip: wordmark left, secure pill right. */
+.vezmopay-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	flex-wrap: wrap;
+	padding: 18px 24px;
+	background: linear-gradient(180deg, #fafbfe, #fff);
+	border-bottom: 1px solid var(--vz-line-2);
+}
+
+.vezmopay-header .vezmopay-logo {
+	height: 22px;
+	width: auto;
+	display: block;
+}
+
+.vezmopay-secure-pill {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 12px;
+	border-radius: 999px;
+	background: rgba(255, 255, 255, 0.7);
+	border: 1px solid var(--vz-line);
+	font-size: 11.5px;
+	font-weight: 600;
+	color: var(--vz-ink-2);
+	letter-spacing: -0.005em;
+	white-space: nowrap;
+}
+
+.vezmopay-secure-pill .vezmopay-lock {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 18px;
+	height: 18px;
+	border-radius: 999px;
+	background: linear-gradient(135deg, var(--vz-success-2), var(--vz-success));
+	color: #fff;
+	flex: none;
+}
+
+.vezmopay-secure-pill .vezmopay-lock svg {
+	width: 10px;
+	height: 10px;
+	display: block;
+}
+
+/* Test-mode pill — warn tint, matches the dashboard's soft status badges. */
+.vezmopay-test-badge {
+	display: inline-block;
+	margin: 16px 24px 0;
+	padding: 5px 12px;
+	border-radius: 999px;
+	background: #fef3c7;
+	border: 1px solid rgba(180, 83, 9, 0.25);
+	color: var(--vz-warn);
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+
+/* Body — hosts the VezmoPay payment element / iframe. */
+.vezmopay-body {
+	padding: 16px 20px 8px;
 }
 
 .vezmopay-container {
@@ -14,25 +112,154 @@
 	min-height: 720px;
 	border: 0;
 	display: block;
+	border-radius: 12px;
+	background: #fff;
 }
 
-.vezmopay-test-badge {
-	display: inline-block;
-	background: #fff3cd;
-	color: #664d03;
-	border: 1px solid #ffecb5;
-	border-radius: 4px;
-	padding: 4px 10px;
-	font-size: 0.85em;
+/* Loading state — brand spinner until the secure form is ready. */
+.vezmopay-loading {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 12px;
+	padding: 48px 20px;
+	color: var(--vz-muted);
+	font-size: 12.5px;
 	font-weight: 600;
-	margin-bottom: 12px;
 }
 
+.vezmopay-loading .vezmopay-spinner {
+	width: 28px;
+	height: 28px;
+	border-radius: 999px;
+	border: 3px solid rgba(61, 77, 255, 0.15);
+	border-top-color: var(--vz-brand);
+	animation: vezmopay-spin 0.6s linear infinite;
+}
+
+@keyframes vezmopay-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.vezmopay-loading .vezmopay-spinner {
+		animation: none;
+		border-top-color: rgba(61, 77, 255, 0.45);
+	}
+}
+
+.vezmopay-checkout.is-ready .vezmopay-loading {
+	display: none;
+}
+
+/* Status messages — tinted notice cards from the checkout result screens. */
 .vezmopay-message {
-	min-height: 1.5em;
+	display: none;
+	margin: 0 20px 16px;
+	padding: 12px 16px;
+	border-radius: 12px;
+	font-size: 13px;
 	font-weight: 600;
+	line-height: 1.45;
 }
 
+.vezmopay-message.is-error {
+	display: block;
+	border: 1px solid #fecaca;
+	background: linear-gradient(180deg, #fff5f5, #fff);
+	color: #7f1d1d;
+}
+
+.vezmopay-message.is-info {
+	display: block;
+	border: 1px solid #c7d2fe;
+	background: linear-gradient(180deg, #f5f7ff, #fff);
+	color: var(--vz-brand-ink);
+}
+
+.vezmopay-message.is-success {
+	display: block;
+	border: 1px solid #bbf7d0;
+	background: linear-gradient(180deg, #f4fbf6, #fff);
+	color: var(--vz-success);
+}
+
+/* Footer — trust strip: powered-by wordmark + assurance items. */
+.vezmopay-footer {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	flex-wrap: wrap;
+	padding: 14px 24px;
+	border-top: 1px solid var(--vz-line-2);
+	font-size: 10.5px;
+	font-weight: 600;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--vz-muted-2);
+}
+
+.vezmopay-footer .vezmopay-powered {
+	display: inline-flex;
+	align-items: center;
+	gap: 7px;
+}
+
+.vezmopay-footer .vezmopay-powered img {
+	height: 14px;
+	width: auto;
+	display: block;
+	opacity: 0.9;
+}
+
+.vezmopay-footer .vezmopay-trust span {
+	margin-left: 14px;
+	white-space: nowrap;
+}
+
+.vezmopay-footer .vezmopay-trust span::before {
+	content: "✓ ";
+	color: var(--vz-success);
+}
+
+.vezmopay-footer .vezmopay-trust span:first-child {
+	margin-left: 0;
+}
+
+/* Blocks checkout tile. */
 .vezmopay-blocks-test-badge {
-	color: #664d03;
+	color: var(--vz-warn, #b45309);
+}
+
+/* Small screens. */
+@media (max-width: 520px) {
+	.vezmopay-checkout {
+		margin: 1em auto;
+		border-radius: 14px;
+	}
+
+	.vezmopay-header,
+	.vezmopay-footer {
+		padding: 14px 16px;
+	}
+
+	.vezmopay-body {
+		padding: 12px 12px 4px;
+	}
+
+	.vezmopay-container iframe,
+	#vezmopay-frame {
+		min-height: 640px;
+	}
+
+	.vezmopay-message {
+		margin: 0 12px 12px;
+	}
+
+	.vezmopay-test-badge {
+		margin: 12px 16px 0;
+	}
 }

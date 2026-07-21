@@ -19,13 +19,28 @@
 
 	var params = vezmopay_params;
 	var messageEl = document.getElementById( 'vezmopay-message' );
+	var checkoutEl = document.getElementById( 'vezmopay-checkout' );
+	var frameEl = document.getElementById( 'vezmopay-frame' );
 	var done = false;
 
-	function setMessage( text ) {
-		if ( messageEl ) {
-			messageEl.textContent = text || '';
+	function setMessage( text, kind ) {
+		if ( ! messageEl ) {
+			return;
+		}
+		messageEl.textContent = text || '';
+		messageEl.className = 'vezmopay-message' + ( text ? ' is-' + ( kind || 'info' ) : '' );
+	}
+
+	function markReady() {
+		if ( checkoutEl ) {
+			checkoutEl.classList.add( 'is-ready' );
 		}
 	}
+
+	if ( frameEl ) {
+		frameEl.addEventListener( 'load', markReady );
+	}
+	window.setTimeout( markReady, 8000 );
 
 	function poll() {
 		if ( done ) {
@@ -53,15 +68,15 @@
 				if ( res.data.redirect ) {
 					done = true;
 					if ( 'PENDING' === res.data.status ) {
-						setMessage( params.i18n.pending );
+						setMessage( params.i18n.pending, 'info' );
 					}
 					window.location = res.data.redirect;
 				} else if ( 'FAILED' === res.data.status ) {
-					setMessage( params.i18n.failed );
+					setMessage( params.i18n.failed, 'error' );
 				} else if ( 'MISMATCH' === res.data.status ) {
 					// Manual review required — polling will never resolve this.
 					done = true;
-					setMessage( params.i18n.review );
+					setMessage( params.i18n.review, 'info' );
 				}
 			} )
 			.catch( function () {

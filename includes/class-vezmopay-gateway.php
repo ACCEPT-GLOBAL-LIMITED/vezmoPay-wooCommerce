@@ -42,6 +42,7 @@ class Gateway extends \WC_Payment_Gateway {
 	 */
 	public function __construct() {
 		$this->id                 = Plugin::GATEWAY_ID;
+		$this->icon               = VEZMOPAY_WC_PLUGIN_URL . 'assets/img/vezmo-mark.svg';
 		$this->method_title       = __( 'VezmoPay', 'vezmopay-woocommerce' );
 		$this->method_description = __( 'Accept payments through VezmoPay — hosted checkout, inline payment element, or secure iframe. Card data never touches your server.', 'vezmopay-woocommerce' );
 		$this->has_fields         = false;
@@ -210,14 +211,15 @@ class Gateway extends \WC_Payment_Gateway {
 				<label><?php echo esc_html( $data['title'] ); ?></label>
 			</th>
 			<td class="forminp">
-				<a href="<?php echo esc_url( Connect::connect_url( $this ) ); ?>" class="button button-primary">
+				<a href="<?php echo esc_url( Connect::connect_url( $this ) ); ?>" class="button button-primary vezmopay-connect-button">
+					<img src="<?php echo esc_url( VEZMOPAY_WC_PLUGIN_URL . 'assets/img/vezmo-mark.svg' ); ?>" alt="" aria-hidden="true" />
 					<?php esc_html_e( 'Connect with VezmoPay', 'vezmopay-woocommerce' ); ?>
 				</a>
 				<?php if ( $connected ) : ?>
-					<span style="margin-left:8px;color:#2ea44f;font-weight:600;">
+					<span class="vezmopay-status-pill">
 						<?php
 						/* translators: %s: environment name */
-						echo esc_html( sprintf( __( '● Credentials saved (%s environment)', 'vezmopay-woocommerce' ), $this->environment() ) );
+						echo esc_html( sprintf( __( 'Credentials saved (%s environment)', 'vezmopay-woocommerce' ), $this->environment() ) );
 						?>
 					</span>
 				<?php endif; ?>
@@ -521,10 +523,22 @@ class Gateway extends \WC_Payment_Gateway {
 			wp_localize_script( 'vezmopay-iframe', 'vezmopay_params', $params );
 		}
 
+		$logo_url = VEZMOPAY_WC_PLUGIN_URL . 'assets/img/vezmo.svg';
+		$lock_svg = '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 10V8a5 5 0 0 1 10 0v2m-11 0h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1Z" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
 		echo '<div id="vezmopay-checkout" class="vezmopay-checkout" data-mode="' . esc_attr( $mode ) . '">';
+
+		echo '<div class="vezmopay-header">';
+		echo '<img class="vezmopay-logo" src="' . esc_url( $logo_url ) . '" alt="VezmoPay" />';
+		echo '<span class="vezmopay-secure-pill"><span class="vezmopay-lock">' . $lock_svg . '</span>' . esc_html__( 'Secure payment · 256-bit TLS', 'vezmopay-woocommerce' ) . '</span>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static inline SVG defined above.
+		echo '</div>';
+
 		if ( $this->is_test_mode() ) {
-			echo '<p class="vezmopay-test-badge">' . esc_html__( 'TEST MODE — no real money will move.', 'vezmopay-woocommerce' ) . '</p>';
+			echo '<span class="vezmopay-test-badge">' . esc_html__( 'Test mode — no real money will move', 'vezmopay-woocommerce' ) . '</span>';
 		}
+
+		echo '<div class="vezmopay-body">';
+		echo '<div class="vezmopay-loading" aria-hidden="true"><span class="vezmopay-spinner"></span>' . esc_html__( 'Preparing your secure payment…', 'vezmopay-woocommerce' ) . '</div>';
 		echo '<div id="vezmopay-container" class="vezmopay-container">';
 		if ( 'iframe' === $mode || '' === $sdk_url ) {
 			// Graceful-degradation path: a plain iframe works even if our JS fails;
@@ -532,8 +546,16 @@ class Gateway extends \WC_Payment_Gateway {
 			echo '<iframe id="vezmopay-frame" src="' . esc_url( $iframe_url ) . '" allow="payment" title="' . esc_attr__( 'VezmoPay secure payment', 'vezmopay-woocommerce' ) . '"></iframe>';
 		}
 		echo '</div>';
+		echo '</div>';
+
 		echo '<p id="vezmopay-message" class="vezmopay-message" role="status" aria-live="polite"></p>';
-		echo '<noscript><p>' . esc_html__( 'JavaScript is disabled. After paying in the secure form above, your order will be confirmed by email once VezmoPay notifies us.', 'vezmopay-woocommerce' ) . '</p></noscript>';
+		echo '<noscript><p class="vezmopay-message is-info" style="display:block;">' . esc_html__( 'JavaScript is disabled. After paying in the secure form above, your order will be confirmed by email once VezmoPay notifies us.', 'vezmopay-woocommerce' ) . '</p></noscript>';
+
+		echo '<div class="vezmopay-footer">';
+		echo '<span class="vezmopay-powered">' . esc_html__( 'Powered by', 'vezmopay-woocommerce' ) . ' <img src="' . esc_url( $logo_url ) . '" alt="Vezmo" /></span>';
+		echo '<span class="vezmopay-trust"><span>' . esc_html__( 'PCI DSS', 'vezmopay-woocommerce' ) . '</span><span>' . esc_html__( '3-D Secure', 'vezmopay-woocommerce' ) . '</span></span>';
+		echo '</div>';
+
 		echo '</div>';
 	}
 

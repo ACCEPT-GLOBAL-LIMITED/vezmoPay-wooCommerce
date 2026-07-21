@@ -20,12 +20,21 @@
 	var params = vezmopay_params;
 	var container = document.getElementById( 'vezmopay-container' );
 	var messageEl = document.getElementById( 'vezmopay-message' );
+	var checkoutEl = document.getElementById( 'vezmopay-checkout' );
 	var finalized = false;
 	var pollTimer = null;
 
-	function setMessage( text ) {
-		if ( messageEl ) {
-			messageEl.textContent = text || '';
+	function setMessage( text, kind ) {
+		if ( ! messageEl ) {
+			return;
+		}
+		messageEl.textContent = text || '';
+		messageEl.className = 'vezmopay-message' + ( text ? ' is-' + ( kind || 'info' ) : '' );
+	}
+
+	function markReady() {
+		if ( checkoutEl ) {
+			checkoutEl.classList.add( 'is-ready' );
 		}
 	}
 
@@ -54,7 +63,7 @@
 			return;
 		}
 		finalized = true;
-		setMessage( statusMessage || params.i18n.processing );
+		setMessage( statusMessage || params.i18n.processing, 'info' );
 		post( params.confirmUrl )
 			.then( function ( res ) {
 				if ( res && res.success && res.data && res.data.redirect ) {
@@ -91,12 +100,12 @@
 						window.clearInterval( pollTimer );
 						window.location = res.data.redirect;
 					} else if ( 'FAILED' === res.data.status ) {
-						setMessage( params.i18n.failed );
+						setMessage( params.i18n.failed, 'error' );
 					} else if ( 'MISMATCH' === res.data.status ) {
 						// Manual review required — polling will never resolve this.
 						finalized = true;
 						window.clearInterval( pollTimer );
-						setMessage( params.i18n.review );
+						setMessage( params.i18n.review, 'info' );
 					}
 				} )
 				.catch( function () {
@@ -114,6 +123,7 @@
 		frame.src = params.iframeUrl;
 		frame.setAttribute( 'allow', 'payment' );
 		frame.setAttribute( 'title', 'VezmoPay secure payment' );
+		frame.addEventListener( 'load', markReady );
 		container.appendChild( frame );
 	}
 
@@ -133,6 +143,12 @@
 			var vezmo = new Vezmo( params.apiBase ? { apiBase: params.apiBase } : undefined );
 			vezmo.mount( container, { clientToken: params.clientToken } );
 
+			var sdkFrame = container.querySelector( 'iframe' );
+			if ( sdkFrame ) {
+				sdkFrame.addEventListener( 'load', markReady );
+			}
+
+			vezmo.on( 'ready', markReady );
 			vezmo.on( 'success', function () {
 				finalize();
 			} );
@@ -143,10 +159,11 @@
 				finalize();
 			} );
 			vezmo.on( 'error', function ( evt ) {
-				setMessage( ( evt && evt.message ) || params.i18n.failed );
+				markReady();
+				setMessage( ( evt && evt.message ) || params.i18n.failed, 'error' );
 			} );
 			vezmo.on( 'expired', function () {
-				setMessage( params.i18n.expired );
+				setMessage( params.i18n.expired, 'info' );
 				window.setTimeout( function () {
 					window.location.reload();
 				}, 1500 );
@@ -154,6 +171,9 @@
 		} catch ( e ) {
 			mountFallbackIframe();
 		}
+
+		// Never leave the spinner up if events are blocked (trusted-origins not set).
+		window.setTimeout( markReady, 8000 );
 
 		// Fallback for stores whose origin is not (yet) in VezmoPay's trusted origins:
 		// events never arrive, but the poll still completes the order.

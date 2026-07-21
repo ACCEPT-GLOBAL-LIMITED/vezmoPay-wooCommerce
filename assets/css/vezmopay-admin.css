@@ -1,0 +1,59 @@
+/**
+ * VezmoPay admin styles — brands the settings screen's Connect flow with the
+ * product's signature gradient button (from the vezmo-user design system).
+ */
+
+.vezmopay-connect-button.button-primary,
+.vezmopay-connect-button.button-primary:focus {
+	background: linear-gradient(180deg, #5b6bff 0%, #3d4dff 60%, #1b2bb8 100%);
+	border: 0;
+	border-radius: 10px;
+	color: #fff;
+	font-weight: 700;
+	letter-spacing: -0.01em;
+	padding: 4px 16px;
+	text-shadow: none;
+	box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 6px 16px -8px rgba(61, 77, 255, 0.5);
+	transition: all 0.15s ease;
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.vezmopay-connect-button.button-primary:hover {
+	background: linear-gradient(180deg, #5b6bff 0%, #3d4dff 60%, #1b2bb8 100%);
+	color: #fff;
+	transform: translateY(-1px);
+	box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 10px 22px -10px rgba(61, 77, 255, 0.55);
+}
+
+.vezmopay-connect-button img {
+	height: 14px;
+	width: auto;
+	display: block;
+	filter: brightness(0) invert(1);
+}
+
+.vezmopay-status-pill {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	margin-left: 10px;
+	padding: 4px 12px;
+	border-radius: 999px;
+	background: #dcfce7;
+	border: 1px solid rgba(21, 128, 61, 0.2);
+	color: #15803d;
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.02em;
+}
+
+.vezmopay-status-pill::before {
+	content: "";
+	width: 7px;
+	height: 7px;
+	border-radius: 999px;
+	background: #22c55e;
+	display: inline-block;
+}

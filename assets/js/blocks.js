@@ -18,7 +18,29 @@
 	var __ = window.wp.i18n.__;
 
 	var settings = getSetting( 'vezmopay_data', {} );
-	var label = decodeEntities( settings.title || __( 'VezmoPay', 'vezmopay-woocommerce' ) );
+	var labelText = decodeEntities( settings.title || __( 'VezmoPay', 'vezmopay-woocommerce' ) );
+
+	function Label() {
+		var children = [
+			createElement( 'span', { key: 'text' }, labelText ),
+		];
+		if ( settings.icon ) {
+			children.push(
+				createElement( 'img', {
+					key: 'icon',
+					src: settings.icon,
+					alt: '',
+					'aria-hidden': 'true',
+					style: { height: '20px', width: 'auto', marginLeft: '8px' },
+				} )
+			);
+		}
+		return createElement(
+			'span',
+			{ style: { display: 'inline-flex', alignItems: 'center', width: '100%', justifyContent: 'space-between' } },
+			children
+		);
+	}
 
 	function Content() {
 		var children = [];
@@ -41,8 +63,8 @@
 
 	registerPaymentMethod( {
 		name: 'vezmopay',
-		label: label,
-		ariaLabel: label,
+		label: createElement( Label ),
+		ariaLabel: labelText,
 		content: createElement( Content ),
 		edit: createElement( Content ),
 		canMakePayment: function () {

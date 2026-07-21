@@ -73,6 +73,7 @@ class Blocks_Support extends AbstractPaymentMethodType {
 		return array(
 			'title'       => $this->get_setting( 'title', __( 'VezmoPay', 'vezmopay-woocommerce' ) ),
 			'description' => $this->get_setting( 'description', '' ),
+			'icon'        => VEZMOPAY_WC_PLUGIN_URL . 'assets/img/vezmo-mark.svg',
 			'testMode'    => $gateway ? $gateway->is_test_mode() : true,
 			'supports'    => $gateway ? array_filter( $gateway->supports, array( $gateway, 'supports' ) ) : array( 'products' ),
 		);

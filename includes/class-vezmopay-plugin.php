@@ -68,6 +68,7 @@ final class Plugin {
 		// Admin: "Test connection" button + Connect-with-VezmoPay callback.
 		add_action( 'wp_ajax_vezmopay_test_connection', array( Connect::class, 'ajax_test_connection' ) );
 		add_action( 'admin_post_vezmopay_connect_callback', array( Connect::class, 'handle_connect_callback' ) );
+		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_admin_styles' ) );
 
 		// Background reconciliation (webhook safety net; sole automatic path for hosted mode).
 		add_filter( 'cron_schedules', array( $this, 'cron_schedules' ) ); // phpcs:ignore WordPress.WP.CronInterval.CronSchedulesInterval -- 5 min is required to settle hosted-checkout orders promptly.
@@ -206,6 +207,23 @@ final class Plugin {
 				'redirect' => $done && 'FAILED' !== $result ? $gateway->get_return_url( $order ) : '',
 			)
 		);
+	}
+
+	/**
+	 * Brand the gateway's settings screen (Connect button, status pill).
+	 *
+	 * @param string $hook_suffix Current admin page hook.
+	 */
+	public function enqueue_admin_styles( $hook_suffix ) {
+		if ( 'woocommerce_page_wc-settings' !== $hook_suffix ) {
+			return;
+		}
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only screen detection.
+		$section = isset( $_GET['section'] ) ? sanitize_key( wp_unslash( $_GET['section'] ) ) : '';
+		if ( self::GATEWAY_ID !== $section ) {
+			return;
+		}
+		wp_enqueue_style( 'vezmopay-admin', VEZMOPAY_WC_PLUGIN_URL . 'assets/css/vezmopay-admin.css', array(), VEZMOPAY_WC_VERSION );
 	}
 
 	/**

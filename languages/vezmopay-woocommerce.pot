@@ -182,7 +182,7 @@ msgid "Something went wrong. Please try again."
 msgstr ""
 
 #: includes/class-vezmopay-gateway.php:485
-msgid "TEST MODE — no real money will move."
+msgid "Test mode — no real money will move"
 msgstr ""
 
 #: includes/class-vezmopay-gateway.php:491
@@ -496,7 +496,7 @@ msgstr ""
 
 #. translators: %s: environment name
 #: includes/class-vezmopay-gateway.php
-msgid "● Credentials saved (%s environment)"
+msgid "Credentials saved (%s environment)"
 msgstr ""
 
 #: includes/class-vezmopay-gateway.php
@@ -509,4 +509,24 @@ msgstr ""
 
 #: includes/class-vezmopay-settings.php
 msgid "Recommended: click \"Connect with VezmoPay\" to log in and have your API credentials created and saved automatically. Or create an API key manually in the VezmoPay dashboard (Settings → API Keys) with the secure-payment.create, paylink.create, paylink.read and payment.read permissions and paste it below. Either way, creating a new key deactivates your previous key."
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php
+msgid "Secure payment · 256-bit TLS"
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php
+msgid "Preparing your secure payment…"
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php
+msgid "Powered by"
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php
+msgid "PCI DSS"
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php
+msgid "3-D Secure"
 msgstr ""
