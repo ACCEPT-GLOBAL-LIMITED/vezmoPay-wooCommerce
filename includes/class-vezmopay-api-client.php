@@ -310,4 +310,49 @@ class Api_Client {
 		}
 		return $this->request( 'GET', $path );
 	}
+
+	/* ---------------------------------------------------------------------
+	 * Account settings (scopes: account.read / account.update) — the same
+	 * controls as the VezmoPay console's Settings page.
+	 * ------------------------------------------------------------------- */
+
+	/**
+	 * Which payment methods the account offers at checkout.
+	 *
+	 * @return array|\WP_Error { methods: { card|ach|applePay|googlePay:
+	 *                          { enabled, eligible, blockedByAdmin, toggleable } }, … }
+	 */
+	public function get_payment_methods() {
+		return $this->request( 'GET', '/merchant/account/payment-methods' );
+	}
+
+	/**
+	 * Toggle payment methods (card is always on and not accepted here).
+	 *
+	 * @param array $changes Any of { ach: bool, applePay: bool, googlePay: bool }.
+	 * @return array|\WP_Error Resulting state (same shape as get_payment_methods).
+	 */
+	public function set_payment_methods( array $changes ) {
+		return $this->request( 'PUT', '/merchant/account/payment-methods', $changes );
+	}
+
+	/**
+	 * The account's 3-D Secure setting.
+	 *
+	 * @return array|\WP_Error { mode: 'on'|'auto', controlAllowed, level, effective }
+	 */
+	public function get_three_ds() {
+		return $this->request( 'GET', '/merchant/account/3d-secure' );
+	}
+
+	/**
+	 * Set the 3-D Secure mode ('on' = authenticate every card payment,
+	 * 'auto' = only when the issuer/regulations require it).
+	 *
+	 * @param string $mode 'on'|'auto'.
+	 * @return array|\WP_Error Resulting state.
+	 */
+	public function set_three_ds( $mode ) {
+		return $this->request( 'PUT', '/merchant/account/3d-secure', array( 'mode' => $mode ) );
+	}
 }

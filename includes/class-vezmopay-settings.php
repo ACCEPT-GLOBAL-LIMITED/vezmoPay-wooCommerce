@@ -130,6 +130,15 @@ class Settings {
 				'type'        => 'vezmopay_test_connection',
 				'description' => '',
 			),
+			'account_settings'    => array(
+				'title'       => __( 'VezmoPay account settings', 'vezmopay-woocommerce' ),
+				'type'        => 'title',
+				'description' => __( 'These control your VezmoPay account itself — the same switches as your VezmoPay console. Changes apply everywhere you charge customers (this store, payment links, invoices), immediately.', 'vezmopay-woocommerce' ),
+			),
+			'account_panel'       => array(
+				'title' => '',
+				'type'  => 'vezmopay_account',
+			),
 			'advanced'            => array(
 				'title'       => __( 'Advanced', 'vezmopay-woocommerce' ),
 				'type'        => 'title',

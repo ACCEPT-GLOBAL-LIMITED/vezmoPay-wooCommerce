@@ -70,6 +70,10 @@ final class Plugin {
 		add_action( 'admin_post_vezmopay_connect_callback', array( Connect::class, 'handle_connect_callback' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_admin_styles' ) );
 
+		// Admin: live VezmoPay account settings (payment methods, 3-D Secure).
+		add_action( 'wp_ajax_vezmopay_account_get', array( $this, 'ajax_account_get' ) );
+		add_action( 'wp_ajax_vezmopay_account_update', array( $this, 'ajax_account_update' ) );
+
 		// Background reconciliation (webhook safety net; sole automatic path for hosted mode).
 		add_filter( 'cron_schedules', array( $this, 'cron_schedules' ) ); // phpcs:ignore WordPress.WP.CronInterval.CronSchedulesInterval -- 5 min is required to settle hosted-checkout orders promptly.
 		add_action( 'init', array( $this, 'maybe_schedule_cron' ) );
@@ -210,6 +214,87 @@ final class Plugin {
 	}
 
 	/**
+	 * Guard shared by the account-settings AJAX handlers.
+	 *
+	 * @return Gateway Exits with a JSON error when not allowed / not configured.
+	 */
+	private function account_ajax_gateway() {
+		check_ajax_referer( 'vezmopay-admin', 'nonce' );
+		if ( ! current_user_can( 'manage_woocommerce' ) ) {
+			wp_send_json_error( array( 'message' => __( 'You are not allowed to do that.', 'vezmopay-woocommerce' ) ), 403 );
+		}
+		$gateway = $this->gateway();
+		if ( ! $gateway || ! $gateway->api_client()->is_configured() ) {
+			wp_send_json_error( array( 'message' => __( 'Connect your VezmoPay account first.', 'vezmopay-woocommerce' ) ), 400 );
+		}
+		return $gateway;
+	}
+
+	/**
+	 * AJAX: load the account's payment-method + 3-D Secure state.
+	 *
+	 * Each block reports independently so a key missing one scope still
+	 * renders the other card.
+	 */
+	public function ajax_account_get() {
+		$client = $this->account_ajax_gateway()->api_client();
+
+		$methods  = $client->get_payment_methods();
+		$three_ds = $client->get_three_ds();
+
+		wp_send_json_success(
+			array(
+				'methods' => is_wp_error( $methods )
+					? array(
+						'ok'      => false,
+						'message' => $methods->get_error_message(),
+					)
+					: array(
+						'ok'   => true,
+						'data' => $methods,
+					),
+				'threeDs' => is_wp_error( $three_ds )
+					? array(
+						'ok'      => false,
+						'message' => $three_ds->get_error_message(),
+					)
+					: array(
+						'ok'   => true,
+						'data' => $three_ds,
+					),
+			)
+		);
+	}
+
+	/**
+	 * AJAX: apply a settings change (payment-method toggle or 3-D Secure mode).
+	 */
+	public function ajax_account_update() {
+		$client = $this->account_ajax_gateway()->api_client();
+
+		$kind = isset( $_POST['kind'] ) ? sanitize_key( wp_unslash( $_POST['kind'] ) ) : '';
+
+		if ( 'payment-methods' === $kind ) {
+			$method = isset( $_POST['method'] ) ? sanitize_text_field( wp_unslash( $_POST['method'] ) ) : '';
+			if ( ! in_array( $method, array( 'ach', 'applePay', 'googlePay' ), true ) ) {
+				wp_send_json_error( array( 'message' => __( 'Invalid payment method.', 'vezmopay-woocommerce' ) ), 400 );
+			}
+			$enabled = isset( $_POST['enabled'] ) && '1' === $_POST['enabled'];
+			$result  = $client->set_payment_methods( array( $method => $enabled ) );
+		} elseif ( '3ds' === $kind ) {
+			$mode = isset( $_POST['mode'] ) && 'on' === $_POST['mode'] ? 'on' : 'auto';
+			$result = $client->set_three_ds( $mode );
+		} else {
+			wp_send_json_error( array( 'message' => __( 'Invalid setting.', 'vezmopay-woocommerce' ) ), 400 );
+		}
+
+		if ( is_wp_error( $result ) ) {
+			wp_send_json_error( array( 'message' => $result->get_error_message() ), 502 );
+		}
+		wp_send_json_success( $result );
+	}
+
+	/**
 	 * Brand the gateway's settings screen (Connect button, status pill).
 	 *
 	 * @param string $hook_suffix Current admin page hook.
@@ -224,6 +309,42 @@ final class Plugin {
 			return;
 		}
 		wp_enqueue_style( 'vezmopay-admin', VEZMOPAY_WC_PLUGIN_URL . 'assets/css/vezmopay-admin.css', array(), VEZMOPAY_WC_VERSION );
+		wp_enqueue_script( 'vezmopay-admin-account', VEZMOPAY_WC_PLUGIN_URL . 'assets/js/admin-account.js', array(), VEZMOPAY_WC_VERSION, true );
+		wp_localize_script(
+			'vezmopay-admin-account',
+			'vezmopay_admin_params',
+			array(
+				'ajaxUrl' => admin_url( 'admin-ajax.php' ),
+				'nonce'   => wp_create_nonce( 'vezmopay-admin' ),
+				'i18n'    => array(
+					'loading'        => __( 'Loading your VezmoPay account settings…', 'vezmopay-woocommerce' ),
+					'loadFailed'     => __( 'We couldn\'t load your VezmoPay account settings. Make sure your API key has the account.read permission, or manage them in your VezmoPay console.', 'vezmopay-woocommerce' ),
+					'paymentMethods' => __( 'Payment methods', 'vezmopay-woocommerce' ),
+					'pmIntro'        => __( 'Choose which methods are offered to your customers at checkout (this store, payment links, invoices and products). Cards are always on.', 'vezmopay-woocommerce' ),
+					'pmFooter'       => __( 'Apple Pay and Google Pay appear automatically for eligible customers on supported devices when enabled. Disabling a method hides it everywhere immediately.', 'vezmopay-woocommerce' ),
+					'card'           => __( 'Cards', 'vezmopay-woocommerce' ),
+					'cardDesc'       => __( 'Visa, Mastercard, Amex and more. Always on — the baseline payment method for every checkout.', 'vezmopay-woocommerce' ),
+					'ach'            => __( 'Bank transfer (ACH)', 'vezmopay-woocommerce' ),
+					'achDesc'        => __( 'Let US customers pay directly from a bank account. Lower fees; USD only.', 'vezmopay-woocommerce' ),
+					'applePay'       => __( 'Apple Pay', 'vezmopay-woocommerce' ),
+					'applePayDesc'   => __( 'One-tap checkout for customers on Apple devices (rides the card rail).', 'vezmopay-woocommerce' ),
+					'googlePay'      => __( 'Google Pay', 'vezmopay-woocommerce' ),
+					'googlePayDesc'  => __( 'One-tap checkout for customers on Google / Android (rides the card rail).', 'vezmopay-woocommerce' ),
+					'alwaysOn'       => __( 'Always on', 'vezmopay-woocommerce' ),
+					'managed'        => __( 'Managed by Vezmo', 'vezmopay-woocommerce' ),
+					'notAvailable'   => __( 'Not available yet', 'vezmopay-woocommerce' ),
+					'verifyHint'     => __( 'Complete account verification to enable this method.', 'vezmopay-woocommerce' ),
+					'threeDs'        => __( '3D Secure (card authentication)', 'vezmopay-woocommerce' ),
+					'threeDsOn'      => __( '3D Secure is on', 'vezmopay-woocommerce' ),
+					'threeDsOff'     => __( '3D Secure is off', 'vezmopay-woocommerce' ),
+					'threeDsOnDesc'  => __( 'Every card payment is authenticated with 3D Secure, reducing fraud and shifting chargeback liability to the card issuer.', 'vezmopay-woocommerce' ),
+					'threeDsOffDesc' => __( '3D Secure is only requested when the card issuer or regulations require it.', 'vezmopay-woocommerce' ),
+					'threeDsLocked'  => __( '3D Secure is required on your account. Contact support if you need to change this.', 'vezmopay-woocommerce' ),
+					'threeDsNote'    => __( 'Cards from regions with regulatory requirements (e.g. Europe/SCA) are always authenticated regardless of this setting — turning it off only stops requesting 3D Secure on other cards.', 'vezmopay-woocommerce' ),
+					'updateFailed'   => __( 'The change could not be saved: ', 'vezmopay-woocommerce' ),
+				),
+			)
+		);
 	}
 
 	/**

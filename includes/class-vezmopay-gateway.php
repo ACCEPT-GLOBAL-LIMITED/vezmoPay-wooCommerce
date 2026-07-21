@@ -233,6 +233,42 @@ class Gateway extends \WC_Payment_Gateway {
 	}
 
 	/**
+	 * Render the live account-settings panel (payment methods + 3-D Secure),
+	 * populated by assets/js/admin-account.js from the VezmoPay API, plus a
+	 * links card for the console-only settings.
+	 *
+	 * @param string $key  Field key.
+	 * @param array  $data Field definition.
+	 * @return string
+	 */
+	public function generate_vezmopay_account_html( $key, $data ) {
+		unset( $key, $data );
+		$console_url = $this->checkout_base() . '/vezmopay/settings';
+		$configured  = $this->api_client()->is_configured();
+
+		ob_start();
+		?>
+		<tr valign="top">
+			<td class="forminp" colspan="2" style="padding-left:0;">
+				<div id="vezmopay-account-panel" class="vezmopay-account-panel" data-configured="<?php echo esc_attr( $configured ? '1' : '0' ); ?>">
+					<?php if ( ! $configured ) : ?>
+						<p class="description"><?php esc_html_e( 'Connect your VezmoPay account (above) to manage these settings here.', 'vezmopay-woocommerce' ); ?></p>
+					<?php endif; ?>
+				</div>
+				<div class="vezmopay-settings-card vezmopay-more-card">
+					<div class="vezmopay-settings-card-title"><?php esc_html_e( 'More account settings', 'vezmopay-woocommerce' ); ?></div>
+					<p class="description"><?php esc_html_e( 'Account verification, payout bank, reserve, checkout branding, Pre-Dispute Protection, Dispute Auto-Resolution and your fee schedule are managed in your VezmoPay console.', 'vezmopay-woocommerce' ); ?></p>
+					<a class="vezmopay-manage-link" href="<?php echo esc_url( $console_url ); ?>" target="_blank" rel="noopener noreferrer">
+						<?php esc_html_e( 'Open VezmoPay console settings →', 'vezmopay-woocommerce' ); ?>
+					</a>
+				</div>
+			</td>
+		</tr>
+		<?php
+		return ob_get_clean();
+	}
+
+	/**
 	 * Render the custom "Test connection" settings row.
 	 *
 	 * @param string $key  Field key.

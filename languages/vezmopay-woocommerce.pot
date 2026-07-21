@@ -535,3 +535,139 @@ msgstr ""
 #: includes/class-vezmopay-settings.php
 msgid "Pricing: %1$s per successful card charge, %2$s per bank (ACH) payment, capped at $10. No monthly fee, no setup fee, no minimum. %3$sSee full VezmoPay pricing%4$s."
 msgstr ""
+
+#: includes/class-vezmopay-settings.php
+msgid "VezmoPay account settings"
+msgstr ""
+
+#: includes/class-vezmopay-settings.php
+msgid "These control your VezmoPay account itself — the same switches as your VezmoPay console. Changes apply everywhere you charge customers (this store, payment links, invoices), immediately."
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php
+msgid "Connect your VezmoPay account (above) to manage these settings here."
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php
+msgid "More account settings"
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php
+msgid "Account verification, payout bank, reserve, checkout branding, Pre-Dispute Protection, Dispute Auto-Resolution and your fee schedule are managed in your VezmoPay console."
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php
+msgid "Open VezmoPay console settings →"
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php
+msgid "Connect your VezmoPay account first."
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php
+msgid "Invalid payment method."
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php
+msgid "Invalid setting."
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php
+msgid "Loading your VezmoPay account settings…"
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php
+msgid "We couldn't load your VezmoPay account settings. Make sure your API key has the account.read permission, or manage them in your VezmoPay console."
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php
+msgid "Payment methods"
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php
+msgid "Choose which methods are offered to your customers at checkout (this store, payment links, invoices and products). Cards are always on."
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php
+msgid "Apple Pay and Google Pay appear automatically for eligible customers on supported devices when enabled. Disabling a method hides it everywhere immediately."
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php
+msgid "Cards"
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php
+msgid "Visa, Mastercard, Amex and more. Always on — the baseline payment method for every checkout."
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php
+msgid "Bank transfer (ACH)"
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php
+msgid "Let US customers pay directly from a bank account. Lower fees; USD only."
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php
+msgid "Apple Pay"
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php
+msgid "One-tap checkout for customers on Apple devices (rides the card rail)."
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php
+msgid "Google Pay"
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php
+msgid "One-tap checkout for customers on Google / Android (rides the card rail)."
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php
+msgid "Always on"
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php
+msgid "Managed by Vezmo"
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php
+msgid "Not available yet"
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php
+msgid "Complete account verification to enable this method."
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php
+msgid "3D Secure (card authentication)"
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php
+msgid "3D Secure is on"
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php
+msgid "3D Secure is off"
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php
+msgid "Every card payment is authenticated with 3D Secure, reducing fraud and shifting chargeback liability to the card issuer."
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php
+msgid "3D Secure is only requested when the card issuer or regulations require it."
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php
+msgid "3D Secure is required on your account. Contact support if you need to change this."
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php
+msgid "Cards from regions with regulatory requirements (e.g. Europe/SCA) are always authenticated regardless of this setting — turning it off only stops requesting 3D Secure on other cards."
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php
+msgid "The change could not be saved: "
+msgstr ""
