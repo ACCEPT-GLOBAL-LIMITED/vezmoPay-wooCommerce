@@ -655,6 +655,18 @@ class Gateway extends \WC_Payment_Gateway {
 			echo '<iframe id="vezmopay-frame" src="' . esc_url( $iframe_url ) . '" allow="payment" title="' . esc_attr__( 'VezmoPay secure payment', 'vezmopay-woocommerce' ) . '"></iframe>';
 		}
 		echo '</div>';
+
+		// Guaranteed pay button: a top-level link to the VezmoPay secure page.
+		// frame-ancestors CSP can block the embedded iframe above (e.g. before the
+		// store's origin is trusted), but it never blocks direct navigation — so
+		// this button always works. Opens in a new tab; this page keeps polling
+		// and forwards to the thank-you page once the payment is confirmed.
+		if ( '' !== $iframe_url ) {
+			echo '<a id="vezmopay-pay-button" class="vezmopay-pay-button" href="' . esc_url( $iframe_url ) . '" target="_blank" rel="noopener">';
+			echo esc_html__( 'Pay securely on the VezmoPay page', 'vezmopay-woocommerce' );
+			echo '<span class="vezmopay-pay-button-hint">' . esc_html__( 'Opens the secure VezmoPay checkout in a new tab', 'vezmopay-woocommerce' ) . '</span>';
+			echo '</a>';
+		}
 		echo '</div>';
 
 		echo '<p id="vezmopay-message" class="vezmopay-message" role="status" aria-live="polite"></p>';
