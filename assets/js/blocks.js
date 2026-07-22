@@ -11,11 +11,23 @@
 ( function () {
 	'use strict';
 
+	// Bail safely if any Blocks dependency is missing — throwing here would
+	// break the whole checkout's payment step ("no payment method available").
+	if (
+		! window.wc ||
+		! window.wc.wcBlocksRegistry ||
+		! window.wc.wcSettings ||
+		! window.wp ||
+		! window.wp.element
+	) {
+		return;
+	}
+
 	var registerPaymentMethod = window.wc.wcBlocksRegistry.registerPaymentMethod;
 	var getSetting = window.wc.wcSettings.getSetting;
-	var decodeEntities = window.wp.htmlEntities.decodeEntities;
+	var decodeEntities = ( window.wp.htmlEntities && window.wp.htmlEntities.decodeEntities ) || function ( s ) { return s; };
 	var createElement = window.wp.element.createElement;
-	var __ = window.wp.i18n.__;
+	var __ = ( window.wp.i18n && window.wp.i18n.__ ) || function ( s ) { return s; };
 
 	var settings = getSetting( 'vezmopay_data', {} );
 	var labelText = decodeEntities( settings.title || __( 'VezmoPay', 'vezmopay-woocommerce' ) );

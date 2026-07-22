@@ -28,10 +28,35 @@ class Blocks_Support extends AbstractPaymentMethodType {
 	protected $name = Plugin::GATEWAY_ID;
 
 	/**
+	 * Cached gateway instance.
+	 *
+	 * @var Gateway|null
+	 */
+	private $gateway_instance;
+
+	/**
 	 * Load gateway settings.
 	 */
 	public function initialize() {
 		$this->settings = get_option( 'woocommerce_' . Plugin::GATEWAY_ID . '_settings', array() );
+	}
+
+	/**
+	 * Resolve a gateway instance WITHOUT depending on WC()->payment_gateways().
+	 *
+	 * The WC gateway registry is populated in admin but may be empty during the
+	 * frontend Store API request that lists Block-checkout payment methods — in
+	 * which case Plugin::instance()->gateway() returns null and the method wrongly
+	 * disappears. Instantiating the gateway directly always works.
+	 *
+	 * @return Gateway
+	 */
+	private function gateway() {
+		if ( null === $this->gateway_instance ) {
+			$registered = Plugin::instance()->gateway();
+			$this->gateway_instance = $registered instanceof Gateway ? $registered : new Gateway();
+		}
+		return $this->gateway_instance;
 	}
 
 	/**
@@ -40,8 +65,7 @@ class Blocks_Support extends AbstractPaymentMethodType {
 	 * @return bool
 	 */
 	public function is_active() {
-		$gateway = Plugin::instance()->gateway();
-		return $gateway ? $gateway->is_available() : false;
+		return $this->gateway()->is_available();
 	}
 
 	/**
@@ -69,13 +93,13 @@ class Blocks_Support extends AbstractPaymentMethodType {
 	 * @return array
 	 */
 	public function get_payment_method_data() {
-		$gateway = Plugin::instance()->gateway();
+		$gateway = $this->gateway();
 		return array(
 			'title'       => $this->get_setting( 'title', __( 'VezmoPay', 'vezmopay-woocommerce' ) ),
 			'description' => $this->get_setting( 'description', '' ),
 			'icon'        => VEZMOPAY_WC_PLUGIN_URL . 'assets/img/vezmo-mark.svg',
-			'testMode'    => $gateway ? $gateway->is_test_mode() : true,
-			'supports'    => $gateway ? array_filter( $gateway->supports, array( $gateway, 'supports' ) ) : array( 'products' ),
+			'testMode'    => $gateway->is_test_mode(),
+			'supports'    => array_values( array_filter( $gateway->supports, array( $gateway, 'supports' ) ) ),
 		);
 	}
 }

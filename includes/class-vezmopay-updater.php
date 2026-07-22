@@ -68,6 +68,12 @@ class Updater {
 		// condition for the Enable/Disable auto-updates link to appear in the
 		// Plugins list (same as any wordpress.org plugin).
 		add_filter( 'update_plugins_github.com', array( $this, 'check_update' ), 10, 3 );
+		// Guarantee the plugin is present in the update_plugins transient on every
+		// read (in response when an update exists, else no_update). Core shows the
+		// Enable/Disable auto-updates link only for plugins it finds there — the
+		// hostname filter above populates it during a scheduled check, but this
+		// read-filter makes it reliable on the very first Plugins-screen load.
+		add_filter( 'site_transient_update_plugins', array( $this, 'inject_transient' ) );
 		add_filter( 'plugins_api', array( $this, 'plugin_details' ), 20, 3 );
 		add_filter( 'upgrader_source_selection', array( $this, 'fix_source_dir' ), 10, 4 );
 
@@ -153,6 +159,52 @@ class Updater {
 		$token = defined( 'VEZMOPAY_GITHUB_TOKEN' ) ? (string) constant( 'VEZMOPAY_GITHUB_TOKEN' ) : '';
 		/** Filter the GitHub token used for update checks. */
 		return (string) apply_filters( 'vezmopay_github_token', $token );
+	}
+
+	/**
+	 * Ensure the plugin is listed in the update_plugins transient on every read,
+	 * so the Plugins screen always renders the auto-updates toggle for it.
+	 *
+	 * @param mixed $transient The update_plugins site transient.
+	 * @return mixed
+	 */
+	public function inject_transient( $transient ) {
+		if ( ! is_object( $transient ) ) {
+			return $transient;
+		}
+		// Already handled this cycle (e.g. by the hostname check) — leave it.
+		if ( isset( $transient->response[ $this->basename ] ) || isset( $transient->no_update[ $this->basename ] ) ) {
+			return $transient;
+		}
+
+		$release = $this->latest_release();
+		$item    = (object) array(
+			'id'           => 'github.com/' . self::REPO,
+			'slug'         => $this->slug,
+			'plugin'       => $this->basename,
+			'new_version'  => $release ? $release['version'] : VEZMOPAY_WC_VERSION,
+			'url'          => $release ? $release['url'] : 'https://github.com/' . self::REPO,
+			'package'      => $release ? $release['package'] : '',
+			'icons'        => array( 'default' => VEZMOPAY_WC_PLUGIN_URL . 'assets/img/vezmo-mark.svg' ),
+			'tested'       => '6.8',
+			'requires'     => '6.0',
+			'requires_php' => '7.4',
+		);
+
+		if ( ! isset( $transient->response ) ) {
+			$transient->response = array();
+		}
+		if ( ! isset( $transient->no_update ) ) {
+			$transient->no_update = array();
+		}
+
+		if ( $release && '' !== $release['package'] && version_compare( $release['version'], VEZMOPAY_WC_VERSION, '>' ) ) {
+			$transient->response[ $this->basename ] = $item;
+		} else {
+			$transient->no_update[ $this->basename ] = $item;
+		}
+
+		return $transient;
 	}
 
 	/**
