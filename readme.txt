@@ -4,7 +4,7 @@ Tags: payments, payment gateway, credit card, ach, woocommerce
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.2.4
+Stable tag: 0.2.5
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -112,6 +112,10 @@ This plugin connects your store to the VezmoPay payment platform, operated by AC
 VezmoPay is operated by ACCEPT GLOBAL LIMITED: [https://vezmo.com](https://vezmo.com) — see the site for terms of service and privacy policy.
 
 == Changelog ==
+
+= 0.2.5 =
+* Fix: payment creation failed with 400 Bad Request — the VezmoPay API now requires client.postalCode (and country) when customer details are sent. The plugin now sends the full billing address, and omits the customer block entirely if the required fields are missing so a bare checkout can never be blocked.
+* API validation errors now surface their field-level details instead of a bare "Bad Request".
 
 = 0.2.4 =
 * Store managers now see the real API error inline in the checkout error message when a payment fails to start (the Block checkout only displays error notices, so the separate manager notice was invisible there). Customers still see the generic message.

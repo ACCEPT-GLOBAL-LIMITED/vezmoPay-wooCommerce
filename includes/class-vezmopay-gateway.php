@@ -509,15 +509,27 @@ class Gateway extends \WC_Payment_Gateway {
 			'ttlMinutes' => self::TOKEN_TTL_MINUTES,
 		);
 
-		$name = trim( $order->get_formatted_billing_full_name() );
-		if ( '' !== $name && '' !== $order->get_billing_email() ) {
+		// The client object is optional, but WHEN sent the API requires name,
+		// email, country AND postalCode (processor verification). Only attach it
+		// when all four are present — a missing billing postcode (optional in
+		// some WooCommerce country configs) must never block the payment.
+		$name        = trim( $order->get_formatted_billing_full_name() );
+		$email       = $order->get_billing_email();
+		$country     = $order->get_billing_country();
+		$postal_code = $order->get_billing_postcode();
+		if ( '' !== $name && '' !== $email && '' !== $country && '' !== $postal_code ) {
 			$payload['client'] = array_filter(
 				array(
-					'name'    => $name,
-					'email'   => $order->get_billing_email(),
-					'phone'   => $order->get_billing_phone(),
-					'company' => $order->get_billing_company(),
-					'country' => $order->get_billing_country(),
+					'name'       => $name,
+					'email'      => $email,
+					'phone'      => $order->get_billing_phone(),
+					'company'    => $order->get_billing_company(),
+					'country'    => $country,
+					'postalCode' => $postal_code,
+					'line1'      => $order->get_billing_address_1(),
+					'line2'      => $order->get_billing_address_2(),
+					'city'       => $order->get_billing_city(),
+					'state'      => $order->get_billing_state(),
 				)
 			);
 		}

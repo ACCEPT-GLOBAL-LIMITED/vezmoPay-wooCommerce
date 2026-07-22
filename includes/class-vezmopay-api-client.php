@@ -242,6 +242,24 @@ class Api_Client {
 		}
 
 		$message = is_array( $decoded ) && ! empty( $decoded['message'] ) ? (string) $decoded['message'] : __( 'Unexpected response from the VezmoPay API.', 'vezmopay-woocommerce' );
+
+		// Validation failures carry the useful detail in errors[], not message
+		// (which is often just "Bad Request") — fold them in.
+		if ( is_array( $decoded ) && ! empty( $decoded['errors'] ) && is_array( $decoded['errors'] ) ) {
+			$details = array();
+			foreach ( array_slice( $decoded['errors'], 0, 5 ) as $err ) {
+				if ( is_string( $err ) ) {
+					$details[] = $err;
+				} elseif ( is_array( $err ) && ! empty( $err['message'] ) ) {
+					$details[] = is_array( $err['message'] ) ? implode( '; ', $err['message'] ) : (string) $err['message'];
+				}
+			}
+			$details = array_filter( array_map( 'trim', $details ) );
+			if ( $details ) {
+				$message .= ' (' . implode( '; ', $details ) . ')';
+			}
+		}
+
 		$this->logger->error( 'API error ' . $code . ' on ' . $path . ': ' . $message );
 
 		return new \WP_Error( 'vezmopay_http_' . $code, $message, array( 'status' => $code ) );
