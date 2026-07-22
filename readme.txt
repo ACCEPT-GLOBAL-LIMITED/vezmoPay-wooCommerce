@@ -4,7 +4,7 @@ Tags: payments, payment gateway, credit card, ach, woocommerce
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.2.1
+Stable tag: 0.2.2
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -113,6 +113,9 @@ VezmoPay is operated by ACCEPT GLOBAL LIMITED: [https://vezmo.com](https://vezmo
 
 == Changelog ==
 
+= 0.2.2 =
+* Fix: the native Enable/Disable auto-updates toggle stays available after connecting. The in-plugin "Automatic updates" force-setting was removed — it made WordPress replace the toggle with static "Auto-updates enabled" text once settings were first saved. Auto-updates are now controlled solely by the Plugins screen toggle, like any other plugin.
+
 = 0.2.1 =
 * Fix: gateway now appears in the WooCommerce Block checkout (Blocks availability no longer depends on the WC gateway registry, which is empty during the Store API request).
 * Fix: the native Enable/Disable auto-updates link now shows in the Plugins list (plugin is injected into the update_plugins transient on every read).
@@ -135,6 +138,6 @@ VezmoPay is operated by ACCEPT GLOBAL LIMITED: [https://vezmo.com](https://vezmo
 
 = Updates =
 
-New releases are published on GitHub and appear on your WordPress Plugins screen like any other update — one-click update, or enable automatic background updates in the plugin settings (or via the Plugins screen's own "Enable auto-updates" toggle).
+New releases are published on GitHub and appear on your WordPress Plugins screen like any other update — update with one click, or use the Plugins screen's native "Enable auto-updates" toggle for automatic background updates.
 
 Distribution note: the plugin checks the GitHub Releases API. If the source repository is private, set a read-only token via the `VEZMOPAY_GITHUB_TOKEN` constant in wp-config.php (or the `vezmopay_github_token` filter) so update checks can authenticate; a public repository needs no token.

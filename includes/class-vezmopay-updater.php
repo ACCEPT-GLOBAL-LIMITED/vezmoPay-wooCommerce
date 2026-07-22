@@ -77,8 +77,11 @@ class Updater {
 		add_filter( 'plugins_api', array( $this, 'plugin_details' ), 20, 3 );
 		add_filter( 'upgrader_source_selection', array( $this, 'fix_source_dir' ), 10, 4 );
 
-		// Honour the in-plugin "automatic updates" setting.
-		add_filter( 'auto_update_plugin', array( $this, 'auto_update' ), 10, 2 );
+		// Auto-updates are controlled by WordPress's native per-plugin toggle on
+		// the Plugins screen. Deliberately NO auto_update_plugin filter here:
+		// force-setting the value makes core replace the Enable/Disable link
+		// with static "Auto-updates enabled" text (state controlled by code),
+		// taking the choice away from the site owner.
 
 		// Refresh the cached lookup right after an update completes.
 		add_action( 'upgrader_process_complete', array( $this, 'flush_cache' ), 10, 2 );
@@ -330,24 +333,6 @@ class Updater {
 		}
 
 		return trailingslashit( $desired );
-	}
-
-	/**
-	 * Enable unattended auto-updates for this plugin when the setting is on.
-	 *
-	 * @param bool|null $update Whether to auto-update.
-	 * @param object    $item   The update offer.
-	 * @return bool|null
-	 */
-	public function auto_update( $update, $item ) {
-		if ( ! is_object( $item ) || empty( $item->plugin ) || $item->plugin !== $this->basename ) {
-			return $update;
-		}
-		$settings = get_option( 'woocommerce_' . Plugin::GATEWAY_ID . '_settings', array() );
-		if ( isset( $settings['auto_update'] ) && 'yes' === $settings['auto_update'] ) {
-			return true;
-		}
-		return $update; // Otherwise defer to the site's native per-plugin choice.
 	}
 
 	/**
