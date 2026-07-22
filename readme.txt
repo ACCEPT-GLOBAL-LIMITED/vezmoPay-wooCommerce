@@ -4,7 +4,7 @@ Tags: payments, payment gateway, credit card, ach, woocommerce
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.2.2
+Stable tag: 0.2.3
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -112,6 +112,9 @@ This plugin connects your store to the VezmoPay payment platform, operated by AC
 VezmoPay is operated by ACCEPT GLOBAL LIMITED: [https://vezmo.com](https://vezmo.com) — see the site for terms of service and privacy policy.
 
 == Changelog ==
+
+= 0.2.3 =
+* Fix: VezmoPay now appears in the WooCommerce Block checkout. The Blocks payment-method registration listened for woocommerce_blocks_loaded, which fires before the plugin boots — so the client-side method was never registered and the checkout showed "no payment methods available" even though the Store API offered vezmopay. Verified against a live store.
 
 = 0.2.2 =
 * Fix: the native Enable/Disable auto-updates toggle stays available after connecting. The in-plugin "Automatic updates" force-setting was removed — it made WordPress replace the toggle with static "Auto-updates enabled" text once settings were first saved. Auto-updates are now controlled solely by the Plugins screen toggle, like any other plugin.

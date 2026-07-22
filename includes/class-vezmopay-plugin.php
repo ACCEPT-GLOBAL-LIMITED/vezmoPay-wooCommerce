@@ -67,7 +67,17 @@ final class Plugin {
 
 		add_filter( 'woocommerce_payment_gateways', array( $this, 'register_gateway' ) );
 		add_action( 'rest_api_init', array( $this->webhook, 'register_routes' ) );
-		add_action( 'woocommerce_blocks_loaded', array( $this, 'register_blocks_support' ) );
+
+		// Blocks checkout: woocommerce_blocks_loaded fires during plugins_loaded
+		// priority 10, BEFORE this constructor runs (priority 11) — subscribing to
+		// it here is subscribing to an event that already fired, so the payment
+		// method type never registered and the Block checkout showed "no payment
+		// methods available". Handle both orders explicitly.
+		if ( did_action( 'woocommerce_blocks_loaded' ) ) {
+			$this->register_blocks_support();
+		} else {
+			add_action( 'woocommerce_blocks_loaded', array( $this, 'register_blocks_support' ) );
+		}
 
 		// AJAX endpoints used by the checkout JS (logged-in and guest customers).
 		add_action( 'wc_ajax_vezmopay_confirm', array( $this, 'ajax_confirm' ) );
