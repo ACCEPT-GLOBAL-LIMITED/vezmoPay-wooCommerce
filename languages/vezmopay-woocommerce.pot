@@ -779,3 +779,11 @@ msgstr ""
 #: includes/class-vezmopay-gateway.php
 msgid "Opens the secure VezmoPay checkout in a new tab"
 msgstr ""
+
+#: includes/class-vezmopay-gateway.php
+msgid "Your payment was not completed."
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php
+msgid "Try payment again"
+msgstr ""

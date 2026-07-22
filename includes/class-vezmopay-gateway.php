@@ -540,6 +540,10 @@ class Gateway extends \WC_Payment_Gateway {
 			'amount'     => (float) wc_format_decimal( $order->get_total(), 2 ),
 			'currency'   => $order->get_currency(),
 			'ttlMinutes' => self::TOKEN_TTL_MINUTES,
+			// Auto-return the shopper to the store after VezmoPay settles the
+			// payment. VezmoPay appends ?paymentId=…&status=success|failed.
+			'successUrl' => $this->get_return_url( $order ),
+			'cancelUrl'  => add_query_arg( 'vezmopay_retry', '1', $order->get_checkout_payment_url( true ) ),
 		);
 
 		// The client object is optional, but WHEN sent the API requires name,
@@ -621,6 +625,11 @@ class Gateway extends \WC_Payment_Gateway {
 			exit;
 		}
 
+		// Returned here after a failed/cancelled payment (VezmoPay cancelUrl).
+		// Show a retry state instead of auto-forwarding, or we'd loop straight
+		// back to VezmoPay. phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$came_back_failed = isset( $_GET['vezmopay_retry'] ) || ( isset( $_GET['status'] ) && 'failed' === sanitize_key( wp_unslash( $_GET['status'] ) ) );
+
 		// Refresh the session if the token expired while the customer idled.
 		$ready = $this->ensure_secure_payment( $order );
 		if ( is_wp_error( $ready ) ) {
@@ -652,9 +661,15 @@ class Gateway extends \WC_Payment_Gateway {
 		echo '</div>';
 
 		echo '<div class="vezmopay-body vezmopay-redirect">';
-		echo '<span class="vezmopay-spinner"></span>';
-		echo '<p class="vezmopay-redirect-text">' . esc_html__( 'Taking you to the secure VezmoPay checkout…', 'vezmopay-woocommerce' ) . '</p>';
-		echo '<a class="vezmopay-continue" href="' . esc_url( $iframe_url ) . '">' . esc_html__( 'Continue to payment', 'vezmopay-woocommerce' ) . '</a>';
+		if ( $came_back_failed ) {
+			// Failed/cancelled at VezmoPay — offer a retry, do NOT auto-forward.
+			echo '<p class="vezmopay-redirect-text">' . esc_html__( 'Your payment was not completed.', 'vezmopay-woocommerce' ) . '</p>';
+			echo '<a class="vezmopay-continue" href="' . esc_url( $iframe_url ) . '">' . esc_html__( 'Try payment again', 'vezmopay-woocommerce' ) . '</a>';
+		} else {
+			echo '<span class="vezmopay-spinner"></span>';
+			echo '<p class="vezmopay-redirect-text">' . esc_html__( 'Taking you to the secure VezmoPay checkout…', 'vezmopay-woocommerce' ) . '</p>';
+			echo '<a class="vezmopay-continue" href="' . esc_url( $iframe_url ) . '">' . esc_html__( 'Continue to payment', 'vezmopay-woocommerce' ) . '</a>';
+		}
 		echo '</div>';
 
 		echo '<div class="vezmopay-footer">';
@@ -664,10 +679,12 @@ class Gateway extends \WC_Payment_Gateway {
 
 		echo '</div>';
 
-		wp_print_inline_script_tag(
-			'window.location.replace(' . wp_json_encode( $iframe_url ) . ');',
-			array( 'id' => 'vezmopay-redirect' )
-		);
+		if ( ! $came_back_failed ) {
+			wp_print_inline_script_tag(
+				'window.location.replace(' . wp_json_encode( $iframe_url ) . ');',
+				array( 'id' => 'vezmopay-redirect' )
+			);
+		}
 	}
 
 	/**
@@ -678,6 +695,18 @@ class Gateway extends \WC_Payment_Gateway {
 	public function thankyou_page( $order_id ) {
 		$order = wc_get_order( $order_id );
 		if ( ! $order || $order->is_paid() ) {
+			return;
+		}
+
+		// Shopper just returned from VezmoPay's successUrl — verify against the
+		// API now so the order shows as paid immediately, instead of waiting for
+		// the webhook or the reconciliation cron.
+		if ( $order->has_status( 'pending' ) && ( '' !== (string) $order->get_meta( '_vezmopay_payment_id' ) || '' !== (string) $order->get_meta( '_vezmopay_paylink_code' ) ) ) {
+			$this->reconcile_order_with_api( $order );
+			$order = wc_get_order( $order_id );
+		}
+
+		if ( $order->is_paid() ) {
 			return;
 		}
 		if ( $order->has_status( array( 'pending', 'on-hold' ) ) ) {
