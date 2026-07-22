@@ -4,7 +4,7 @@ Tags: payments, payment gateway, credit card, ach, woocommerce
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.2.6
+Stable tag: 0.2.7
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -112,6 +112,9 @@ This plugin connects your store to the VezmoPay payment platform, operated by AC
 VezmoPay is operated by ACCEPT GLOBAL LIMITED: [https://vezmo.com](https://vezmo.com) — see the site for terms of service and privacy policy.
 
 == Changelog ==
+
+= 0.2.7 =
+* The pay page now always shows a working "Pay securely on the VezmoPay page" button. It opens the secure VezmoPay checkout in a new tab via top-level navigation, which is never blocked by the embed frame-ancestors CSP — so customers can always pay even before the store origin is added to trusted origins. The page keeps polling and forwards to the thank-you page once payment is confirmed.
 
 = 0.2.6 =
 * Connect with VezmoPay now also registers your store as a VezmoPay trusted origin (required for the embedded payment form to render at all). If it cannot be added automatically, the settings screen shows the exact manual step.

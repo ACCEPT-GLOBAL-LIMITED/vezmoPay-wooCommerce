@@ -771,3 +771,11 @@ msgstr ""
 #: includes/class-vezmopay-connect.php
 msgid "The embedded payment form only renders on origins in your VezmoPay trusted-origins list, and it could not be added automatically. In your VezmoPay console open Settings → Developer Settings → Trusted Origins and add: %s"
 msgstr ""
+
+#: includes/class-vezmopay-gateway.php
+msgid "Pay securely on the VezmoPay page"
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php
+msgid "Opens the secure VezmoPay checkout in a new tab"
+msgstr ""
