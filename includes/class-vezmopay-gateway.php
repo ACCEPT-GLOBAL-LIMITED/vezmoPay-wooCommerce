@@ -211,7 +211,44 @@ class Gateway extends \WC_Payment_Gateway {
 			echo esc_html__( 'Your store currency is a zero-decimal currency (e.g. JPY, KRW). VezmoPay does not currently handle these correctly, so the gateway will not be offered at checkout.', 'vezmopay-woocommerce' );
 			echo '</p></div>';
 		}
+
+		// Explain a silent hide: enabled but not appearing at checkout.
+		$reason = $this->unavailable_reason();
+		if ( '' !== $reason ) {
+			echo '<div class="notice notice-warning inline"><p><strong>';
+			echo esc_html__( 'VezmoPay will not appear at checkout yet.', 'vezmopay-woocommerce' );
+			echo '</strong> ' . esc_html( $reason ) . '</p></div>';
+		} elseif ( 'yes' === $this->get_option( 'enabled' ) ) {
+			echo '<div class="notice notice-success inline"><p>';
+			echo esc_html__( 'VezmoPay is active and will appear at checkout.', 'vezmopay-woocommerce' );
+			echo '</p></div>';
+		}
+
 		parent::admin_options();
+	}
+
+	/**
+	 * Human-readable reason the gateway would be hidden at checkout, or '' when
+	 * it will show. Mirrors the checks in is_available() so merchants aren't left
+	 * guessing why an enabled gateway is missing.
+	 *
+	 * @return string
+	 */
+	private function unavailable_reason() {
+		if ( 'yes' !== $this->get_option( 'enabled' ) ) {
+			return __( 'Tick “Enable VezmoPay” above and save.', 'vezmopay-woocommerce' );
+		}
+		if ( in_array( get_woocommerce_currency(), Settings::ZERO_DECIMAL_CURRENCIES, true ) ) {
+			return __( 'Your store currency is not supported by VezmoPay yet.', 'vezmopay-woocommerce' );
+		}
+		if ( ! $this->api_client()->is_configured() ) {
+			return sprintf(
+				/* translators: %s: environment name (test/live) */
+				__( 'No API credentials are saved for the %s environment. Click “Connect with VezmoPay”, or paste your key and secret, then save.', 'vezmopay-woocommerce' ),
+				$this->environment()
+			);
+		}
+		return '';
 	}
 
 	/**

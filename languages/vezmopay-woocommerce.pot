@@ -732,3 +732,24 @@ msgstr ""
 #: includes/class-vezmopay-gateway.php
 msgid "Going live: click \"Request production access\" to complete VezmoPay account verification. Once approved, switch Environment to Live and connect again to get your live credentials."
 msgstr ""
+
+#: includes/class-vezmopay-gateway.php
+msgid "VezmoPay will not appear at checkout yet."
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php
+msgid "VezmoPay is active and will appear at checkout."
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php
+msgid "Tick “Enable VezmoPay” above and save."
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php
+msgid "Your store currency is not supported by VezmoPay yet."
+msgstr ""
+
+#. translators: %s: environment name (test/live)
+#: includes/class-vezmopay-gateway.php
+msgid "No API credentials are saved for the %s environment. Click “Connect with VezmoPay”, or paste your key and secret, then save."
+msgstr ""
