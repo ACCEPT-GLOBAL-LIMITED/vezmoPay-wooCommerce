@@ -4,7 +4,7 @@ Tags: payments, payment gateway, credit card, ach, woocommerce
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.1.0
+Stable tag: 0.2.0
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -112,6 +112,13 @@ This plugin connects your store to the VezmoPay payment platform, operated by AC
 VezmoPay is operated by ACCEPT GLOBAL LIMITED: [https://vezmo.com](https://vezmo.com) — see the site for terms of service and privacy policy.
 
 == Changelog ==
+
+= 0.2.0 =
+* Correct test/live host (user.dev.vezmo.com); self-heal old saved value.
+* Auto-register webhook on Connect; auto-fill the signing secret.
+* Request-production-access link; account settings panel; light/dark/auto checkout theme.
+* Native auto-updates toggle via the Update URI hostname filter.
+* Settings screen now explains exactly why the gateway is hidden at checkout.
 
 = 0.1.0 =
 * Initial release.

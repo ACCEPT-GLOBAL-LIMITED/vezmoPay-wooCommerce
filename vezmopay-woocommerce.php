@@ -3,7 +3,7 @@
  * Plugin Name:       VezmoPay for WooCommerce
  * Plugin URI:        https://github.com/ACCEPT-GLOBAL-LIMITED/vezmoPay-wooCommerce
  * Description:       Accept payments through VezmoPay — hosted checkout, inline payment element, or secure iframe. Cards, US bank (ACH) and more, with 3-D Secure handled by VezmoPay.
- * Version:           0.1.0
+ * Version:           0.2.0
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Requires Plugins:  woocommerce
@@ -23,7 +23,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'VEZMOPAY_WC_VERSION', '0.1.0' );
+define( 'VEZMOPAY_WC_VERSION', '0.2.0' );
 define( 'VEZMOPAY_WC_PLUGIN_FILE', __FILE__ );
 define( 'VEZMOPAY_WC_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'VEZMOPAY_WC_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
