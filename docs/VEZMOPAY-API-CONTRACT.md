@@ -58,7 +58,7 @@ Request body:
 | `amount` | yes | **major units**, max 2 decimals, 0.01–1,000,000 |
 | `currency` | no | ≤8 chars, default `USD` |
 | `description` | no | ≤2000 |
-| `client` | no | `{ name*, email*, phone?, company?, country? }` |
+| `client` | no | `{ name*, email*, country*, postalCode*, phone?, company?, line1?, line2?, city?, state? }` — country and postalCode became REQUIRED (processor verification) when the object is sent (contract change observed 2026-07-22) |
 | `ttlMinutes` | no | 5–1440, default 30 |
 | `iframe` | no | `{ width?, height? }` |
 
