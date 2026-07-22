@@ -851,22 +851,24 @@ class Gateway extends \WC_Payment_Gateway {
 		);
 		$order->save();
 
-		wc_add_notice( $this->customer_facing_error( $error ), 'error' );
+		$message = $this->customer_facing_error( $error );
 
+		// Store managers get the real API error inline in the checkout error
+		// itself — the Block checkout only surfaces 'error' notices, so a
+		// separate 'notice'-type message would never be seen there.
 		if ( current_user_can( 'manage_woocommerce' ) ) {
 			$detail = $error->get_error_message();
 			if ( 'vezmopay_http_403' === $error->get_error_code() ) {
 				$detail .= ' — ' . __( 'Your VezmoPay API key is missing a required permission: element/iframe modes need secure-payment.create, hosted mode needs paylink.create. Assign it to the key in the VezmoPay admin.', 'vezmopay-woocommerce' );
 			}
-			wc_add_notice(
-				sprintf(
-					/* translators: %s: technical error detail (shown to store managers only) */
-					__( 'VezmoPay (visible to store managers only): %s', 'vezmopay-woocommerce' ),
-					$detail
-				),
-				'notice'
+			$message .= ' ' . sprintf(
+				/* translators: %s: technical error detail (shown to store managers only) */
+				__( '[Store managers only] Reason: %s', 'vezmopay-woocommerce' ),
+				$detail
 			);
 		}
+
+		wc_add_notice( $message, 'error' );
 	}
 
 	/**

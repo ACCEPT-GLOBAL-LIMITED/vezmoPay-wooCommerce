@@ -753,3 +753,8 @@ msgstr ""
 #: includes/class-vezmopay-gateway.php
 msgid "No API credentials are saved for the %s environment. Click “Connect with VezmoPay”, or paste your key and secret, then save."
 msgstr ""
+
+#. translators: %s: technical error detail (shown to store managers only)
+#: includes/class-vezmopay-gateway.php
+msgid "[Store managers only] Reason: %s"
+msgstr ""
