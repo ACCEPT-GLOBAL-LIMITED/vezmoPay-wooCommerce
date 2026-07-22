@@ -61,7 +61,13 @@ class Updater {
 		$this->basename = plugin_basename( VEZMOPAY_WC_PLUGIN_FILE );
 		$this->slug     = dirname( $this->basename );
 
-		add_filter( 'pre_set_site_transient_update_plugins', array( $this, 'inject_update' ) );
+		// Canonical Update-URI API: because the plugin header declares
+		// `Update URI: https://github.com/…`, WordPress routes update checks for
+		// it through update_plugins_github.com. Registering this filter is ALSO
+		// what makes core treat the plugin as "update-supported", which is the
+		// condition for the Enable/Disable auto-updates link to appear in the
+		// Plugins list (same as any wordpress.org plugin).
+		add_filter( 'update_plugins_github.com', array( $this, 'check_update' ), 10, 3 );
 		add_filter( 'plugins_api', array( $this, 'plugin_details' ), 20, 3 );
 		add_filter( 'upgrader_source_selection', array( $this, 'fix_source_dir' ), 10, 4 );
 
@@ -150,46 +156,46 @@ class Updater {
 	}
 
 	/**
-	 * Inject update info into the plugins update transient.
+	 * Update-check callback for the plugin's Update URI host (github.com).
 	 *
-	 * @param object $transient Update transient.
-	 * @return object
+	 * WordPress calls this once per update check for plugins whose `Update URI`
+	 * host is github.com. Returning the update array (even when up to date) makes
+	 * core file the plugin under response/no_update by version compare — and its
+	 * mere registration flags the plugin "update-supported", which is what shows
+	 * the Enable/Disable auto-updates link in the Plugins list. Returning the
+	 * unchanged `$update` (false) only on API failure so nothing else is affected.
+	 *
+	 * @param array|false $update      The update offer (false by default).
+	 * @param array       $plugin_data The plugin headers.
+	 * @param string      $plugin_file The plugin basename being checked.
+	 * @return array|false
 	 */
-	public function inject_update( $transient ) {
-		if ( ! is_object( $transient ) ) {
-			return $transient;
+	public function check_update( $update, $plugin_data, $plugin_file ) {
+		if ( $plugin_file !== $this->basename ) {
+			return $update;
 		}
 
 		$release = $this->latest_release();
 		if ( ! $release || '' === $release['package'] ) {
-			return $transient;
+			return $update;
 		}
 
-		$has_update = version_compare( $release['version'], VEZMOPAY_WC_VERSION, '>' );
-
-		$item = (object) array(
-			'id'          => 'github.com/' . self::REPO,
-			'slug'        => $this->slug,
-			'plugin'      => $this->basename,
-			'new_version' => $release['version'],
-			'url'         => $release['url'],
-			'package'     => $has_update ? $release['package'] : '',
-			'icons'       => array(
+		// Both `version` (core's compare) and `new_version` (list/upgrader display).
+		return array(
+			'id'           => 'github.com/' . self::REPO,
+			'slug'         => $this->slug,
+			'plugin'       => $this->basename,
+			'version'      => $release['version'],
+			'new_version'  => $release['version'],
+			'url'          => $release['url'],
+			'package'      => $release['package'],
+			'icons'        => array(
 				'default' => VEZMOPAY_WC_PLUGIN_URL . 'assets/img/vezmo-mark.svg',
 			),
-			'tested'      => '6.8',
-			'requires'    => '6.0',
+			'tested'       => '6.8',
+			'requires'     => '6.0',
 			'requires_php' => '7.4',
 		);
-
-		if ( $has_update ) {
-			$transient->response[ $this->basename ] = $item;
-		} else {
-			// Listing it under no_update keeps the auto-update toggle visible.
-			$transient->no_update[ $this->basename ] = $item;
-		}
-
-		return $transient;
 	}
 
 	/**
