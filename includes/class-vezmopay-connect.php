@@ -119,10 +119,16 @@ class Connect {
 			$webhook_saved = true;
 		}
 
+		// The embed only renders on origins in the merchant's trusted-origins
+		// list (frame-ancestors CSP). Connect auto-registers the store origin;
+		// when that failed (older API, 20-origin cap, …) warn the merchant.
+		$origin_trusted = ! empty( $credentials['trustedOriginAdded'] );
+
 		self::back_to_settings(
 			array(
 				'vezmopay_connected' => $key_env,
 				'vezmopay_webhook'   => $webhook_saved ? '1' : '0',
+				'vezmopay_origin'    => $origin_trusted ? '1' : '0',
 			)
 		);
 	}
@@ -195,7 +201,24 @@ class Connect {
 			if ( isset( $_GET['vezmopay_webhook'] ) && '1' === $_GET['vezmopay_webhook'] ) {
 				echo esc_html__( 'Your webhook was registered automatically too — no copy-paste needed.', 'vezmopay-woocommerce' ) . ' ';
 			}
+			if ( isset( $_GET['vezmopay_origin'] ) && '1' === $_GET['vezmopay_origin'] ) {
+				echo esc_html__( 'Your store was added to your VezmoPay trusted origins, so the embedded payment form can render here.', 'vezmopay-woocommerce' ) . ' ';
+			}
 			echo esc_html__( 'Note: connecting deactivates any previous API key for your VezmoPay account.', 'vezmopay-woocommerce' ) . '</p></div>';
+
+			if ( isset( $_GET['vezmopay_origin'] ) && '0' === $_GET['vezmopay_origin'] ) {
+				echo '<div class="notice notice-warning inline"><p><strong>';
+				echo esc_html__( 'One manual step left: trust this store in VezmoPay.', 'vezmopay-woocommerce' );
+				echo '</strong> ';
+				echo esc_html(
+					sprintf(
+						/* translators: %s: this store's origin URL */
+						__( 'The embedded payment form only renders on origins in your VezmoPay trusted-origins list, and it could not be added automatically. In your VezmoPay console open Settings → Developer Settings → Trusted Origins and add: %s', 'vezmopay-woocommerce' ),
+						untrailingslashit( home_url() )
+					)
+				);
+				echo '</p></div>';
+			}
 		}
 
 		if ( isset( $_GET['vezmopay_connect_error'] ) ) {

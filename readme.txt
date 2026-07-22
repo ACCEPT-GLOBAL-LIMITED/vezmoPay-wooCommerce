@@ -4,7 +4,7 @@ Tags: payments, payment gateway, credit card, ach, woocommerce
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.2.5
+Stable tag: 0.2.6
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -112,6 +112,9 @@ This plugin connects your store to the VezmoPay payment platform, operated by AC
 VezmoPay is operated by ACCEPT GLOBAL LIMITED: [https://vezmo.com](https://vezmo.com) — see the site for terms of service and privacy policy.
 
 == Changelog ==
+
+= 0.2.6 =
+* Connect with VezmoPay now also registers your store as a VezmoPay trusted origin (required for the embedded payment form to render at all). If it cannot be added automatically, the settings screen shows the exact manual step.
 
 = 0.2.5 =
 * Fix: payment creation failed with 400 Bad Request — the VezmoPay API now requires client.postalCode (and country) when customer details are sent. The plugin now sends the full billing address, and omits the customer block entirely if the required fields are missing so a bare checkout can never be blocked.

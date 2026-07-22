@@ -758,3 +758,16 @@ msgstr ""
 #: includes/class-vezmopay-gateway.php
 msgid "[Store managers only] Reason: %s"
 msgstr ""
+
+#: includes/class-vezmopay-connect.php
+msgid "Your store was added to your VezmoPay trusted origins, so the embedded payment form can render here."
+msgstr ""
+
+#: includes/class-vezmopay-connect.php
+msgid "One manual step left: trust this store in VezmoPay."
+msgstr ""
+
+#. translators: %s: this store's origin URL
+#: includes/class-vezmopay-connect.php
+msgid "The embedded payment form only renders on origins in your VezmoPay trusted-origins list, and it could not be added automatically. In your VezmoPay console open Settings → Developer Settings → Trusted Origins and add: %s"
+msgstr ""
