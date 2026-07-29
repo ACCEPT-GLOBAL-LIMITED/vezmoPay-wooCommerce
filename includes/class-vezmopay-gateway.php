@@ -42,7 +42,7 @@ class Gateway extends \WC_Payment_Gateway {
 	 */
 	public function __construct() {
 		$this->id                 = Plugin::GATEWAY_ID;
-		$this->icon               = VEZMOPAY_WC_PLUGIN_URL . 'assets/img/vezmo-mark.svg';
+		$this->icon               = VEZMOPAY_WC_PLUGIN_URL . 'assets/img/vezmopay-icon.png';
 		$this->method_title       = __( 'VezmoPay', 'vezmopay-woocommerce' );
 		$this->method_description = __( 'Accept payments through VezmoPay — hosted checkout, inline payment element, or secure iframe. Card data never touches your server.', 'vezmopay-woocommerce' );
 		$this->has_fields         = false;
@@ -74,6 +74,30 @@ class Gateway extends \WC_Payment_Gateway {
 	 */
 	public function logger() {
 		return $this->logger;
+	}
+
+	/**
+	 * Checkout icon. Renders the mark before the title on the classic checkout
+	 * payment-method row and vertically centres both. The scoped <style> ships
+	 * with the icon markup so no extra stylesheet has to be enqueued on checkout.
+	 *
+	 * @return string
+	 */
+	public function get_icon() {
+		$icon = sprintf(
+			'<img src="%1$s" alt="%2$s" class="vezmopay-checkout-icon" />',
+			esc_url( $this->icon ),
+			esc_attr( $this->get_title() )
+		);
+
+		$style = '<style>'
+			. '.wc_payment_method.payment_method_' . esc_attr( $this->id ) . ' > label{'
+			. 'display:flex;align-items:center;gap:8px;font-weight:600;}'
+			. '.wc_payment_method.payment_method_' . esc_attr( $this->id ) . ' > label img.vezmopay-checkout-icon{'
+			. 'order:-1;max-height:42px;width:auto;margin:0;float:none;}'
+			. '</style>';
+
+		return apply_filters( 'woocommerce_gateway_icon', $icon . $style, $this->id );
 	}
 
 	/* ---------------------------------------------------------------------
