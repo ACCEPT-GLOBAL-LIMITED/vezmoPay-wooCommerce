@@ -369,16 +369,20 @@ class Gateway extends \WC_Payment_Gateway {
 		$nonce = wp_create_nonce( 'vezmopay-admin' );
 		wc_enqueue_js(
 			"jQuery(function($){
-				$('#vezmopay-test-connection').on('click', function(e){
+				var btn=$('#vezmopay-test-connection');
+				btn.on('click', function(e){
 					e.preventDefault();
-					var btn=$(this), out=$('#vezmopay-test-connection-result');
-					btn.prop('disabled',true); out.text('…');
+					var out=$('#vezmopay-test-connection-result');
+					btn.prop('disabled',true).addClass('is-testing');
+					out.hide().removeClass('is-success is-error').empty();
 					$.post(ajaxurl,{action:'vezmopay_test_connection',nonce:'" . esc_js( $nonce ) . "',environment:$('#woocommerce_vezmopay_environment').val()},function(r){
-						out.css('color', r.success?'green':'#d63638').text(r.data&&r.data.message?r.data.message:'Error');
+						var ok=!!r.success;
+						var msg=(r.data&&r.data.message)?r.data.message:(ok?'Connection successful.':'Error');
+						out.addClass(ok?'is-success':'is-error').text(msg).show();
 					}).fail(function(x){
 						var m=(x.responseJSON&&x.responseJSON.data&&x.responseJSON.data.message)?x.responseJSON.data.message:'Request failed';
-						out.css('color','#d63638').text(m);
-					}).always(function(){ btn.prop('disabled',false); });
+						out.addClass('is-error').text(m).show();
+					}).always(function(){ btn.prop('disabled',false).removeClass('is-testing'); });
 				});
 			});"
 		);
@@ -393,10 +397,10 @@ class Gateway extends \WC_Payment_Gateway {
 				<button type="button" class="button" id="vezmopay-test-connection">
 					<?php esc_html_e( 'Test connection', 'vezmopay-woocommerce' ); ?>
 				</button>
-				<span id="vezmopay-test-connection-result" style="margin-left:8px;"></span>
 				<p class="description">
 					<?php esc_html_e( 'Validates the saved API key and secret for the selected environment against the VezmoPay API. Save your changes first.', 'vezmopay-woocommerce' ); ?>
 				</p>
+				<div id="vezmopay-test-connection-result" class="vezmopay-test-result" role="status" aria-live="polite"></div>
 			</td>
 		</tr>
 		<?php
