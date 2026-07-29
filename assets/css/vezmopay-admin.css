@@ -172,8 +172,9 @@
 	font-weight: 600;
 }
 
-/* Restyle the native Enable/Disable checkbox as a switch. */
-.vezmopay-admin-fields input#woocommerce_vezmopay_enabled {
+/* Restyle native on/off checkboxes (Enable/Disable, Debug logging) as switches. */
+.vezmopay-admin-fields input#woocommerce_vezmopay_enabled,
+.vezmopay-admin-fields input#woocommerce_vezmopay_debug {
 	appearance: none;
 	-webkit-appearance: none;
 	position: relative;
@@ -191,7 +192,8 @@
 	transition: background 0.15s ease;
 }
 
-.vezmopay-admin-fields input#woocommerce_vezmopay_enabled::before {
+.vezmopay-admin-fields input#woocommerce_vezmopay_enabled::before,
+.vezmopay-admin-fields input#woocommerce_vezmopay_debug::before {
 	content: "";
 	position: absolute;
 	top: 3px;
@@ -205,20 +207,24 @@
 	transition: transform 0.15s ease;
 }
 
-.vezmopay-admin-fields input#woocommerce_vezmopay_enabled:checked {
+.vezmopay-admin-fields input#woocommerce_vezmopay_enabled:checked,
+.vezmopay-admin-fields input#woocommerce_vezmopay_debug:checked {
 	background: var(--vz-brand);
 }
 
-.vezmopay-admin-fields input#woocommerce_vezmopay_enabled:checked::before {
+.vezmopay-admin-fields input#woocommerce_vezmopay_enabled:checked::before,
+.vezmopay-admin-fields input#woocommerce_vezmopay_debug:checked::before {
 	transform: translateX(20px);
 }
 
-.vezmopay-admin-fields input#woocommerce_vezmopay_enabled:focus-visible {
+.vezmopay-admin-fields input#woocommerce_vezmopay_enabled:focus-visible,
+.vezmopay-admin-fields input#woocommerce_vezmopay_debug:focus-visible {
 	outline: 2px solid var(--vz-brand);
 	outline-offset: 2px;
 }
 
-.vezmopay-admin-fields label[for="woocommerce_vezmopay_enabled"] {
+.vezmopay-admin-fields label[for="woocommerce_vezmopay_enabled"],
+.vezmopay-admin-fields label[for="woocommerce_vezmopay_debug"] {
 	display: inline-flex;
 	align-items: center;
 }
