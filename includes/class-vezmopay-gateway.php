@@ -194,13 +194,30 @@ class Gateway extends \WC_Payment_Gateway {
 	 * Settings screen with an unmistakable environment banner.
 	 */
 	public function admin_options() {
+		$test = $this->is_test_mode();
+
+		echo '<div class="vezmopay-admin">';
+
+		// Branded pill-banner hero: the VezmoPay lockup on a lavender pill,
+		// a short tagline, and the current-environment chip.
+		echo '<header class="vezmopay-admin-hero">';
 		printf(
-			'<img src="%s" alt="%s" style="height:36px;width:auto;display:block;margin:4px 0 16px;" />',
+			'<span class="vezmopay-admin-brandpill"><img src="%s" alt="%s" /></span>',
 			esc_url( VEZMOPAY_WC_PLUGIN_URL . 'assets/img/vezmopay.svg' ),
 			esc_attr__( 'VezmoPay', 'vezmopay-woocommerce' )
 		);
+		echo '<p class="vezmopay-admin-tagline">' . esc_html__( 'Modern payments for your WooCommerce store.', 'vezmopay-woocommerce' ) . '</p>';
+		printf(
+			'<span class="vezmopay-admin-envchip %1$s">%2$s</span>',
+			$test ? 'is-test' : 'is-live',
+			$test ? esc_html__( 'Test mode', 'vezmopay-woocommerce' ) : esc_html__( 'Live mode', 'vezmopay-woocommerce' )
+		);
+		echo '</header>';
+
+		// Status notices — the scoped stylesheet renders each as a card.
+		echo '<div class="vezmopay-admin-notices">';
 		Connect::maybe_render_connect_notices( $this );
-		if ( $this->is_test_mode() ) {
+		if ( $test ) {
 			echo '<div class="notice notice-warning inline"><p><strong>';
 			echo esc_html__( 'VezmoPay is in TEST mode.', 'vezmopay-woocommerce' );
 			echo '</strong> ';
@@ -228,8 +245,15 @@ class Gateway extends \WC_Payment_Gateway {
 			echo esc_html__( 'VezmoPay is active and will appear at checkout.', 'vezmopay-woocommerce' );
 			echo '</p></div>';
 		}
+		echo '</div>';
 
+		// WooCommerce's own heading + description + settings table, wrapped
+		// in a card surface by the scoped stylesheet.
+		echo '<div class="vezmopay-admin-fields">';
 		parent::admin_options();
+		echo '</div>';
+
+		echo '</div>';
 	}
 
 	/**
