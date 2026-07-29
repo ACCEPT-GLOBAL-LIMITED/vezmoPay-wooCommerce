@@ -194,6 +194,11 @@ class Gateway extends \WC_Payment_Gateway {
 	 * Settings screen with an unmistakable environment banner.
 	 */
 	public function admin_options() {
+		printf(
+			'<img src="%s" alt="%s" style="height:36px;width:auto;display:block;margin:4px 0 16px;" />',
+			esc_url( VEZMOPAY_WC_PLUGIN_URL . 'assets/img/vezmopay.svg' ),
+			esc_attr__( 'VezmoPay', 'vezmopay-woocommerce' )
+		);
 		Connect::maybe_render_connect_notices( $this );
 		if ( $this->is_test_mode() ) {
 			echo '<div class="notice notice-warning inline"><p><strong>';
