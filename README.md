@@ -282,7 +282,7 @@ Contributions welcome — match WordPress Coding Standards, keep strings transla
 <div align="center">
 
 **VezmoPay for WooCommerce** · v0.1.0 · GPL-2.0-or-later
-Built by [ACCEPT GLOBAL LIMITED](https://vezmo.com)
+Built by [Vezmo Technology, Inc.](https://vezmo.com)
 
 *💡 Found an issue? [Open one](https://github.com/ACCEPT-GLOBAL-LIMITED/vezmoPay-wooCommerce/issues) — include the redacted `vezmopay` log if you can.*
 

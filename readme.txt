@@ -98,7 +98,7 @@ Enable **Debug logging** in the gateway settings, then look under WooCommerce �
 
 == External services ==
 
-This plugin connects your store to the VezmoPay payment platform, operated by ACCEPT GLOBAL LIMITED. It communicates with the following services:
+This plugin connects your store to the VezmoPay payment platform, operated by Vezmo Technology, Inc. It communicates with the following services:
 
 **VezmoPay API** (`https://api.vezmo.com`, or `https://api.dev.vezmo.com` in Test mode)
 
@@ -109,7 +109,7 @@ This plugin connects your store to the VezmoPay payment platform, operated by AC
 
 * The customer's browser loads VezmoPay-hosted payment pages/scripts so that card details are entered directly with VezmoPay and never touch your store. Loaded on the pay page (element/iframe modes) or after redirect (hosted mode).
 
-VezmoPay is operated by ACCEPT GLOBAL LIMITED: [https://vezmo.com](https://vezmo.com) — see the site for terms of service and privacy policy.
+VezmoPay is operated by Vezmo Technology, Inc.: [https://vezmo.com](https://vezmo.com) — see the site for terms of service and privacy policy.
 
 == Changelog ==
 
