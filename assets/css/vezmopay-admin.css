@@ -1,7 +1,304 @@
+/* Hallmark · redesign · scope: WooCommerce gateway settings panel
+ * genre: modern-minimal · theme: VezmoPay system (lavender #ECEAFB pill · indigo #503af2 accent)
+ * pre-emit critique: P4 H5 E5 S4 R5 V4
+ * contrast: pass · fabricated content: none (reuses existing strings)
+ */
+
 /**
  * VezmoPay admin styles — brands the settings screen's Connect flow with the
  * product's signature gradient button (from the vezmo-user design system).
  */
+
+/* ── Redesigned settings panel: pill-banner hero + card-based layout ──────── */
+
+.vezmopay-admin {
+	/* Locked tokens — every value below references one of these. */
+	--vz-paper: #ffffff;
+	--vz-lavender: #eceafb;
+	--vz-lavender-edge: #ddd8f7;
+	--vz-ink: #0b1020;
+	--vz-muted: #6b7280;
+	--vz-border: #eef0f4;
+	--vz-brand: #503af2;
+	--vz-radius-card: 16px;
+	--vz-radius-pill: 999px;
+	--vz-shadow-card: 0 1px 2px rgba(11, 16, 32, 0.04), 0 8px 24px -18px rgba(11, 16, 32, 0.25);
+	--vz-space-sm: 10px;
+	--vz-space-md: 16px;
+	--vz-space-lg: 24px;
+	--vz-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+	width: 100%;
+	box-sizing: border-box;
+	margin-top: 6px;
+	margin-right: 20px;
+}
+
+/* Hero — brand lockup on a lavender stadium pill, tagline, environment chip. */
+.vezmopay-admin-hero {
+	display: flex;
+	align-items: center;
+	gap: var(--vz-space-md);
+	flex-wrap: wrap;
+	background: var(--vz-paper);
+	border: 1px solid var(--vz-border);
+	border-radius: var(--vz-radius-card);
+	box-shadow: var(--vz-shadow-card);
+	padding: 20px 22px;
+	margin: 0 0 var(--vz-space-md);
+}
+
+.vezmopay-admin-brandpill {
+	display: inline-flex;
+	align-items: center;
+	background: linear-gradient(135deg, var(--vz-lavender) 0%, #f2f0fd 100%);
+	border: 1px solid var(--vz-lavender-edge);
+	border-radius: var(--vz-radius-pill);
+	padding: 11px 22px;
+	transition: transform 0.2s var(--vz-ease-out), box-shadow 0.2s var(--vz-ease-out);
+}
+
+.vezmopay-admin-brandpill:hover {
+	transform: translateY(-1px);
+	box-shadow: 0 12px 26px -16px rgba(80, 58, 242, 0.45);
+}
+
+.vezmopay-admin-brandpill img {
+	display: block;
+	height: 24px;
+	width: auto;
+}
+
+.vezmopay-admin-tagline {
+	flex: 1 1 180px;
+	min-width: 0;
+	margin: 0;
+	font-size: 14px;
+	font-weight: 500;
+	color: var(--vz-muted);
+	line-height: 1.45;
+}
+
+.vezmopay-admin-envchip {
+	display: inline-flex;
+	align-items: center;
+	gap: 7px;
+	flex: none;
+	border-radius: var(--vz-radius-pill);
+	padding: 5px 13px;
+	font-size: 11.5px;
+	font-weight: 700;
+	letter-spacing: 0.03em;
+	white-space: nowrap;
+}
+
+.vezmopay-admin-envchip::before {
+	content: "";
+	width: 8px;
+	height: 8px;
+	border-radius: var(--vz-radius-pill);
+}
+
+.vezmopay-admin-envchip.is-test {
+	background: #fef3c7;
+	color: #b45309;
+}
+
+.vezmopay-admin-envchip.is-test::before {
+	background: #f59e0b;
+}
+
+.vezmopay-admin-envchip.is-live {
+	background: #dcfce7;
+	color: #15803d;
+}
+
+.vezmopay-admin-envchip.is-live::before {
+	background: #22c55e;
+}
+
+/* Notices — restyle WordPress inline notices as rounded cards. */
+.vezmopay-admin-notices {
+	display: flex;
+	flex-direction: column;
+	gap: var(--vz-space-sm);
+	margin: 0 0 var(--vz-space-md);
+}
+
+.vezmopay-admin-notices .notice.inline {
+	margin: 0;
+	border: 1px solid var(--vz-border);
+	border-left-width: 4px;
+	border-radius: 12px;
+	box-shadow: var(--vz-shadow-card);
+	padding: 12px 16px;
+}
+
+.vezmopay-admin-notices .notice.inline p {
+	margin: 0.3em 0;
+	font-size: 13.5px;
+	color: var(--vz-ink);
+}
+
+/* Fields — wrap WooCommerce's heading + description + form table in a card. */
+.vezmopay-admin-fields {
+	background: var(--vz-paper);
+	border: 1px solid var(--vz-border);
+	border-radius: var(--vz-radius-card);
+	box-shadow: var(--vz-shadow-card);
+	padding: 8px var(--vz-space-lg) var(--vz-space-lg);
+}
+
+.vezmopay-admin-fields h2 {
+	font-size: 17px;
+	font-weight: 700;
+	color: var(--vz-ink);
+	padding: var(--vz-space-md) 0 4px;
+	margin: 0;
+}
+
+/* Hide WooCommerce's method-description paragraph — the hero tagline and the
+ * per-field help text already cover it; showing both duplicates copy. */
+.vezmopay-admin-fields h2 + p {
+	display: none;
+}
+
+.vezmopay-admin-fields .form-table {
+	margin-top: 4px;
+}
+
+.vezmopay-admin-fields .form-table > tbody > tr > th {
+	color: var(--vz-ink);
+	font-weight: 600;
+}
+
+/* Restyle native on/off checkboxes (Enable/Disable, Debug logging) as switches. */
+.vezmopay-admin-fields input#woocommerce_vezmopay_enabled,
+.vezmopay-admin-fields input#woocommerce_vezmopay_debug {
+	appearance: none;
+	-webkit-appearance: none;
+	position: relative;
+	flex: none;
+	width: 44px;
+	height: 24px;
+	min-width: 44px;
+	margin: 0 8px 0 0;
+	padding: 0;
+	border: 0;
+	border-radius: var(--vz-radius-pill);
+	background: rgba(120, 120, 135, 0.35);
+	vertical-align: middle;
+	cursor: pointer;
+	transition: background 0.15s ease;
+}
+
+.vezmopay-admin-fields input#woocommerce_vezmopay_enabled::before,
+.vezmopay-admin-fields input#woocommerce_vezmopay_debug::before {
+	content: "";
+	position: absolute;
+	top: 3px;
+	left: 3px;
+	width: 18px;
+	height: 18px;
+	margin: 0;
+	border-radius: var(--vz-radius-pill);
+	background: #fff;
+	box-shadow: 0 1px 2px rgba(11, 16, 32, 0.2);
+	transition: transform 0.15s ease;
+}
+
+.vezmopay-admin-fields input#woocommerce_vezmopay_enabled:checked,
+.vezmopay-admin-fields input#woocommerce_vezmopay_debug:checked {
+	background: var(--vz-brand);
+}
+
+.vezmopay-admin-fields input#woocommerce_vezmopay_enabled:checked::before,
+.vezmopay-admin-fields input#woocommerce_vezmopay_debug:checked::before {
+	transform: translateX(20px);
+}
+
+.vezmopay-admin-fields input#woocommerce_vezmopay_enabled:focus-visible,
+.vezmopay-admin-fields input#woocommerce_vezmopay_debug:focus-visible {
+	outline: 2px solid var(--vz-brand);
+	outline-offset: 2px;
+}
+
+.vezmopay-admin-fields label[for="woocommerce_vezmopay_enabled"],
+.vezmopay-admin-fields label[for="woocommerce_vezmopay_debug"] {
+	display: inline-flex;
+	align-items: center;
+}
+
+/* Test connection — spinner button state + alert card below the button. */
+#vezmopay-test-connection.is-testing {
+	position: relative;
+	color: transparent !important;
+	pointer-events: none;
+}
+
+#vezmopay-test-connection.is-testing::before {
+	content: "";
+	position: absolute;
+	left: 14px;
+	top: 50%;
+	margin-top: -7px;
+	width: 14px;
+	height: 14px;
+	border-radius: var(--vz-radius-pill);
+	border: 2px solid rgba(34, 113, 177, 0.3);
+	border-top-color: #2271b1;
+	animation: vezmopay-admin-spin 0.6s linear infinite;
+}
+
+#vezmopay-test-connection.is-testing::after {
+	content: "Testing…";
+	position: absolute;
+	left: 34px;
+	right: 12px;
+	top: 50%;
+	transform: translateY(-50%);
+	text-align: left;
+	color: #2271b1;
+	font-weight: 500;
+}
+
+.vezmopay-test-result {
+	display: none;
+	margin: 12px 0 0;
+	max-width: 560px;
+	padding: 12px 16px;
+	border: 1px solid var(--vz-border);
+	border-left-width: 4px;
+	border-radius: 12px;
+	font-size: 13.5px;
+	font-weight: 500;
+	line-height: 1.45;
+	box-shadow: var(--vz-shadow-card);
+}
+
+.vezmopay-test-result.is-success {
+	border-left-color: #22c55e;
+	background: #f0fdf4;
+	color: #15803d;
+}
+
+.vezmopay-test-result.is-error {
+	border-left-color: #ef4444;
+	background: #fef2f2;
+	color: #b91c1c;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.vezmopay-admin-brandpill,
+	.vezmopay-admin-brandpill:hover {
+		transition: none;
+		transform: none;
+	}
+
+	#vezmopay-test-connection.is-testing::before {
+		animation: none;
+	}
+}
 
 .vezmopay-connect-button.button-primary,
 .vezmopay-connect-button.button-primary:focus {
@@ -67,11 +364,6 @@
 }
 
 /* ── Account settings panel (mirrors the VezmoPay console Settings page) ── */
-
-.vezmopay-account-panel,
-.vezmopay-more-card {
-	max-width: 720px;
-}
 
 .vezmopay-settings-card {
 	background: #fff;

@@ -42,7 +42,7 @@ class Gateway extends \WC_Payment_Gateway {
 	 */
 	public function __construct() {
 		$this->id                 = Plugin::GATEWAY_ID;
-		$this->icon               = VEZMOPAY_WC_PLUGIN_URL . 'assets/img/vezmo-mark.svg';
+		$this->icon               = VEZMOPAY_WC_PLUGIN_URL . 'assets/img/vezmopay-icon.png';
 		$this->method_title       = __( 'VezmoPay', 'vezmopay-woocommerce' );
 		$this->method_description = __( 'Accept payments through VezmoPay — hosted checkout, inline payment element, or secure iframe. Card data never touches your server.', 'vezmopay-woocommerce' );
 		$this->has_fields         = false;
@@ -74,6 +74,30 @@ class Gateway extends \WC_Payment_Gateway {
 	 */
 	public function logger() {
 		return $this->logger;
+	}
+
+	/**
+	 * Checkout icon. Renders the mark before the title on the classic checkout
+	 * payment-method row and vertically centres both. The scoped <style> ships
+	 * with the icon markup so no extra stylesheet has to be enqueued on checkout.
+	 *
+	 * @return string
+	 */
+	public function get_icon() {
+		$icon = sprintf(
+			'<img src="%1$s" alt="%2$s" class="vezmopay-checkout-icon" />',
+			esc_url( $this->icon ),
+			esc_attr( $this->get_title() )
+		);
+
+		$style = '<style>'
+			. '.wc_payment_method.payment_method_' . esc_attr( $this->id ) . ' > label{'
+			. 'display:flex;align-items:center;gap:8px;font-weight:600;}'
+			. '.wc_payment_method.payment_method_' . esc_attr( $this->id ) . ' > label img.vezmopay-checkout-icon{'
+			. 'order:-1;max-height:42px;width:auto;margin:0;float:none;}'
+			. '</style>';
+
+		return apply_filters( 'woocommerce_gateway_icon', $icon . $style, $this->id );
 	}
 
 	/* ---------------------------------------------------------------------
@@ -194,8 +218,30 @@ class Gateway extends \WC_Payment_Gateway {
 	 * Settings screen with an unmistakable environment banner.
 	 */
 	public function admin_options() {
+		$test = $this->is_test_mode();
+
+		echo '<div class="vezmopay-admin">';
+
+		// Branded pill-banner hero: the VezmoPay lockup on a lavender pill,
+		// a short tagline, and the current-environment chip.
+		echo '<header class="vezmopay-admin-hero">';
+		printf(
+			'<span class="vezmopay-admin-brandpill"><img src="%s" alt="%s" /></span>',
+			esc_url( VEZMOPAY_WC_PLUGIN_URL . 'assets/img/vezmopay.svg' ),
+			esc_attr__( 'VezmoPay', 'vezmopay-woocommerce' )
+		);
+		echo '<p class="vezmopay-admin-tagline">' . esc_html__( 'Modern payments for your WooCommerce store.', 'vezmopay-woocommerce' ) . '</p>';
+		printf(
+			'<span class="vezmopay-admin-envchip %1$s">%2$s</span>',
+			$test ? 'is-test' : 'is-live',
+			$test ? esc_html__( 'Test mode', 'vezmopay-woocommerce' ) : esc_html__( 'Live mode', 'vezmopay-woocommerce' )
+		);
+		echo '</header>';
+
+		// Status notices — the scoped stylesheet renders each as a card.
+		echo '<div class="vezmopay-admin-notices">';
 		Connect::maybe_render_connect_notices( $this );
-		if ( $this->is_test_mode() ) {
+		if ( $test ) {
 			echo '<div class="notice notice-warning inline"><p><strong>';
 			echo esc_html__( 'VezmoPay is in TEST mode.', 'vezmopay-woocommerce' );
 			echo '</strong> ';
@@ -223,8 +269,15 @@ class Gateway extends \WC_Payment_Gateway {
 			echo esc_html__( 'VezmoPay is active and will appear at checkout.', 'vezmopay-woocommerce' );
 			echo '</p></div>';
 		}
+		echo '</div>';
 
+		// WooCommerce's own heading + description + settings table, wrapped
+		// in a card surface by the scoped stylesheet.
+		echo '<div class="vezmopay-admin-fields">';
 		parent::admin_options();
+		echo '</div>';
+
+		echo '</div>';
 	}
 
 	/**
@@ -340,16 +393,20 @@ class Gateway extends \WC_Payment_Gateway {
 		$nonce = wp_create_nonce( 'vezmopay-admin' );
 		wc_enqueue_js(
 			"jQuery(function($){
-				$('#vezmopay-test-connection').on('click', function(e){
+				var btn=$('#vezmopay-test-connection');
+				btn.on('click', function(e){
 					e.preventDefault();
-					var btn=$(this), out=$('#vezmopay-test-connection-result');
-					btn.prop('disabled',true); out.text('…');
+					var out=$('#vezmopay-test-connection-result');
+					btn.prop('disabled',true).addClass('is-testing');
+					out.hide().removeClass('is-success is-error').empty();
 					$.post(ajaxurl,{action:'vezmopay_test_connection',nonce:'" . esc_js( $nonce ) . "',environment:$('#woocommerce_vezmopay_environment').val()},function(r){
-						out.css('color', r.success?'green':'#d63638').text(r.data&&r.data.message?r.data.message:'Error');
+						var ok=!!r.success;
+						var msg=(r.data&&r.data.message)?r.data.message:(ok?'Connection successful.':'Error');
+						out.addClass(ok?'is-success':'is-error').text(msg).show();
 					}).fail(function(x){
 						var m=(x.responseJSON&&x.responseJSON.data&&x.responseJSON.data.message)?x.responseJSON.data.message:'Request failed';
-						out.css('color','#d63638').text(m);
-					}).always(function(){ btn.prop('disabled',false); });
+						out.addClass('is-error').text(m).show();
+					}).always(function(){ btn.prop('disabled',false).removeClass('is-testing'); });
 				});
 			});"
 		);
@@ -364,10 +421,10 @@ class Gateway extends \WC_Payment_Gateway {
 				<button type="button" class="button" id="vezmopay-test-connection">
 					<?php esc_html_e( 'Test connection', 'vezmopay-woocommerce' ); ?>
 				</button>
-				<span id="vezmopay-test-connection-result" style="margin-left:8px;"></span>
 				<p class="description">
 					<?php esc_html_e( 'Validates the saved API key and secret for the selected environment against the VezmoPay API. Save your changes first.', 'vezmopay-woocommerce' ); ?>
 				</p>
+				<div id="vezmopay-test-connection-result" class="vezmopay-test-result" role="status" aria-live="polite"></div>
 			</td>
 		</tr>
 		<?php

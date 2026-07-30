@@ -1,4 +1,4 @@
-# Copyright (C) 2026 ACCEPT GLOBAL LIMITED
+# Copyright (C) 2026 Vezmo Technology, Inc.
 # This file is distributed under the GPL-2.0-or-later.
 msgid ""
 msgstr ""
@@ -32,7 +32,7 @@ msgstr ""
 
 #. Author of the plugin
 #: vezmopay-woocommerce.php
-msgid "ACCEPT GLOBAL LIMITED"
+msgid "Vezmo Technology, Inc."
 msgstr ""
 
 #. Author URI of the plugin

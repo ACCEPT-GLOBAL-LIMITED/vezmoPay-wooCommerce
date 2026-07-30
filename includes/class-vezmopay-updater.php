@@ -275,7 +275,7 @@ class Updater {
 			'name'          => 'VezmoPay for WooCommerce',
 			'slug'          => $this->slug,
 			'version'       => $release['version'],
-			'author'        => '<a href="https://vezmo.com">ACCEPT GLOBAL LIMITED</a>',
+			'author'        => '<a href="https://vezmo.com">Vezmo Technology, Inc.</a>',
 			'homepage'      => $release['url'],
 			'requires'      => '6.0',
 			'requires_php'  => '7.4',
