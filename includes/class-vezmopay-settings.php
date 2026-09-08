@@ -64,18 +64,13 @@ class Settings {
 			'integration_mode'    => array(
 				'title'       => __( 'Integration mode', 'vezmopay-woocommerce' ),
 				'type'        => 'select',
-				'default'     => 'embedded',
-				// Two options, because there are two behaviours. The old
-				// 'element' and 'iframe' values both mean 'embedded' now: they
-				// rendered the SAME VezmoPay page and differed only in whether
-				// vezmo.js or the plugin drove the frame — an implementation
-				// detail the plugin picks itself (SDK when the session offers
-				// one, a plain frame otherwise).
+				'default'     => 'element',
 				'options'     => array(
-					'embedded' => __( 'Embedded on your store (recommended)', 'vezmopay-woocommerce' ),
-					'hosted'   => __( 'Hosted checkout (redirect to the VezmoPay paylink page)', 'vezmopay-woocommerce' ),
+					'element' => __( 'Inline payment element (vezmo.js on your pay page)', 'vezmopay-woocommerce' ),
+					'iframe'  => __( 'Secure iframe (embedded on your pay page)', 'vezmopay-woocommerce' ),
+					'hosted'  => __( 'Hosted checkout (redirect to the VezmoPay paylink page)', 'vezmopay-woocommerce' ),
 				),
-				'description' => __( 'Embedded keeps the customer on your own pay page (card fields are VezmoPay-hosted either way, keeping you at SAQ-A PCI scope). It needs this store to be one of your VezmoPay trusted origins — Connect registers it automatically — and when it is not, the shopper is sent to the VezmoPay secure page instead of an empty frame. Hosted always redirects, to a VezmoPay paylink page.', 'vezmopay-woocommerce' ),
+				'description' => __( 'Inline and iframe both keep the customer on your own pay page — inline lets the VezmoPay SDK drive the form (auto-sizing and payment events), iframe embeds the same page and confirms by polling. Card fields are VezmoPay-hosted either way, keeping you at SAQ-A PCI scope. Each mode falls back on its own when it cannot run: inline drops to the iframe if the SDK is unavailable, and both send the shopper to the VezmoPay secure page — never an empty frame — until this store is one of your VezmoPay trusted origins, which Connect registers automatically. Hosted always redirects, to a VezmoPay paylink page.', 'vezmopay-woocommerce' ),
 			),
 			'environment'         => array(
 				'title'       => __( 'Environment', 'vezmopay-woocommerce' ),

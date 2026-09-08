@@ -125,14 +125,19 @@ class Gateway extends \WC_Payment_Gateway {
 	/**
 	 * Selected integration mode.
 	 *
-	 * Legacy 'element' and 'iframe' both normalise to 'embedded': they rendered
-	 * the same VezmoPay page and differed only in what drove the frame, which the
-	 * plugin now decides per session. Stores keep working without re-saving.
+	 * 'element' drives the embed with vezmo.js, 'iframe' embeds the same page and
+	 * polls, 'hosted' redirects. Each degrades on its own where it cannot run —
+	 * see render_embedded_checkout() and receipt_page(). The 0.2.13-only
+	 * 'embedded' value normalises to 'element', the richer of the two embeds.
 	 *
-	 * @return string 'embedded'|'hosted'
+	 * @return string 'element'|'iframe'|'hosted'
 	 */
 	public function integration_mode() {
-		return 'hosted' === $this->get_option( 'integration_mode', 'embedded' ) ? 'hosted' : 'embedded';
+		$mode = $this->get_option( 'integration_mode', 'element' );
+		if ( 'embedded' === $mode ) {
+			return 'element';
+		}
+		return in_array( $mode, array( 'element', 'iframe', 'hosted' ), true ) ? $mode : 'element';
 	}
 
 	/**
@@ -888,6 +893,15 @@ class Gateway extends \WC_Payment_Gateway {
 			return;
 		}
 
+		// Record the hand-off against the order so the mode the shopper actually
+		// got is answerable later, not just the one that was configured. Covers
+		// both hosted mode and an embed that had to fall back. Skipped on a
+		// return from a failed attempt, which must not rewrite that history.
+		if ( ! $came_back_failed ) {
+			$order->update_meta_data( '_vezmopay_effective_mode', 'hosted' );
+			$order->save_meta_data();
+		}
+
 		$this->render_redirect_checkout( $iframe_url, $came_back_failed );
 	}
 
@@ -905,9 +919,6 @@ class Gateway extends \WC_Payment_Gateway {
 	 * @param string    $iframe_url Secure payment page URL.
 	 */
 	private function render_embedded_checkout( $order, $mode, $iframe_url ) {
-		// Prefer VezmoPay's own SDK when the session carries one: it owns the
-		// frame's origin checks, auto-resize and the captcha/3-D Secure popup
-		// fallback. Without a sdkUrl, drive a plain frame ourselves.
 		$sdk_url = (string) $order->get_meta( '_vezmopay_sdk_url' );
 
 		$params = array(
@@ -947,7 +958,18 @@ class Gateway extends \WC_Payment_Gateway {
 			),
 		);
 
-		$use_sdk = '' !== $sdk_url;
+		// Inline mode hands the frame to VezmoPay's own SDK, which owns its origin
+		// checks, auto-resize and the captcha/3-D Secure popup fallback. Iframe
+		// mode deliberately does NOT load it: the plugin embeds the page and
+		// confirms by polling, which is the point of choosing that mode. Inline
+		// without a sdkUrl on the session has nothing to mount, so it degrades to
+		// exactly what iframe mode does rather than failing.
+		$use_sdk = 'element' === $mode && '' !== $sdk_url;
+		if ( 'element' === $mode && ! $use_sdk ) {
+			$this->logger->debug(
+				'Inline mode requested but the session carried no sdkUrl; falling back to the embedded iframe.'
+			);
+		}
 		if ( $use_sdk ) {
 			wp_enqueue_script( 'vezmopay-sdk', $sdk_url, array(), null, true ); // phpcs:ignore WordPress.WP.EnqueuedResourceParameters.MissingVersion -- remote SDK, provider-versioned.
 			wp_enqueue_script( 'vezmopay-element', VEZMOPAY_WC_PLUGIN_URL . 'assets/js/checkout-element.js', array( 'vezmopay-sdk' ), Plugin::asset_version( 'assets/js/checkout-element.js' ), true );
@@ -972,9 +994,12 @@ class Gateway extends \WC_Payment_Gateway {
 			array( 'id' => 'vezmopay-embed-early' )
 		);
 
+		$order->update_meta_data( '_vezmopay_effective_mode', $use_sdk ? 'element' : 'iframe' );
+		$order->save_meta_data();
+
 		$logo_url = VEZMOPAY_WC_PLUGIN_URL . 'assets/img/vezmopay.svg';
 
-		echo '<div id="vezmopay-checkout" class="vezmopay-checkout" data-mode="' . esc_attr( $mode ) . '" data-theme="' . esc_attr( $this->checkout_theme() ) . '">';
+		echo '<div id="vezmopay-checkout" class="vezmopay-checkout" data-mode="' . esc_attr( $use_sdk ? 'element' : 'iframe' ) . '" data-theme="' . esc_attr( $this->checkout_theme() ) . '">';
 
 		echo '<div class="vezmopay-header">';
 		echo '<img class="vezmopay-logo" src="' . esc_url( $logo_url ) . '" alt="VezmoPay" />';
@@ -1305,7 +1330,7 @@ class Gateway extends \WC_Payment_Gateway {
 		if ( current_user_can( 'manage_woocommerce' ) ) {
 			$detail = $error->get_error_message();
 			if ( 'vezmopay_http_403' === $error->get_error_code() ) {
-				$detail .= ' — ' . __( 'Your VezmoPay API key is missing a required permission: embedded mode needs secure-payment.create, hosted mode needs paylink.create. Assign it to the key in the VezmoPay admin.', 'vezmopay-woocommerce' );
+				$detail .= ' — ' . __( 'Your VezmoPay API key is missing a required permission: inline and iframe modes need secure-payment.create, hosted mode needs paylink.create. Assign it to the key in the VezmoPay admin.', 'vezmopay-woocommerce' );
 			}
 			$message .= ' ' . sprintf(
 				/* translators: %s: technical error detail (shown to store managers only) */
