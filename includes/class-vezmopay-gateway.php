@@ -213,6 +213,24 @@ class Gateway extends \WC_Payment_Gateway {
 	}
 
 	/**
+	 * Scheme + host (+ port) of a URL, for postMessage targeting.
+	 *
+	 * @param string $url URL.
+	 * @return string Origin, or '' when unparsable.
+	 */
+	private function url_origin( $url ) {
+		$parts = wp_parse_url( $url );
+		if ( empty( $parts['scheme'] ) || empty( $parts['host'] ) ) {
+			return '';
+		}
+		$origin = $parts['scheme'] . '://' . $parts['host'];
+		if ( ! empty( $parts['port'] ) ) {
+			$origin .= ':' . (int) $parts['port'];
+		}
+		return $origin;
+	}
+
+	/**
 	 * Whether VezmoPay will actually let this store embed the secure payment page.
 	 *
 	 * The platform serves that page with a per-merchant `frame-ancestors` CSP built
@@ -893,11 +911,27 @@ class Gateway extends \WC_Payment_Gateway {
 			'orderKey'     => $order->get_order_key(),
 			'clientToken'  => (string) $order->get_meta( '_vezmopay_client_token' ),
 			'iframeUrl'    => $iframe_url,
+			// Target origin for the parent -> iframe submit message that drives the
+			// charge in iframe mode (element mode goes through the SDK's .pay()).
+			'secureOrigin' => $this->url_origin( $iframe_url ),
 			'confirmUrl'   => \WC_AJAX::get_endpoint( 'vezmopay_confirm' ),
 			'statusUrl'    => \WC_AJAX::get_endpoint( 'vezmopay_status' ),
 			'nonce'        => wp_create_nonce( 'vezmopay-checkout' ),
 			'pollInterval' => 4000,
 			'i18n'         => array(
+				// wc_price() returns the currency symbol as an HTML entity
+				// (&#36;), and the script writes this label with textContent —
+				// so decode it here or a shopper who retries after a decline
+				// sees the literal "Pay &#36;12.34".
+				'pay'        => sprintf(
+					/* translators: %s: order total, e.g. $300.00 */
+					__( 'Pay %s', 'vezmopay-woocommerce' ),
+					html_entity_decode(
+						wp_strip_all_tags( wc_price( $order->get_total(), array( 'currency' => $order->get_currency() ) ) ),
+						ENT_QUOTES,
+						'UTF-8'
+					)
+				),
 				'processing' => __( 'Processing your payment…', 'vezmopay-woocommerce' ),
 				'pending'    => __( 'Your bank payment is processing. We will email you when it completes.', 'vezmopay-woocommerce' ),
 				'failed'     => __( 'Payment failed. Please try again or use a different payment method.', 'vezmopay-woocommerce' ),
@@ -940,6 +974,16 @@ class Gateway extends \WC_Payment_Gateway {
 		}
 		echo '</div>';
 		echo '</div>';
+
+		// When the secure page is embedded it HIDES its own card/bank submit button
+		// and waits for a `vezmo:secure-payment:submit` message from us — by design,
+		// so the merchant owns the primary call to action. Render that button here or
+		// the shopper has a card form they cannot submit. Wallet (Apple/Google Pay)
+		// buttons inside the frame keep working on their own. Revealed once the frame
+		// reports ready, so it never appears over an empty box.
+		echo '<button type="button" id="vezmopay-pay" class="vezmopay-pay">';
+		echo '<span class="vezmopay-pay-label">' . esc_html( $params['i18n']['pay'] ) . '</span>';
+		echo '</button>';
 
 		echo '<p id="vezmopay-message" class="vezmopay-message" role="status" aria-live="polite"></p>';
 

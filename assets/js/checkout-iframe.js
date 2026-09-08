@@ -21,6 +21,7 @@
 	var messageEl = document.getElementById( 'vezmopay-message' );
 	var checkoutEl = document.getElementById( 'vezmopay-checkout' );
 	var frameEl = document.getElementById( 'vezmopay-frame' );
+	var payButton = document.getElementById( 'vezmopay-pay' );
 	var done = false;
 
 	function setMessage( text, kind ) {
@@ -41,6 +42,49 @@
 		frameEl.addEventListener( 'load', markReady );
 	}
 	window.setTimeout( markReady, 8000 );
+
+	// The embedded page hides its own submit button and charges only on a
+	// parent -> iframe submit message (the same one vezmo.js's .pay() posts),
+	// so without this button the shopper cannot pay at all.
+	function setPaying( paying ) {
+		if ( ! payButton ) {
+			return;
+		}
+		payButton.disabled = paying;
+		payButton.classList.toggle( 'is-paying', !! paying );
+		var label = payButton.querySelector( '.vezmopay-pay-label' );
+		if ( label ) {
+			label.textContent = paying ? params.i18n.processing : params.i18n.pay;
+		}
+	}
+
+	if ( payButton && frameEl && params.secureOrigin ) {
+		payButton.addEventListener( 'click', function () {
+			setPaying( true );
+			setMessage( '' );
+			frameEl.contentWindow.postMessage(
+				{ type: 'vezmo:secure-payment:submit' },
+				params.secureOrigin
+			);
+		} );
+	}
+
+	// The frame reports outcomes to us as well as to the store's status endpoint.
+	// Only the failure/ready signals matter here — completion is handled by the
+	// poll below, which re-verifies against the API rather than trusting a
+	// message — but a decline must hand the button back immediately.
+	window.addEventListener( 'message', function ( e ) {
+		if ( params.secureOrigin && e.origin !== params.secureOrigin ) {
+			return;
+		}
+		var type = e.data && e.data.type;
+		if ( 'vezmo:secure-payment:ready' === type ) {
+			markReady();
+		} else if ( 'vezmo:secure-payment:error' === type ) {
+			setPaying( false );
+			setMessage( ( e.data && e.data.message ) || params.i18n.failed, 'error' );
+		}
+	} );
 
 	function poll() {
 		if ( done ) {
@@ -72,6 +116,7 @@
 					}
 					window.location = res.data.redirect;
 				} else if ( 'FAILED' === res.data.status ) {
+					setPaying( false );
 					setMessage( params.i18n.failed, 'error' );
 				} else if ( 'MISMATCH' === res.data.status ) {
 					// Manual review required — polling will never resolve this.

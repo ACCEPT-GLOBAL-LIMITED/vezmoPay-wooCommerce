@@ -21,8 +21,23 @@
 	var container = document.getElementById( 'vezmopay-container' );
 	var messageEl = document.getElementById( 'vezmopay-message' );
 	var checkoutEl = document.getElementById( 'vezmopay-checkout' );
+	var payButton = document.getElementById( 'vezmopay-pay' );
 	var finalized = false;
 	var pollTimer = null;
+
+	// The embedded secure page hides its own submit button and charges only when
+	// the merchant page asks it to, so this button is the shopper's way to pay.
+	function setPaying( paying ) {
+		if ( ! payButton ) {
+			return;
+		}
+		payButton.disabled = paying;
+		payButton.classList.toggle( 'is-paying', !! paying );
+		var label = payButton.querySelector( '.vezmopay-pay-label' );
+		if ( label ) {
+			label.textContent = paying ? params.i18n.processing : params.i18n.pay;
+		}
+	}
 
 	function setMessage( text, kind ) {
 		if ( ! messageEl ) {
@@ -100,6 +115,7 @@
 						window.clearInterval( pollTimer );
 						window.location = res.data.redirect;
 					} else if ( 'FAILED' === res.data.status ) {
+						setPaying( false );
 						setMessage( params.i18n.failed, 'error' );
 					} else if ( 'MISMATCH' === res.data.status ) {
 						// Manual review required — polling will never resolve this.
@@ -125,6 +141,18 @@
 		frame.setAttribute( 'title', 'VezmoPay secure payment' );
 		frame.addEventListener( 'load', markReady );
 		container.appendChild( frame );
+
+		// No SDK here, so drive the charge with the same message it would post.
+		if ( payButton && params.secureOrigin ) {
+			payButton.addEventListener( 'click', function () {
+				setPaying( true );
+				setMessage( '' );
+				frame.contentWindow.postMessage(
+					{ type: 'vezmo:secure-payment:submit' },
+					params.secureOrigin
+				);
+			} );
+		}
 	}
 
 	function init() {
@@ -148,6 +176,16 @@
 				sdkFrame.addEventListener( 'load', markReady );
 			}
 
+			if ( payButton ) {
+				payButton.addEventListener( 'click', function () {
+					setPaying( true );
+					setMessage( '' );
+					// Posts vezmo:secure-payment:submit into the frame, which runs
+					// the same charge path as the hosted page's own button.
+					vezmo.pay();
+				} );
+			}
+
 			vezmo.on( 'ready', markReady );
 			vezmo.on( 'success', function () {
 				finalize();
@@ -160,6 +198,7 @@
 			} );
 			vezmo.on( 'error', function ( evt ) {
 				markReady();
+				setPaying( false );
 				setMessage( ( evt && evt.message ) || params.i18n.failed, 'error' );
 			} );
 			vezmo.on( 'expired', function () {
