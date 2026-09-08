@@ -32,10 +32,11 @@
 	var settings = getSetting( 'vezmopay_data', {} );
 	var labelText = decodeEntities( settings.title || __( 'VezmoPay', 'vezmopay-woocommerce' ) );
 
+	// Mark FIRST, then the title — the same order as the classic checkout row,
+	// where get_icon() puts the image before the label with `order:-1`. The icon
+	// is decorative (the title carries the name), so it stays aria-hidden.
 	function Label() {
-		var children = [
-			createElement( 'span', { key: 'text' }, labelText ),
-		];
+		var children = [];
 		if ( settings.icon ) {
 			children.push(
 				createElement( 'img', {
@@ -43,13 +44,14 @@
 					src: settings.icon,
 					alt: '',
 					'aria-hidden': 'true',
-					style: { height: '20px', width: 'auto', marginLeft: '8px' },
+					style: { height: '20px', width: 'auto', marginRight: '8px' },
 				} )
 			);
 		}
+		children.push( createElement( 'span', { key: 'text' }, labelText ) );
 		return createElement(
 			'span',
-			{ style: { display: 'inline-flex', alignItems: 'center', width: '100%', justifyContent: 'space-between' } },
+			{ style: { display: 'inline-flex', alignItems: 'center' } },
 			children
 		);
 	}
