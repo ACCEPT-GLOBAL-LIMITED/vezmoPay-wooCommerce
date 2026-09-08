@@ -183,6 +183,16 @@
 				className: 'vezmopay-inline-container',
 			} )
 		);
+		// Same button the classic checkout renders server-side: the embedded form
+		// hides its own submit, so the payment area gets one here. It places the
+		// order, exactly as the block checkout's own button does.
+		children.push(
+			createElement(
+				'button',
+				{ key: 'pay', type: 'button', className: 'vezmopay-inline-pay', hidden: true },
+				createElement( 'span', { className: 'vezmopay-inline-pay-label' }, __( 'Pay', 'vezmopay-woocommerce' ) )
+			)
+		);
 		children.push(
 			createElement( 'p', {
 				key: 'msg',

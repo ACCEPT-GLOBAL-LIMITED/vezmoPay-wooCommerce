@@ -69,6 +69,81 @@
 		if ( el ) {
 			el.classList.add( 'is-ready' );
 		}
+		bindPayButton();
+		refreshPayButton();
+	}
+
+	/**
+	 * The Pay button under the embedded form.
+	 *
+	 * WooCommerce's own "Place order" button already does this — the Stripe
+	 * plugin ships nothing else — but the embedded VezmoPay form hides its own
+	 * submit button, which leaves the payment area looking unfinished. So this
+	 * button exists for reassurance and simply places the order: same action,
+	 * next to the fields the shopper just filled in.
+	 */
+	function payButton() {
+		var scope = root();
+		return scope ? scope.querySelector( '.vezmopay-inline-pay' ) : null;
+	}
+
+	function formatAmount() {
+		if ( ! session ) {
+			return '';
+		}
+		try {
+			return new Intl.NumberFormat( undefined, {
+				style: 'currency',
+				currency: session.currency || 'USD',
+			} ).format( Number( session.amount ) );
+		} catch ( e ) {
+			return String( session.amount );
+		}
+	}
+
+	function refreshPayButton() {
+		var btn = payButton();
+		if ( ! btn ) {
+			return;
+		}
+		var label = btn.querySelector( '.vezmopay-inline-pay-label' );
+		if ( label ) {
+			label.textContent = charging
+				? params.i18n.processing
+				: params.i18n.pay.replace( '%s', formatAmount() );
+		}
+		btn.disabled = !! charging || ! ready;
+		btn.hidden = ! session;
+	}
+
+	/** Place the order — whichever checkout we are on. */
+	function submitCheckout() {
+		var blocks = document.querySelector( '.wc-block-components-checkout-place-order-button' );
+		if ( blocks ) {
+			blocks.click();
+			return;
+		}
+		var classic = document.querySelector( 'form.checkout #place_order' );
+		if ( classic ) {
+			classic.click();
+		}
+	}
+
+	function bindPayButton() {
+		var btn = payButton();
+		if ( ! btn || btn.dataset.vezmopayBound ) {
+			return;
+		}
+		btn.dataset.vezmopayBound = '1';
+		btn.addEventListener( 'click', function ( e ) {
+			e.preventDefault();
+			if ( charging || ! ready ) {
+				return;
+			}
+			setMessage( '' );
+			submitCheckout();
+		} );
+		refreshPayButton();
 	}
 
 	function selected() {
@@ -146,6 +221,7 @@
 		}
 
 		mountFrame( host );
+		bindPayButton();
 		return Promise.resolve();
 	}
 
@@ -254,6 +330,7 @@
 		}
 		charging = { orderId: orderId, orderKey: orderKey, deferred: deferred || null };
 		setMessage( params.i18n.processing, 'info' );
+		refreshPayButton();
 
 		if ( vezmo ) {
 			vezmo.pay();
@@ -316,6 +393,7 @@
 		}
 		var d = charging.deferred;
 		charging = null;
+		refreshPayButton();
 		if ( d ) {
 			// The caller (Blocks) surfaces the failure in its own notice area —
 			// showing it here too would say the same thing twice.

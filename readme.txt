@@ -4,7 +4,7 @@ Tags: payments, payment gateway, credit card, ach, woocommerce
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.2.15
+Stable tag: 0.2.16
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -112,6 +112,10 @@ This plugin connects your store to the VezmoPay payment platform, operated by Ve
 VezmoPay is operated by Vezmo Technology, Inc.: [https://vezmo.com](https://vezmo.com) — see the site for terms of service and privacy policy.
 
 == Changelog ==
+
+= 0.2.16 =
+* Added a Pay button under the payment fields on the checkout page, showing the order total. The embedded VezmoPay form hides its own submit button, which left the payment area looking unfinished — this places the order, exactly as WooCommerce's own "Place order" button does. Both buttons work; use whichever your customers reach first.
+* The payment fields are taller by default, so the card and bank options are no longer scrolled inside a short box.
 
 = 0.2.15 =
 * Inline and iframe modes now work the way Stripe's plugin does: the VezmoPay form appears in the payment section of the checkout page itself, and the customer pays with WooCommerce's own "Place order" button. No second page, no second button.

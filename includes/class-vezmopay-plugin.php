@@ -242,6 +242,8 @@ final class Plugin {
 				'confirmUrl'  => \WC_AJAX::get_endpoint( 'vezmopay_confirm' ),
 				'nonce'       => wp_create_nonce( 'vezmopay-checkout' ),
 				'i18n'        => array(
+					/* translators: %s: order total, e.g. $500.00 */
+					'pay'         => __( 'Pay %s', 'vezmopay-woocommerce' ),
 					'processing'  => __( 'Processing your payment…', 'vezmopay-woocommerce' ),
 					'failed'      => __( 'Payment failed. Please check your card details and try again.', 'vezmopay-woocommerce' ),
 					'unavailable' => __( 'Secure payment fields could not be loaded. Please reload the page or choose another payment method.', 'vezmopay-woocommerce' ),

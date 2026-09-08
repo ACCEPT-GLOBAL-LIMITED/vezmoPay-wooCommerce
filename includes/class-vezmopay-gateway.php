@@ -106,6 +106,12 @@ class Gateway extends \WC_Payment_Gateway {
 		echo '<div id="vezmopay-inline" class="vezmopay-inline" data-mode="' . esc_attr( $this->integration_mode() ) . '" data-theme="' . esc_attr( $this->checkout_theme() ) . '">';
 		echo '<div class="vezmopay-inline-loading"><span class="vezmopay-spinner"></span>' . esc_html__( 'Loading secure payment fields…', 'vezmopay-woocommerce' ) . '</div>';
 		echo '<div id="vezmopay-inline-container" class="vezmopay-inline-container"></div>';
+		// The embedded form hides its own submit button, so give the shopper one
+		// here, beside the fields. It places the order — the same thing
+		// WooCommerce's "Place order" button does.
+		echo '<button type="button" class="vezmopay-inline-pay" hidden>';
+		echo '<span class="vezmopay-inline-pay-label">' . esc_html__( 'Pay', 'vezmopay-woocommerce' ) . '</span>';
+		echo '</button>';
 		echo '<p id="vezmopay-inline-message" class="vezmopay-inline-message" role="status" aria-live="polite"></p>';
 		echo '</div>';
 	}
