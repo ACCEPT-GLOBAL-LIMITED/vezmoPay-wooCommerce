@@ -4,7 +4,7 @@ Tags: payments, payment gateway, credit card, ach, woocommerce
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.2.12
+Stable tag: 0.2.13
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -112,6 +112,10 @@ This plugin connects your store to the VezmoPay payment platform, operated by Ve
 VezmoPay is operated by Vezmo Technology, Inc.: [https://vezmo.com](https://vezmo.com) — see the site for terms of service and privacy policy.
 
 == Changelog ==
+
+= 0.2.13 =
+* Integration mode is now two choices instead of three. "Inline payment element" and "Secure iframe" opened the same VezmoPay page and differed only in what drove the frame, which the plugin now decides for itself — they are one "Embedded on your store" option. Stores set to either keep working with no change.
+* "Payments secured by VezmoPay" now sits below the Pay button, where it reassures at the moment of paying, instead of above it inside the form.
 
 = 0.2.12 =
 * Fixed the Pay button appearing unstyled on some stores. The plugin's stylesheet was cached against the version number alone, so a store that updated between releases kept serving the old CSS. Asset URLs now change whenever the file changes.

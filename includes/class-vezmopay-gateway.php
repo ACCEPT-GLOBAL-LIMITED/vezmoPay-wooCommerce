@@ -125,11 +125,14 @@ class Gateway extends \WC_Payment_Gateway {
 	/**
 	 * Selected integration mode.
 	 *
-	 * @return string 'element'|'iframe'|'hosted'
+	 * Legacy 'element' and 'iframe' both normalise to 'embedded': they rendered
+	 * the same VezmoPay page and differed only in what drove the frame, which the
+	 * plugin now decides per session. Stores keep working without re-saving.
+	 *
+	 * @return string 'embedded'|'hosted'
 	 */
 	public function integration_mode() {
-		$mode = $this->get_option( 'integration_mode', 'element' );
-		return in_array( $mode, array( 'element', 'iframe', 'hosted' ), true ) ? $mode : 'element';
+		return 'hosted' === $this->get_option( 'integration_mode', 'embedded' ) ? 'hosted' : 'embedded';
 	}
 
 	/**
@@ -902,6 +905,9 @@ class Gateway extends \WC_Payment_Gateway {
 	 * @param string    $iframe_url Secure payment page URL.
 	 */
 	private function render_embedded_checkout( $order, $mode, $iframe_url ) {
+		// Prefer VezmoPay's own SDK when the session carries one: it owns the
+		// frame's origin checks, auto-resize and the captcha/3-D Secure popup
+		// fallback. Without a sdkUrl, drive a plain frame ourselves.
 		$sdk_url = (string) $order->get_meta( '_vezmopay_sdk_url' );
 
 		$params = array(
@@ -941,9 +947,7 @@ class Gateway extends \WC_Payment_Gateway {
 			),
 		);
 
-		// Element mode needs VezmoPay's own embed SDK; without a sdkUrl on the
-		// session there is nothing to mount, so fall through to the raw iframe.
-		$use_sdk = 'element' === $mode && '' !== $sdk_url;
+		$use_sdk = '' !== $sdk_url;
 		if ( $use_sdk ) {
 			wp_enqueue_script( 'vezmopay-sdk', $sdk_url, array(), null, true ); // phpcs:ignore WordPress.WP.EnqueuedResourceParameters.MissingVersion -- remote SDK, provider-versioned.
 			wp_enqueue_script( 'vezmopay-element', VEZMOPAY_WC_PLUGIN_URL . 'assets/js/checkout-element.js', array( 'vezmopay-sdk' ), Plugin::asset_version( 'assets/js/checkout-element.js' ), true );
@@ -1024,7 +1028,11 @@ class Gateway extends \WC_Payment_Gateway {
 		echo '<noscript><p class="vezmopay-message is-info" style="display:block;">' . esc_html__( 'JavaScript is disabled. After paying in the secure form above, your order will be confirmed by email once VezmoPay notifies us.', 'vezmopay-woocommerce' ) . '</p></noscript>';
 
 		echo '<div class="vezmopay-footer">';
-		echo '<span class="vezmopay-powered">' . esc_html__( 'Powered by', 'vezmopay-woocommerce' ) . ' <img src="' . esc_url( $logo_url ) . '" alt="VezmoPay" /></span>';
+		// "Payments secured by VezmoPay" belongs BELOW the Pay button — it
+		// reassures at the moment of paying, not before the form is filled in.
+		// The embedded page hides its own copy of this line, so there is exactly
+		// one, here. phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static inline SVG.
+		echo '<span class="vezmopay-powered">' . '<svg class="vezmopay-lock-mini" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 10V8a5 5 0 0 1 10 0v2m-11 0h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1Z"/></svg>' . ' ' . esc_html__( 'Payments secured by', 'vezmopay-woocommerce' ) . ' <img src="' . esc_url( $logo_url ) . '" alt="VezmoPay" /></span>';
 		echo '<span class="vezmopay-trust"><span>' . esc_html__( 'PCI DSS', 'vezmopay-woocommerce' ) . '</span><span>' . esc_html__( '3-D Secure', 'vezmopay-woocommerce' ) . '</span></span>';
 		echo '</div>';
 
@@ -1064,7 +1072,11 @@ class Gateway extends \WC_Payment_Gateway {
 		echo '</div>';
 
 		echo '<div class="vezmopay-footer">';
-		echo '<span class="vezmopay-powered">' . esc_html__( 'Powered by', 'vezmopay-woocommerce' ) . ' <img src="' . esc_url( $logo_url ) . '" alt="VezmoPay" /></span>';
+		// "Payments secured by VezmoPay" belongs BELOW the Pay button — it
+		// reassures at the moment of paying, not before the form is filled in.
+		// The embedded page hides its own copy of this line, so there is exactly
+		// one, here. phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static inline SVG.
+		echo '<span class="vezmopay-powered">' . '<svg class="vezmopay-lock-mini" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 10V8a5 5 0 0 1 10 0v2m-11 0h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1Z"/></svg>' . ' ' . esc_html__( 'Payments secured by', 'vezmopay-woocommerce' ) . ' <img src="' . esc_url( $logo_url ) . '" alt="VezmoPay" /></span>';
 		echo '<span class="vezmopay-trust"><span>' . esc_html__( 'PCI DSS', 'vezmopay-woocommerce' ) . '</span><span>' . esc_html__( '3-D Secure', 'vezmopay-woocommerce' ) . '</span></span>';
 		echo '</div>';
 
@@ -1293,7 +1305,7 @@ class Gateway extends \WC_Payment_Gateway {
 		if ( current_user_can( 'manage_woocommerce' ) ) {
 			$detail = $error->get_error_message();
 			if ( 'vezmopay_http_403' === $error->get_error_code() ) {
-				$detail .= ' — ' . __( 'Your VezmoPay API key is missing a required permission: element/iframe modes need secure-payment.create, hosted mode needs paylink.create. Assign it to the key in the VezmoPay admin.', 'vezmopay-woocommerce' );
+				$detail .= ' — ' . __( 'Your VezmoPay API key is missing a required permission: embedded mode needs secure-payment.create, hosted mode needs paylink.create. Assign it to the key in the VezmoPay admin.', 'vezmopay-woocommerce' );
 			}
 			$message .= ' ' . sprintf(
 				/* translators: %s: technical error detail (shown to store managers only) */

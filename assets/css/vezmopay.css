@@ -551,3 +551,11 @@
 	max-width: none;
 	position: relative;
 }
+
+/* Padlock in the "Payments secured by VezmoPay" line under the Pay button. */
+.vezmopay-lock-mini {
+	flex: 0 0 auto;
+	vertical-align: -2px;
+	margin-right: 2px;
+	opacity: 0.75;
+}

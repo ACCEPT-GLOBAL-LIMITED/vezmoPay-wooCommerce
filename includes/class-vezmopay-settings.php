@@ -64,13 +64,18 @@ class Settings {
 			'integration_mode'    => array(
 				'title'       => __( 'Integration mode', 'vezmopay-woocommerce' ),
 				'type'        => 'select',
-				'default'     => 'element',
+				'default'     => 'embedded',
+				// Two options, because there are two behaviours. The old
+				// 'element' and 'iframe' values both mean 'embedded' now: they
+				// rendered the SAME VezmoPay page and differed only in whether
+				// vezmo.js or the plugin drove the frame — an implementation
+				// detail the plugin picks itself (SDK when the session offers
+				// one, a plain frame otherwise).
 				'options'     => array(
-					'element' => __( 'Inline payment element (vezmo.js on the pay page)', 'vezmopay-woocommerce' ),
-					'iframe'  => __( 'Secure iframe (hosted fields, status polling)', 'vezmopay-woocommerce' ),
-					'hosted'  => __( 'Hosted checkout (redirect to VezmoPay paylink page)', 'vezmopay-woocommerce' ),
+					'embedded' => __( 'Embedded on your store (recommended)', 'vezmopay-woocommerce' ),
+					'hosted'   => __( 'Hosted checkout (redirect to the VezmoPay paylink page)', 'vezmopay-woocommerce' ),
 				),
-				'description' => __( 'Element and iframe modes keep the customer on your pay page (card fields are VezmoPay-hosted either way, keeping you at SAQ-A PCI scope). They need this store to be one of your VezmoPay trusted origins — Connect registers it automatically — and when it is not, the shopper is sent to the VezmoPay secure page instead of an empty frame. Hosted mode always redirects, to a VezmoPay paylink page.', 'vezmopay-woocommerce' ),
+				'description' => __( 'Embedded keeps the customer on your own pay page (card fields are VezmoPay-hosted either way, keeping you at SAQ-A PCI scope). It needs this store to be one of your VezmoPay trusted origins — Connect registers it automatically — and when it is not, the shopper is sent to the VezmoPay secure page instead of an empty frame. Hosted always redirects, to a VezmoPay paylink page.', 'vezmopay-woocommerce' ),
 			),
 			'environment'         => array(
 				'title'       => __( 'Environment', 'vezmopay-woocommerce' ),
