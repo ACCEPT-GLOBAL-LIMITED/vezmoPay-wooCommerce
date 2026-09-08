@@ -875,7 +875,7 @@ class Gateway extends \WC_Payment_Gateway {
 			return;
 		}
 
-		wp_enqueue_style( 'vezmopay', VEZMOPAY_WC_PLUGIN_URL . 'assets/css/vezmopay.css', array(), VEZMOPAY_WC_VERSION );
+		wp_enqueue_style( 'vezmopay', VEZMOPAY_WC_PLUGIN_URL . 'assets/css/vezmopay.css', array(), Plugin::asset_version( 'assets/css/vezmopay.css' ) );
 
 		$mode  = $this->integration_mode();
 		$embed = 'hosted' !== $mode && ! $came_back_failed && $this->embed_allowed( $order );
@@ -946,10 +946,10 @@ class Gateway extends \WC_Payment_Gateway {
 		$use_sdk = 'element' === $mode && '' !== $sdk_url;
 		if ( $use_sdk ) {
 			wp_enqueue_script( 'vezmopay-sdk', $sdk_url, array(), null, true ); // phpcs:ignore WordPress.WP.EnqueuedResourceParameters.MissingVersion -- remote SDK, provider-versioned.
-			wp_enqueue_script( 'vezmopay-element', VEZMOPAY_WC_PLUGIN_URL . 'assets/js/checkout-element.js', array( 'vezmopay-sdk' ), VEZMOPAY_WC_VERSION, true );
+			wp_enqueue_script( 'vezmopay-element', VEZMOPAY_WC_PLUGIN_URL . 'assets/js/checkout-element.js', array( 'vezmopay-sdk' ), Plugin::asset_version( 'assets/js/checkout-element.js' ), true );
 			wp_localize_script( 'vezmopay-element', 'vezmopay_params', $params );
 		} else {
-			wp_enqueue_script( 'vezmopay-iframe', VEZMOPAY_WC_PLUGIN_URL . 'assets/js/checkout-iframe.js', array(), VEZMOPAY_WC_VERSION, true );
+			wp_enqueue_script( 'vezmopay-iframe', VEZMOPAY_WC_PLUGIN_URL . 'assets/js/checkout-iframe.js', array(), Plugin::asset_version( 'assets/js/checkout-iframe.js' ), true );
 			wp_localize_script( 'vezmopay-iframe', 'vezmopay_params', $params );
 		}
 
@@ -991,7 +991,11 @@ class Gateway extends \WC_Payment_Gateway {
 			// Apple/Google Pay across the checkout redirect, and without Storage
 			// Access the fraud captcha / 3-D Secure challenge cannot complete
 			// inside a third-party frame.
-			echo '<iframe id="vezmopay-frame" src="' . esc_url( $iframe_url ) . '" allow="payment *; storage-access *" title="' . esc_attr__( 'VezmoPay secure payment', 'vezmopay-woocommerce' ) . '"></iframe>';
+			// width/height ATTRIBUTES as well as CSS: an iframe with neither
+			// defaults to 300x150, which renders the checkout in its mobile
+			// layout inside a tiny box — so the frame must be full width even
+			// if the stylesheet is missing, blocked or stale.
+			echo '<iframe id="vezmopay-frame" src="' . esc_url( $iframe_url ) . '" width="100%" height="720" allow="payment *; storage-access *" title="' . esc_attr__( 'VezmoPay secure payment', 'vezmopay-woocommerce' ) . '"></iframe>';
 		}
 		echo '</div>';
 		echo '</div>';

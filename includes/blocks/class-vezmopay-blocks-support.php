@@ -78,7 +78,7 @@ class Blocks_Support extends AbstractPaymentMethodType {
 			'vezmopay-blocks',
 			VEZMOPAY_WC_PLUGIN_URL . 'assets/js/blocks.js',
 			array( 'wc-blocks-registry', 'wc-settings', 'wp-element', 'wp-html-entities', 'wp-i18n' ),
-			VEZMOPAY_WC_VERSION,
+			Plugin::asset_version( 'assets/js/blocks.js' ),
 			true
 		);
 		if ( function_exists( 'wp_set_script_translations' ) ) {

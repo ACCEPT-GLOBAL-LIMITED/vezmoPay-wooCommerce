@@ -53,6 +53,36 @@
 		}
 	}
 
+	// A theme can hand this page a column far narrower than the screen, which
+	// makes the VezmoPay form inside render its phone layout on a desktop
+	// monitor. Only then — narrow card, wide viewport — centre the card on the
+	// viewport instead of the column.
+	function checkBreakout() {
+		if ( ! checkoutEl ) {
+			return;
+		}
+		// Always measure from the un-broken state, so a resize can undo this.
+		checkoutEl.classList.remove( 'is-breakout' );
+		checkoutEl.style.width = '';
+		checkoutEl.style.marginLeft = '';
+
+		var cardWidth = checkoutEl.getBoundingClientRect().width;
+		if ( cardWidth >= 420 || window.innerWidth < 700 ) {
+			return;
+		}
+
+		// Centre on the VIEWPORT: offset the card by the gap between the
+		// viewport's centred position and wherever the narrow parent starts.
+		var target = Math.min( 760, window.innerWidth - 40 );
+		var parent = checkoutEl.parentElement || document.body;
+		var offset = Math.round(
+			( window.innerWidth - target ) / 2 - parent.getBoundingClientRect().left
+		);
+		checkoutEl.classList.add( 'is-breakout' );
+		checkoutEl.style.width = target + 'px';
+		checkoutEl.style.marginLeft = offset + 'px';
+	}
+
 	function post( url, extra ) {
 		var body = new URLSearchParams();
 		body.append( 'nonce', params.nonce );
@@ -220,6 +250,9 @@
 		// events never arrive, but the poll still completes the order.
 		startPolling();
 	}
+
+	checkBreakout();
+	window.addEventListener( 'resize', checkBreakout );
 
 	if ( 'loading' === document.readyState ) {
 		document.addEventListener( 'DOMContentLoaded', init );

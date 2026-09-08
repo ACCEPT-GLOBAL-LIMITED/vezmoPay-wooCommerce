@@ -20,6 +20,25 @@ final class Plugin {
 	const GATEWAY_ID = 'vezmopay';
 
 	/**
+	 * Cache-busting version for a bundled asset.
+	 *
+	 * The plugin version alone is not enough: a store that tracks the repo (or
+	 * pulls a fix between releases) keeps the SAME version string while the file
+	 * changes underneath it, so browsers and page caches keep serving the old
+	 * stylesheet — which is exactly how a released Pay button ended up on a
+	 * merchant's checkout with none of its CSS. Fold the file's mtime in so any
+	 * change to the file changes its URL.
+	 *
+	 * @param string $relative Path under the plugin directory, e.g. assets/css/x.css.
+	 * @return string
+	 */
+	public static function asset_version( $relative ) {
+		$path = VEZMOPAY_WC_PLUGIN_DIR . ltrim( $relative, '/' );
+		$mtime = @filemtime( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- missing file falls back to the plugin version.
+		return $mtime ? VEZMOPAY_WC_VERSION . '.' . $mtime : VEZMOPAY_WC_VERSION;
+	}
+
+	/**
 	 * Singleton instance.
 	 *
 	 * @var Plugin|null
@@ -326,8 +345,8 @@ final class Plugin {
 		if ( self::GATEWAY_ID !== $section ) {
 			return;
 		}
-		wp_enqueue_style( 'vezmopay-admin', VEZMOPAY_WC_PLUGIN_URL . 'assets/css/vezmopay-admin.css', array(), VEZMOPAY_WC_VERSION );
-		wp_enqueue_script( 'vezmopay-admin-account', VEZMOPAY_WC_PLUGIN_URL . 'assets/js/admin-account.js', array(), VEZMOPAY_WC_VERSION, true );
+		wp_enqueue_style( 'vezmopay-admin', VEZMOPAY_WC_PLUGIN_URL . 'assets/css/vezmopay-admin.css', array(), self::asset_version( 'assets/css/vezmopay-admin.css' ) );
+		wp_enqueue_script( 'vezmopay-admin-account', VEZMOPAY_WC_PLUGIN_URL . 'assets/js/admin-account.js', array(), self::asset_version( 'assets/js/admin-account.js' ), true );
 		wp_localize_script(
 			'vezmopay-admin-account',
 			'vezmopay_admin_params',

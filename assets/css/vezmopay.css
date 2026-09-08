@@ -38,7 +38,21 @@
 	--vz-test-border: rgba(180, 83, 9, 0.25);
 	--vz-test-text: var(--vz-warn);
 
+	/* `width` as well as `max-width`: inside a flex or grid parent — which block
+	   themes hand out freely — a max-width-only block sizes to its CONTENT, and
+	   the content here is an iframe whose own width is a percentage of the parent.
+	   That circularity collapses the card to the iframe's intrinsic 300px and the
+	   checkout inside renders its phone layout on a desktop screen. */
+	width: 100%;
 	max-width: 760px;
+	/* basis 100%, not auto: as a flex item next to siblings, `auto` sizes to
+	   content and the card collapses. 100% claims a full line where the
+	   container wraps, and a fair share where it does not. */
+	flex: 1 1 100%;
+	/* Stays 0: a min-width floor here rescues the card in a flex row but pushes
+	   the ROW past the viewport, and horizontal scrolling on a checkout is worse
+	   than a narrow card. Measured both ways. */
+	min-width: 0;
 	margin: 2em auto;
 	background: var(--vz-panel);
 	border: 1px solid var(--vz-line);
@@ -204,11 +218,13 @@
 
 .vezmopay-container {
 	width: 100%;
+	min-width: 0;
 }
 
 .vezmopay-container iframe,
 #vezmopay-frame {
 	width: 100%;
+	min-width: 0;
 	box-sizing: border-box;
 	/* A starting height only. The checkout reports its real content height and
 	   the embed sets it inline (vezmo.js does this itself; iframe mode does it in
@@ -516,4 +532,22 @@
 	.vezmopay-embed-escape {
 		font-size: 12.5px;
 	}
+}
+
+/* Escape a squeezed content column.
+   Some themes hand this page a very narrow column (a flex row with siblings, a
+   sidebar layout, a small content width). The card fills whatever it is given —
+   correct — but a ~300px column makes the VezmoPay form render its PHONE layout
+   on a desktop screen, which is what a shopper sees as broken. The embed scripts
+   measure the card once it is ready and add this class only when the card came
+   out narrow AND the viewport is genuinely wide, then centre it on the viewport
+   instead of the column. Capped against 100vw so it can never introduce
+   horizontal scrolling. */
+.vezmopay-checkout.is-breakout {
+	/* The script sets width and margin-left inline: `left: 50%` here would
+	   centre the card on the NARROW PARENT's midpoint, which pushes it off the
+	   left edge of the screen. Viewport centring needs the parent's offset,
+	   which only measurement can give. */
+	max-width: none;
+	position: relative;
 }

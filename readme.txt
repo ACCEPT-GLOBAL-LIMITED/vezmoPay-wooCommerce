@@ -4,7 +4,7 @@ Tags: payments, payment gateway, credit card, ach, woocommerce
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.2.11
+Stable tag: 0.2.12
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -112,6 +112,11 @@ This plugin connects your store to the VezmoPay payment platform, operated by Ve
 VezmoPay is operated by Vezmo Technology, Inc.: [https://vezmo.com](https://vezmo.com) — see the site for terms of service and privacy policy.
 
 == Changelog ==
+
+= 0.2.12 =
+* Fixed the Pay button appearing unstyled on some stores. The plugin's stylesheet was cached against the version number alone, so a store that updated between releases kept serving the old CSS. Asset URLs now change whenever the file changes.
+* Fixed the embedded payment form rendering its narrow phone layout on desktop when a theme gives the pay page a cramped content column: the form is centred on the screen at a usable width instead, and still fills the column on a phone.
+* The embedded form no longer collapses when a theme places it in a flex or grid container.
 
 = 0.2.11 =
 * The embedded payment form sizes itself to its content and lays out correctly from phone to desktop, in light and dark checkout themes, with no horizontal scrolling.
