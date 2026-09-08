@@ -4,7 +4,7 @@ Tags: payments, payment gateway, credit card, ach, woocommerce
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.2.9
+Stable tag: 0.2.10
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -112,6 +112,11 @@ This plugin connects your store to the VezmoPay payment platform, operated by Ve
 VezmoPay is operated by Vezmo Technology, Inc.: [https://vezmo.com](https://vezmo.com) — see the site for terms of service and privacy policy.
 
 == Changelog ==
+
+= 0.2.10 =
+* The gateway settings screen is branded: the VezmoPay lockup, a tagline, and a chip that states plainly whether you are in Test or Live mode.
+* The payment method at checkout now shows a smaller, cleaner VezmoPay icon, aligned with its label.
+* Company name updated to Vezmo Technology, Inc. throughout, and plugin-directory icon/banner artwork added.
 
 = 0.2.9 =
 * After paying (or a failed/cancelled payment) on the VezmoPay page, the shopper is now returned to your store automatically — to the order-received page on success, or back to a "try again" screen on failure. The order-received page verifies the payment on arrival so it shows as paid immediately.
