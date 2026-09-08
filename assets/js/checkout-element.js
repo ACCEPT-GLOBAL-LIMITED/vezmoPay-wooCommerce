@@ -211,8 +211,10 @@
 			mountFallbackIframe();
 		}
 
-		// Never leave the spinner up if events are blocked (trusted-origins not set).
-		window.setTimeout( markReady, 8000 );
+		// The SDK mounts its own frame, so a ready event cannot have been missed
+		// before this script ran — but never leave the spinner (and the Pay button
+		// with it) waiting on an event that may never arrive.
+		window.setTimeout( markReady, 2500 );
 
 		// Fallback for stores whose origin is not (yet) in VezmoPay's trusted origins:
 		// events never arrive, but the poll still completes the order.

@@ -41,7 +41,14 @@
 	if ( frameEl ) {
 		frameEl.addEventListener( 'load', markReady );
 	}
-	window.setTimeout( markReady, 8000 );
+	// The inline snippet on the page records a load that happened before this
+	// script ran, so a fast frame does not leave the Pay button hidden.
+	if ( window.vezmopayFrameLoaded ) {
+		markReady();
+	}
+	// Safety net for a frame that never reports anything. Short, because the
+	// button below is the only way to pay — nobody should wait on a spinner.
+	window.setTimeout( markReady, 2500 );
 
 	// The embedded page hides its own submit button and charges only on a
 	// parent -> iframe submit message (the same one vezmo.js's .pay() posts),
@@ -73,18 +80,36 @@
 	// Only the failure/ready signals matter here — completion is handled by the
 	// poll below, which re-verifies against the API rather than trusting a
 	// message — but a decline must hand the button back immediately.
-	window.addEventListener( 'message', function ( e ) {
+	function onFrameMessage( e ) {
 		if ( params.secureOrigin && e.origin !== params.secureOrigin ) {
 			return;
 		}
 		var type = e.data && e.data.type;
-		if ( 'vezmo:secure-payment:ready' === type ) {
+		if ( 'vezmo:secure-payment:resize' === type ) {
+			// The checkout reports its content height; size the frame to it so the
+			// form never sits in its own scrollbar. Same behaviour vezmo.js gives
+			// element mode, and clamped so a bad number cannot break the page.
+			var h = Number( e.data.height );
+			if ( frameEl && h > 200 && h < 4000 ) {
+				frameEl.style.height = h + 'px';
+				frameEl.setAttribute( 'height', String( h ) );
+			}
+		} else if ( 'vezmo:secure-payment:ready' === type ) {
 			markReady();
 		} else if ( 'vezmo:secure-payment:error' === type ) {
 			setPaying( false );
 			setMessage( ( e.data && e.data.message ) || params.i18n.failed, 'error' );
 		}
-	} );
+	}
+
+	window.addEventListener( 'message', onFrameMessage );
+
+	// Replay anything the frame posted before this script was parsed (a ready or
+	// resize we would otherwise have missed entirely).
+	if ( window.vezmopayEmbedEvents && window.vezmopayEmbedEvents.length ) {
+		window.vezmopayEmbedEvents.forEach( onFrameMessage );
+		window.vezmopayEmbedEvents.length = 0;
+	}
 
 	function poll() {
 		if ( done ) {

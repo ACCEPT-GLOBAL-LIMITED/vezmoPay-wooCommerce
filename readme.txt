@@ -114,6 +114,7 @@ VezmoPay is operated by Vezmo Technology, Inc.: [https://vezmo.com](https://vezm
 == Changelog ==
 
 = 0.2.11 =
+* The embedded payment form sizes itself to its content and lays out correctly from phone to desktop, in light and dark checkout themes, with no horizontal scrolling.
 * The embedded payment form now has a Pay button. When the VezmoPay form is embedded it hides its own submit button by design and waits for the store to trigger the charge, so inline/iframe mode showed a card form the shopper could not submit. The button carries the order total and hands itself back if a card is declined.
 * Inline payment element and Secure iframe modes now really keep the customer on your store's pay page, instead of quietly redirecting to VezmoPay like Hosted mode did. Embedding needs your store to be one of your VezmoPay trusted origins — "Connect with VezmoPay" registers it — and when it is not, shoppers are still sent to the VezmoPay secure page rather than an empty frame, with the reason shown on the settings screen.
 * At checkout the VezmoPay mark now appears to the left of the payment method name in the block checkout, matching the classic checkout.

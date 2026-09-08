@@ -953,6 +953,21 @@ class Gateway extends \WC_Payment_Gateway {
 			wp_localize_script( 'vezmopay-iframe', 'vezmopay_params', $params );
 		}
 
+		// The embed scripts load in the FOOTER, by which time the frame can already
+		// have loaded and posted its ready/resize messages — which left the Pay
+		// button hidden behind a safety timeout and the frame at its default
+		// height. Register before the frame exists: a capture-phase load listener
+		// catches an element added later, and every message is queued for the
+		// script to replay.
+		wp_print_inline_script_tag(
+			'window.vezmopayEmbedEvents=[];' .
+			'window.addEventListener("message",function(e){window.vezmopayEmbedEvents.push(e);});' .
+			'document.addEventListener("load",function(e){' .
+			'if(e.target&&e.target.id==="vezmopay-frame"){window.vezmopayFrameLoaded=true;}' .
+			'},true);',
+			array( 'id' => 'vezmopay-embed-early' )
+		);
+
 		$logo_url = VEZMOPAY_WC_PLUGIN_URL . 'assets/img/vezmopay.svg';
 
 		echo '<div id="vezmopay-checkout" class="vezmopay-checkout" data-mode="' . esc_attr( $mode ) . '" data-theme="' . esc_attr( $this->checkout_theme() ) . '">';
@@ -970,7 +985,13 @@ class Gateway extends \WC_Payment_Gateway {
 		if ( ! $use_sdk ) {
 			// Server-rendered so payment still works with our JS disabled; the
 			// order is then completed by webhook.
-			echo '<iframe id="vezmopay-frame" src="' . esc_url( $iframe_url ) . '" allow="payment" title="' . esc_attr__( 'VezmoPay secure payment', 'vezmopay-woocommerce' ) . '"></iframe>';
+			// `payment *` and `storage-access *` mirror what vezmo.js sets on its
+			// own iframe, and for the reasons its source gives: bare `payment`
+			// scopes the permission to the frame's src origin, which breaks
+			// Apple/Google Pay across the checkout redirect, and without Storage
+			// Access the fraud captcha / 3-D Secure challenge cannot complete
+			// inside a third-party frame.
+			echo '<iframe id="vezmopay-frame" src="' . esc_url( $iframe_url ) . '" allow="payment *; storage-access *" title="' . esc_attr__( 'VezmoPay secure payment', 'vezmopay-woocommerce' ) . '"></iframe>';
 		}
 		echo '</div>';
 		echo '</div>';
@@ -981,16 +1002,20 @@ class Gateway extends \WC_Payment_Gateway {
 		// the shopper has a card form they cannot submit. Wallet (Apple/Google Pay)
 		// buttons inside the frame keep working on their own. Revealed once the frame
 		// reports ready, so it never appears over an empty box.
+		// Wrapped so the button and link share the card's side inset — the body
+		// above carries its own padding, and these sit outside it.
+		echo '<div class="vezmopay-actions">';
 		echo '<button type="button" id="vezmopay-pay" class="vezmopay-pay">';
 		echo '<span class="vezmopay-pay-label">' . esc_html( $params['i18n']['pay'] ) . '</span>';
 		echo '</button>';
-
-		echo '<p id="vezmopay-message" class="vezmopay-message" role="status" aria-live="polite"></p>';
 
 		// Manual escape hatch: if the embedded form does not work for this shopper
 		// (blocked third-party frames, an extension, a browser we did not predict),
 		// the same payment is one top-level navigation away.
 		echo '<p class="vezmopay-embed-escape"><a href="' . esc_url( $iframe_url ) . '">' . esc_html__( 'Trouble with the form? Continue on the VezmoPay page →', 'vezmopay-woocommerce' ) . '</a></p>';
+		echo '</div>';
+
+		echo '<p id="vezmopay-message" class="vezmopay-message" role="status" aria-live="polite"></p>';
 
 		echo '<noscript><p class="vezmopay-message is-info" style="display:block;">' . esc_html__( 'JavaScript is disabled. After paying in the secure form above, your order will be confirmed by email once VezmoPay notifies us.', 'vezmopay-woocommerce' ) . '</p></noscript>';
 
