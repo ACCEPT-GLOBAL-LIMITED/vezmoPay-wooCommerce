@@ -4,7 +4,7 @@ Tags: payments, payment gateway, credit card, ach, woocommerce
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.2.18
+Stable tag: 0.2.19
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -112,6 +112,11 @@ This plugin connects your store to the VezmoPay payment platform, operated by Ve
 VezmoPay is operated by Vezmo Technology, Inc.: [https://vezmo.com](https://vezmo.com) — see the site for terms of service and privacy policy.
 
 == Changelog ==
+
+= 0.2.19 =
+* Fixed a successful payment not showing the order-received page. The checkout asked the store to confirm the payment first, and if that one request failed — a slow response, or a security token retired because checkout created an account mid-flow — the customer was left waiting on the checkout page even though they had paid. A successful payment now always reaches the order-received page, which verifies the payment with VezmoPay as it loads.
+* The success and pay-page addresses now come from WooCommerce itself rather than being assembled by the checkout, so stores with plain permalinks or translated checkout URLs land in the right place.
+* A payment that stalls without ever succeeding still goes to the pay page, where it can be completed — the two cases no longer share one fallback.
 
 = 0.2.18 =
 * A payment that stalls no longer leaves the customer watching a spinner. After 20 seconds they are told it is taking longer than usual and offered a link to finish the payment on the VezmoPay page, and after 75 seconds they are moved to the pay page automatically, which keeps checking and can complete the order.

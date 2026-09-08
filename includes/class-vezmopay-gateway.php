@@ -667,11 +667,32 @@ class Gateway extends \WC_Payment_Gateway {
 			$order->update_meta_data( '_vezmopay_effective_mode', $this->integration_mode() . '-inline' );
 			$order->save_meta_data();
 
+			// Everything the checkout script needs, including the REAL success and
+			// pay-page URLs. Building those in the browser meant assuming pretty
+			// permalinks and English endpoint slugs; WooCommerce knows them.
+			$marker = rtrim(
+				strtr(
+					base64_encode(
+						wp_json_encode(
+							array(
+								'id'  => $order->get_id(),
+								'key' => $order->get_order_key(),
+								'ret' => $this->get_return_url( $order ),
+								'pay' => $order->get_checkout_payment_url( true ),
+							)
+						)
+					),
+					'+/',
+					'-_'
+				),
+				'='
+			);
+
 			return array(
 				'result'   => 'success',
 				// Hash-only: WooCommerce assigns it to window.location, which fires
 				// hashchange without navigating, and checkout-inline.js picks it up.
-				'redirect' => '#vezmopay-charge:' . $order->get_id() . ':' . $order->get_order_key(),
+				'redirect' => '#vezmopay-charge:' . $marker,
 			);
 		}
 

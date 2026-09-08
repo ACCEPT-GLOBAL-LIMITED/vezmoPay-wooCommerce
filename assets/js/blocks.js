@@ -151,7 +151,7 @@
 					return true; // hosted / fallback redirect — let Blocks follow it.
 				}
 				return inline
-					.charge( marker.orderId, marker.orderKey )
+					.charge( marker.orderId, marker.orderKey, marker )
 					.then( function ( url ) {
 						window.location.href = url;
 						return { type: 'success', redirectUrl: url };

@@ -163,6 +163,40 @@
 		refreshPayButton();
 	}
 
+	/**
+	 * Decode a charge marker. The payload is base64url JSON carrying the order id
+	 * and key plus the store's own success and pay-page URLs; the older
+	 * 'id:key' form is still accepted so a checkout page cached from a previous
+	 * version keeps working.
+	 */
+	function parseMarker( value ) {
+		if ( ! value || value.indexOf( CHARGE_PREFIX ) === -1 ) {
+			return null;
+		}
+		var raw = value.slice( value.indexOf( CHARGE_PREFIX ) + CHARGE_PREFIX.length );
+		try {
+			var b64 = raw.replace( /-/g, '+' ).replace( /_/g, '/' );
+			while ( b64.length % 4 ) {
+				b64 += '=';
+			}
+			var data = JSON.parse( window.atob( b64 ) );
+			if ( data && data.id && data.key ) {
+				return {
+					orderId: String( data.id ),
+					orderKey: data.key,
+					returnUrl: data.ret || '',
+					payUrl: data.pay || '',
+				};
+			}
+		} catch ( e ) {
+			// Not the encoded form — fall through to the legacy shape.
+		}
+		var parts = raw.split( ':' );
+		return parts.length >= 2
+			? { orderId: parts[ 0 ], orderKey: parts[ 1 ], returnUrl: '', payUrl: '' }
+			: null;
+	}
+
 	function selected() {
 		var input = document.querySelector( 'input[name="payment_method"]:checked' );
 		return !! input && 'vezmopay' === input.value;
@@ -448,6 +482,10 @@
 			window.clearTimeout( charging.stallTimer );
 			charging.stallTimer = null;
 		}
+		if ( charging.confirmTimer ) {
+			window.clearTimeout( charging.confirmTimer );
+			charging.confirmTimer = null;
+		}
 	}
 
 	/**
@@ -471,12 +509,32 @@
 		scope.appendChild( p );
 	}
 
+	function payPageUrl() {
+		if ( charging && charging.payUrl ) {
+			return charging.payUrl;
+		}
+		return window.location.origin + '/checkout/order-pay/' + charging.orderId + '/?key=' + encodeURIComponent( charging.orderKey );
+	}
+
+	function returnUrl() {
+		if ( charging && charging.returnUrl ) {
+			return charging.returnUrl;
+		}
+		return window.location.origin + '/checkout/order-received/' + charging.orderId + '/?key=' + encodeURIComponent( charging.orderKey );
+	}
+
+	/**
+	 * Nothing settled in time. Where to send the shopper depends on what we saw:
+	 * after a success event the payment HAPPENED, so the success page is right —
+	 * it verifies against the API as it loads and will show the order as paid.
+	 * With no success event, the pay page is right: it re-renders the form so the
+	 * payment can still be made.
+	 */
 	function handOffToPayPage() {
 		if ( ! charging ) {
 			return;
 		}
-		var url = window.location.origin + '/checkout/order-pay/' + charging.orderId + '/?key=' + encodeURIComponent( charging.orderKey );
-		finish( url );
+		finish( charging.sawSuccess ? returnUrl() : payPageUrl() );
 	}
 
 	/** Settle the charge: resolve the caller's promise, or navigate ourselves. */
@@ -496,11 +554,21 @@
 		window.location.href = url;
 	}
 
-	function startCharge( orderId, orderKey, deferred ) {
+	function startCharge( orderId, orderKey, deferred, marker ) {
 		if ( charging ) {
 			return;
 		}
-		charging = { orderId: orderId, orderKey: orderKey, deferred: deferred || null, pollTimer: null, stallTimer: null };
+		charging = {
+			orderId: orderId,
+			orderKey: orderKey,
+			deferred: deferred || null,
+			pollTimer: null,
+			stallTimer: null,
+			confirmTimer: null,
+			sawSuccess: false,
+			returnUrl: ( marker && marker.returnUrl ) || '',
+			payUrl: ( marker && marker.payUrl ) || '',
+		};
 		log( 'charge starting for order', orderId, vezmo ? 'via SDK pay()' : 'via frame submit message' );
 		setMessage( params.i18n.processing, 'info' );
 		refreshPayButton();
@@ -526,6 +594,23 @@
 		if ( ! charging ) {
 			return;
 		}
+		charging.sawSuccess = true;
+		log( 'form reported success — confirming with the store' );
+
+		// The payment succeeded. Confirming server-side is the right thing to do,
+		// but it must not be the ONLY way to the success page: if this call is
+		// slow, 502s, or has its nonce invalidated (checkout can create an
+		// account mid-flow, which retires the nonce), the shopper must still land
+		// on the success page — which reconciles against the API as it loads.
+		if ( ! charging.confirmTimer ) {
+			charging.confirmTimer = window.setTimeout( function () {
+				if ( charging ) {
+					log( 'confirm did not answer in time — going to the success page anyway' );
+					finish( returnUrl() );
+				}
+			}, 6000 );
+		}
+
 		var body = new URLSearchParams();
 		body.append( 'nonce', params.nonce );
 		body.append( 'order_id', charging.orderId );
@@ -577,17 +662,13 @@
 	}
 
 	function handleHash() {
-		var hash = window.location.hash;
-		if ( 0 !== hash.indexOf( CHARGE_PREFIX ) ) {
-			return;
-		}
-		var parts = hash.slice( CHARGE_PREFIX.length ).split( ':' );
-		if ( parts.length < 2 ) {
+		var marker = parseMarker( window.location.hash );
+		if ( ! marker ) {
 			return;
 		}
 		// Clear it so a reload cannot re-run a charge.
 		window.history.replaceState( null, '', window.location.pathname + window.location.search );
-		startCharge( parts[ 0 ], parts[ 1 ] );
+		startCharge( marker.orderId, marker.orderKey, null, marker );
 	}
 
 	/* --------------------------------------------------------------------
@@ -623,19 +704,13 @@
 			return !! session;
 		},
 		/** Charge the mounted form; resolves with the store's redirect URL. */
-		charge: function ( orderId, orderKey ) {
+		charge: function ( orderId, orderKey, marker ) {
 			return new Promise( function ( resolve, reject ) {
-				startCharge( orderId, orderKey, { resolve: resolve, reject: reject } );
+				startCharge( orderId, orderKey, { resolve: resolve, reject: reject }, marker );
 			} );
 		},
-		/** Pull a '#vezmopay-charge:id:key' marker out of a redirect string. */
-		parseMarker: function ( value ) {
-			if ( ! value || value.indexOf( CHARGE_PREFIX ) === -1 ) {
-				return null;
-			}
-			var parts = value.slice( value.indexOf( CHARGE_PREFIX ) + CHARGE_PREFIX.length ).split( ':' );
-			return parts.length >= 2 ? { orderId: parts[ 0 ], orderKey: parts[ 1 ] } : null;
-		},
+		/** Decode the '#vezmopay-charge:<payload>' marker. */
+		parseMarker: parseMarker,
 		messages: params.i18n,
 	};
 
