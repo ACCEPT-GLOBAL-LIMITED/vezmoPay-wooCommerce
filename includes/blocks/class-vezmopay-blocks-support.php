@@ -84,7 +84,16 @@ class Blocks_Support extends AbstractPaymentMethodType {
 		if ( function_exists( 'wp_set_script_translations' ) ) {
 			wp_set_script_translations( 'vezmopay-blocks', 'vezmopay-woocommerce', VEZMOPAY_WC_PLUGIN_DIR . 'languages' );
 		}
-		return array( 'vezmopay-blocks' );
+		// The Blocks tile drives the same session/charge machinery as the classic
+		// checkout, so its script must be present before ours runs.
+		$handles = array( 'vezmopay-blocks' );
+		if ( 'hosted' !== $this->gateway()->integration_mode() ) {
+			Plugin::register_checkout_inline_script();
+			if ( wp_script_is( 'vezmopay-checkout-inline', 'registered' ) ) {
+				$handles[] = 'vezmopay-checkout-inline';
+			}
+		}
+		return $handles;
 	}
 
 	/**
@@ -95,6 +104,7 @@ class Blocks_Support extends AbstractPaymentMethodType {
 	public function get_payment_method_data() {
 		$gateway = $this->gateway();
 		return array(
+			'mode'        => $gateway->integration_mode(),
 			'title'       => $this->get_setting( 'title', __( 'VezmoPay', 'vezmopay-woocommerce' ) ),
 			'description' => $this->get_setting( 'description', '' ),
 			'icon'        => VEZMOPAY_WC_PLUGIN_URL . 'assets/img/vezmo-mark.svg',

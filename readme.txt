@@ -4,7 +4,7 @@ Tags: payments, payment gateway, credit card, ach, woocommerce
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.2.14
+Stable tag: 0.2.15
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -112,6 +112,14 @@ This plugin connects your store to the VezmoPay payment platform, operated by Ve
 VezmoPay is operated by Vezmo Technology, Inc.: [https://vezmo.com](https://vezmo.com) — see the site for terms of service and privacy policy.
 
 == Changelog ==
+
+= 0.2.15 =
+* Inline and iframe modes now work the way Stripe's plugin does: the VezmoPay form appears in the payment section of the checkout page itself, and the customer pays with WooCommerce's own "Place order" button. No second page, no second button.
+* Works on both the block checkout and the classic (shortcode) checkout.
+* A declined card keeps the customer on the checkout page with the reason shown, so they can correct the card and try again without starting over.
+* Your order is always created before the card is charged, and the store confirms the payment with VezmoPay server-side before marking it paid — the browser is never taken at its word.
+* If the payment fields cannot load (JavaScript blocked, an extension in the way), checkout falls back to the previous pay-page flow, which needs no JavaScript.
+* Changing the cart total mid-checkout (shipping, a coupon) rebuilds the payment session, so the amount charged always matches the order.
 
 = 0.2.14 =
 * All three integration modes are back and each now does its own thing: Inline payment element hands the form to the VezmoPay SDK (auto-sizing and payment events), Secure iframe embeds the same page and confirms by polling, and Hosted checkout redirects to the VezmoPay paylink page.

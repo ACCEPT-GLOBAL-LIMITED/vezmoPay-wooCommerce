@@ -99,6 +99,7 @@ final class Plugin {
 		}
 
 		// AJAX endpoints used by the checkout JS (logged-in and guest customers).
+		add_action( 'wc_ajax_vezmopay_session', array( $this, 'ajax_session' ) );
 		add_action( 'wc_ajax_vezmopay_confirm', array( $this, 'ajax_confirm' ) );
 		add_action( 'wc_ajax_vezmopay_status', array( $this, 'ajax_status' ) );
 
@@ -106,6 +107,7 @@ final class Plugin {
 		add_action( 'wp_ajax_vezmopay_test_connection', array( Connect::class, 'ajax_test_connection' ) );
 		add_action( 'admin_post_vezmopay_connect_callback', array( Connect::class, 'handle_connect_callback' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_admin_styles' ) );
+		add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_checkout_scripts' ) );
 
 		// Admin: live VezmoPay account settings (payment methods, 3-D Secure).
 		add_action( 'wp_ajax_vezmopay_account_get', array( $this, 'ajax_account_get' ) );
@@ -183,6 +185,104 @@ final class Plugin {
 	/**
 	 * AJAX: the SDK reported success/pending — verify against the API and finalize the order.
 	 */
+	/**
+	 * Classic checkout assets. Only on the checkout page, and only when the
+	 * gateway is actually available and set to an embedded mode.
+	 */
+	public function enqueue_checkout_scripts() {
+		if ( ! function_exists( 'is_checkout' ) || ! is_checkout() || is_wc_endpoint_url( 'order-pay' ) || is_wc_endpoint_url( 'order-received' ) ) {
+			return;
+		}
+		$gateway = $this->gateway();
+		if ( ! $gateway || 'hosted' === $gateway->integration_mode() || ! $gateway->is_available() ) {
+			return;
+		}
+
+		wp_enqueue_style(
+			'vezmopay',
+			VEZMOPAY_WC_PLUGIN_URL . 'assets/css/vezmopay.css',
+			array(),
+			self::asset_version( 'assets/css/vezmopay.css' )
+		);
+		self::register_checkout_inline_script();
+		wp_enqueue_script( 'vezmopay-checkout-inline' );
+	}
+
+	/**
+	 * Register (idempotently) the shared checkout script.
+	 *
+	 * Both checkouts use it, and the Blocks integration resolves its script
+	 * handles before wp_enqueue_scripts runs — so registration cannot live in
+	 * the enqueue callback alone.
+	 */
+	public static function register_checkout_inline_script() {
+		if ( wp_script_is( 'vezmopay-checkout-inline', 'registered' ) ) {
+			return;
+		}
+		$gateway = self::instance()->gateway();
+		if ( ! $gateway ) {
+			return;
+		}
+
+		wp_register_script(
+			'vezmopay-checkout-inline',
+			VEZMOPAY_WC_PLUGIN_URL . 'assets/js/checkout-inline.js',
+			array( 'jquery' ),
+			self::asset_version( 'assets/js/checkout-inline.js' ),
+			true
+		);
+		wp_localize_script(
+			'vezmopay-checkout-inline',
+			'vezmopay_inline_params',
+			array(
+				'mode'        => $gateway->integration_mode(),
+				'theme'       => $gateway->checkout_theme(),
+				'apiBase'     => $gateway->api_client()->host(),
+				'sessionUrl'  => \WC_AJAX::get_endpoint( 'vezmopay_session' ),
+				'confirmUrl'  => \WC_AJAX::get_endpoint( 'vezmopay_confirm' ),
+				'nonce'       => wp_create_nonce( 'vezmopay-checkout' ),
+				'i18n'        => array(
+					'processing'  => __( 'Processing your payment…', 'vezmopay-woocommerce' ),
+					'failed'      => __( 'Payment failed. Please check your card details and try again.', 'vezmopay-woocommerce' ),
+					'unavailable' => __( 'Secure payment fields could not be loaded. Please reload the page or choose another payment method.', 'vezmopay-woocommerce' ),
+					'incomplete'  => __( 'Please complete your card details before placing the order.', 'vezmopay-woocommerce' ),
+				),
+			)
+		);
+	}
+
+	/**
+	 * Create (or return) the cart's VezmoPay payment session, so the form can be
+	 * mounted in the payment box before any order exists.
+	 */
+	public function ajax_session() {
+		check_ajax_referer( 'vezmopay-checkout', 'nonce' );
+
+		$gateway = $this->gateway();
+		if ( ! $gateway || 'hosted' === $gateway->integration_mode() ) {
+			wp_send_json_error( array( 'message' => __( 'VezmoPay is not accepting inline payments.', 'vezmopay-woocommerce' ) ), 400 );
+		}
+
+		$session = $gateway->checkout_session()->get();
+		if ( is_wp_error( $session ) ) {
+			wp_send_json_error( array( 'message' => $session->get_error_message() ), 502 );
+		}
+
+		// Only what the browser needs to mount the frame. The payment id stays
+		// server-side: the order is bound to it in process_payment(), so nothing
+		// the browser sends can point an order at a different payment.
+		wp_send_json_success(
+			array(
+				'clientToken' => $session['clientToken'],
+				'url'         => $session['url'],
+				'sdkUrl'      => $session['sdkUrl'],
+				'amount'      => $session['amount'],
+				'currency'    => $session['currency'],
+				'expires'     => $session['expires'],
+			)
+		);
+	}
+
 	public function ajax_confirm() {
 		check_ajax_referer( 'vezmopay-checkout', 'nonce' );
 

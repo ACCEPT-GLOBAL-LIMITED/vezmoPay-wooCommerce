@@ -56,7 +56,15 @@
 		);
 	}
 
-	function Content() {
+	var useEffect = window.wp.element.useEffect;
+	var useRef = window.wp.element.useRef;
+
+	/**
+	 * Hosted mode, and the fallback when the inline script is unavailable: an
+	 * informational tile. The redirect happens server-side after the order is
+	 * created.
+	 */
+	function Notice() {
 		var children = [];
 		if ( settings.description ) {
 			children.push(
@@ -75,12 +83,134 @@
 		return createElement( 'span', null, children );
 	}
 
+	/**
+	 * Inline / iframe modes: mount the SAME VezmoPay form the classic checkout
+	 * uses, right here in the Blocks payment method, and charge it after Blocks
+	 * has created the order — so the shopper presses the block checkout's own
+	 * "Place order" button and never leaves the page.
+	 *
+	 * The order is created BEFORE the charge (the Store API runs process_payment
+	 * server-side, which answers with a '#vezmopay-charge:…' marker), and the
+	 * store — not this component — decides whether the payment really settled.
+	 */
+	function InlineContent( props ) {
+		var hostRef = useRef( null );
+		var inline = window.VezmoPayInline;
+
+		useEffect( function () {
+			if ( ! inline || ! hostRef.current ) {
+				return;
+			}
+			inline.mountInto( hostRef.current );
+			return function () {
+				inline.unmount();
+			};
+		}, [ inline ] );
+
+		// Block the order while the form has not finished loading, instead of
+		// creating an order we cannot charge.
+		useEffect( function () {
+			if ( ! inline || ! props.eventRegistration ) {
+				return;
+			}
+			return props.eventRegistration.onPaymentSetup( function () {
+				if ( ! inline.hasSession() ) {
+					return { type: 'error', message: inline.messages.unavailable };
+				}
+				if ( ! inline.isReady() ) {
+					return { type: 'error', message: inline.messages.incomplete };
+				}
+				return { type: 'success' };
+			} );
+		}, [ inline, props.eventRegistration ] );
+
+		// The order now exists. Drive the charge, then follow the store's own
+		// confirmed redirect rather than the marker.
+		useEffect( function () {
+			if ( ! inline || ! props.eventRegistration ) {
+				return;
+			}
+			return props.eventRegistration.onCheckoutSuccess( function ( data ) {
+				// The Store API drops a hash-only redirect_url, but it passes the
+				// gateway's whole result through as paymentDetails — so that is
+				// where the marker survives on the Blocks checkout. Accept either
+				// shape: an object keyed by name, or the raw key/value list.
+				var details = ( data && data.processingResponse && data.processingResponse.paymentDetails ) || {};
+				var fromDetails = '';
+				if ( Array.isArray( details ) ) {
+					details.forEach( function ( row ) {
+						if ( row && 'redirect' === row.key ) {
+							fromDetails = row.value;
+						}
+					} );
+				} else if ( details.redirect ) {
+					fromDetails = details.redirect;
+				}
+				var marker = inline.parseMarker( fromDetails || ( data && data.redirectUrl ) || '' );
+				if ( ! marker ) {
+					return true; // hosted / fallback redirect — let Blocks follow it.
+				}
+				return inline
+					.charge( marker.orderId, marker.orderKey )
+					.then( function ( url ) {
+						window.location.href = url;
+						return { type: 'success', redirectUrl: url };
+					} )
+					.catch( function ( message ) {
+						return {
+							type: 'error',
+							message: message || inline.messages.failed,
+							messageContext: 'wc/checkout/payments',
+						};
+					} );
+			} );
+		}, [ inline, props.eventRegistration ] );
+
+		var children = [];
+		if ( settings.testMode ) {
+			children.push(
+				createElement(
+					'strong',
+					{ key: 'test', className: 'vezmopay-blocks-test-badge' },
+					__( 'Test mode — no real money will move.', 'vezmopay-woocommerce' )
+				)
+			);
+		}
+		children.push(
+			createElement( 'div', {
+				key: 'host',
+				ref: hostRef,
+				className: 'vezmopay-inline-container',
+			} )
+		);
+		children.push(
+			createElement( 'p', {
+				key: 'msg',
+				className: 'vezmopay-inline-message',
+				role: 'status',
+				'aria-live': 'polite',
+			} )
+		);
+
+		return createElement( 'div', { className: 'vezmopay-inline is-blocks' }, children );
+	}
+
+	function Content( props ) {
+		// Hosted mode never embeds. Without the inline script (blocked, or an
+		// older cached copy) fall back to the tile + server-side redirect, which
+		// still completes a payment.
+		if ( 'hosted' === settings.mode || ! window.VezmoPayInline ) {
+			return createElement( Notice );
+		}
+		return createElement( InlineContent, props );
+	}
+
 	registerPaymentMethod( {
 		name: 'vezmopay',
 		label: createElement( Label ),
 		ariaLabel: labelText,
 		content: createElement( Content ),
-		edit: createElement( Content ),
+		edit: createElement( Notice ),
 		canMakePayment: function () {
 			return true;
 		},

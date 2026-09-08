@@ -559,3 +559,84 @@
 	margin-right: 2px;
 	opacity: 0.75;
 }
+
+/* ---------------------------------------------------------------------------
+   The form inside WooCommerce's payment box on the checkout page. Scoped and
+   deliberately plain: this sits inside a theme's own payment row, so it borrows
+   the surrounding width and adds no card of its own.
+   --------------------------------------------------------------------------- */
+.vezmopay-inline {
+	width: 100%;
+	min-width: 0;
+	margin: 6px 0 2px;
+}
+
+.vezmopay-inline-description,
+.vezmopay-inline-test {
+	margin: 0 0 8px;
+	font-size: 13px;
+	line-height: 1.5;
+}
+
+.vezmopay-inline-test {
+	font-weight: 700;
+	color: #b45309;
+}
+
+.vezmopay-inline-loading {
+	display: flex;
+	align-items: center;
+	gap: 9px;
+	padding: 14px 0;
+	font-size: 13px;
+	color: #6b7280;
+}
+
+.vezmopay-inline.is-ready .vezmopay-inline-loading {
+	display: none;
+}
+
+.vezmopay-inline-container {
+	width: 100%;
+	min-width: 0;
+}
+
+.vezmopay-inline-container iframe {
+	width: 100%;
+	min-width: 0;
+	box-sizing: border-box;
+	border: 0;
+	display: block;
+	border-radius: 12px;
+	background: #fff;
+}
+
+.vezmopay-inline-message {
+	display: none;
+	margin: 10px 0 0;
+	padding: 11px 14px;
+	border-radius: 10px;
+	font-size: 13px;
+	font-weight: 600;
+	line-height: 1.45;
+}
+
+.vezmopay-inline-message.is-error {
+	display: block;
+	background: #fff5f5;
+	border: 1px solid #fecaca;
+	color: #7f1d1d;
+}
+
+.vezmopay-inline-message.is-info {
+	display: block;
+	background: #f5f7ff;
+	border: 1px solid #c7d2fe;
+	color: #1b2bb8;
+}
+
+@media (prefers-color-scheme: dark) {
+	.vezmopay-inline-container iframe {
+		background: #141826;
+	}
+}

@@ -45,7 +45,10 @@ class Gateway extends \WC_Payment_Gateway {
 		$this->icon               = VEZMOPAY_WC_PLUGIN_URL . 'assets/img/vezmopay-icon.png';
 		$this->method_title       = __( 'VezmoPay', 'vezmopay-woocommerce' );
 		$this->method_description = __( 'Accept payments through VezmoPay — hosted checkout, inline payment element, or secure iframe. Card data never touches your server.', 'vezmopay-woocommerce' );
-		$this->has_fields         = false;
+		// Inline and iframe modes render the VezmoPay form in the payment box on
+		// the checkout page itself, the way Stripe's plugin does — so WooCommerce
+		// must ask us for fields. Hosted mode has nothing to show there.
+		$this->has_fields         = 'hosted' !== $this->integration_mode();
 		$this->supports           = array( 'products' );
 
 		$this->init_form_fields();
@@ -74,6 +77,37 @@ class Gateway extends \WC_Payment_Gateway {
 	 */
 	public function logger() {
 		return $this->logger;
+	}
+
+	/**
+	 * Cart-time payment session helper.
+	 *
+	 * @return Checkout_Session
+	 */
+	public function checkout_session() {
+		return new Checkout_Session( $this );
+	}
+
+	/**
+	 * The VezmoPay form, rendered inside WooCommerce's payment box on the
+	 * checkout page. The session (and therefore the frame) is created by
+	 * assets/js/checkout-inline.js over AJAX, so an abandoned checkout mints
+	 * nothing until the shopper actually picks VezmoPay.
+	 */
+	public function payment_fields() {
+		$description = $this->get_description();
+		if ( $description ) {
+			echo '<p class="vezmopay-inline-description">' . wp_kses_post( wpautop( wptexturize( $description ) ) ) . '</p>';
+		}
+		if ( $this->is_test_mode() ) {
+			echo '<p class="vezmopay-inline-test">' . esc_html__( 'Test mode — no real money will move.', 'vezmopay-woocommerce' ) . '</p>';
+		}
+
+		echo '<div id="vezmopay-inline" class="vezmopay-inline" data-mode="' . esc_attr( $this->integration_mode() ) . '" data-theme="' . esc_attr( $this->checkout_theme() ) . '">';
+		echo '<div class="vezmopay-inline-loading"><span class="vezmopay-spinner"></span>' . esc_html__( 'Loading secure payment fields…', 'vezmopay-woocommerce' ) . '</div>';
+		echo '<div id="vezmopay-inline-container" class="vezmopay-inline-container"></div>';
+		echo '<p id="vezmopay-inline-message" class="vezmopay-inline-message" role="status" aria-live="polite"></p>';
+		echo '</div>';
 	}
 
 	/**
@@ -609,6 +643,30 @@ class Gateway extends \WC_Payment_Gateway {
 
 		if ( 'hosted' === $this->integration_mode() ) {
 			return $this->process_payment_hosted( $order );
+		}
+
+		// Preferred path, and the one that behaves like Stripe's plugin: the
+		// shopper filled the VezmoPay form in the payment box, so the payment
+		// session already exists. Bind it to the order and hand a marker back to
+		// our checkout script, which tells the mounted form to charge and then
+		// confirms server-side. No extra page, no second button.
+		//
+		// bind_to_order() refuses a session whose amount, currency or lifetime no
+		// longer matches the order, and with no usable session at all (JS off,
+		// blocked, or the shopper never selected the method) this falls through to
+		// the pay-page flow below — which still works without JavaScript.
+		$session = $this->checkout_session();
+		if ( $session->bind_to_order( $order ) ) {
+			$this->await_payment( $order, __( 'Awaiting VezmoPay payment on the checkout page.', 'vezmopay-woocommerce' ) );
+			$order->update_meta_data( '_vezmopay_effective_mode', $this->integration_mode() . '-inline' );
+			$order->save_meta_data();
+
+			return array(
+				'result'   => 'success',
+				// Hash-only: WooCommerce assigns it to window.location, which fires
+				// hashchange without navigating, and checkout-inline.js picks it up.
+				'redirect' => '#vezmopay-charge:' . $order->get_id() . ':' . $order->get_order_key(),
+			);
 		}
 
 		$result = $this->ensure_secure_payment( $order );
