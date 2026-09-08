@@ -688,3 +688,15 @@
 		font-size: 14.5px;
 	}
 }
+
+/* Hand-off link shown when a charge stalls on the checkout page. */
+.vezmopay-inline-escape {
+	margin: 10px 0 0;
+	text-align: center;
+	font-size: 13.5px;
+	font-weight: 700;
+}
+
+.vezmopay-inline-escape a {
+	color: #3d4dff;
+}

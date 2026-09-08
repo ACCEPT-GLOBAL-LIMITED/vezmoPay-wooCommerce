@@ -4,7 +4,7 @@ Tags: payments, payment gateway, credit card, ach, woocommerce
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.2.17
+Stable tag: 0.2.18
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -112,6 +112,11 @@ This plugin connects your store to the VezmoPay payment platform, operated by Ve
 VezmoPay is operated by Vezmo Technology, Inc.: [https://vezmo.com](https://vezmo.com) — see the site for terms of service and privacy policy.
 
 == Changelog ==
+
+= 0.2.18 =
+* A payment that stalls no longer leaves the customer watching a spinner. After 20 seconds they are told it is taking longer than usual and offered a link to finish the payment on the VezmoPay page, and after 75 seconds they are moved to the pay page automatically, which keeps checking and can complete the order.
+* Extra bank verification (3-D Secure) now says what it is doing instead of showing a generic message.
+* With the gateway's Debug setting on, the checkout traces the payment to the browser console and every status check to your store's log (WooCommerce → Status → Logs → vezmopay), so a payment that will not settle can be diagnosed instead of guessed at.
 
 = 0.2.17 =
 * Fixed a payment that could sit on "Processing your payment…" forever. The checkout was waiting for the payment form to report back, and that message does not always arrive — some stores send no referrer, which is what the form needs to identify your site before it can talk to it. The checkout now also asks your store, which asks VezmoPay directly, so a payment is confirmed (or shown as failed) either way.

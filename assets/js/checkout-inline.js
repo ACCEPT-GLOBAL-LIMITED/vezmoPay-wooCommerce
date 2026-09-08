@@ -33,9 +33,12 @@
 	var params = vezmopay_inline_params;
 	var CHARGE_PREFIX = '#vezmopay-charge:';
 	var POLL_INTERVAL_MS = 3500;
+	// A charge that has not resolved by here is not going to resolve on its own
+	// message: show the shopper a way out rather than a spinner.
+	var STALL_MS = 20000;
 	// Long enough for a slow 3-D Secure challenge, short enough that nobody
 	// stares at a spinner: after this the pay page takes over.
-	var POLL_LIMIT_MS = 3 * 60 * 1000;
+	var POLL_LIMIT_MS = 75 * 1000;
 
 	var session = null;      // { clientToken, url, sdkUrl, amount, … }
 	var vezmo = null;        // vezmo.js instance, inline mode only
@@ -48,6 +51,16 @@
 	// Where to mount. The classic checkout renders the markup server-side in the
 	// payment box; the Blocks checkout hands us its own element instead.
 	var hostEl = null;
+
+	/** Trace the payment when the gateway's Debug setting is on. */
+	function log() {
+		if ( ! params.debug || ! window.console ) {
+			return;
+		}
+		var args = Array.prototype.slice.call( arguments );
+		args.unshift( '[VezmoPay]' );
+		window.console.log.apply( window.console, args );
+	}
 
 	function root() {
 		return hostEl ? hostEl.closest( '.vezmopay-inline' ) || hostEl : document.getElementById( 'vezmopay-inline' );
@@ -206,6 +219,13 @@
 				.then( function () {
 					vezmo = new Vezmo( params.apiBase ? { apiBase: params.apiBase } : undefined );
 					vezmo.mount( host, { clientToken: session.clientToken, theme: params.theme } );
+					[ 'ready', 'processing', 'success', 'error', 'pending', 'already-paid', 'expired', 'cancel' ].forEach(
+						function ( name ) {
+							vezmo.on( name, function ( evt ) {
+								log( 'sdk event:', name, ( evt && evt.message ) || '' );
+							} );
+						}
+					);
 					vezmo.on( 'ready', markReady );
 					vezmo.on( 'error', function ( evt ) {
 						setMessage( ( evt && evt.message ) || params.i18n.failed, 'error' );
@@ -272,6 +292,9 @@
 			return;
 		}
 		var data = e.data || {};
+		if ( data.type && 0 === String( data.type ).indexOf( 'vezmo:secure-payment:' ) && 'vezmo:secure-payment:resize' !== data.type ) {
+			log( 'frame event:', data.type, data.message || '' );
+		}
 		if ( 'vezmo:secure-payment:resize' === data.type ) {
 			var h = Number( data.height );
 			if ( h > 200 && h < 4000 ) {
@@ -294,6 +317,9 @@
 			failCharge( params.i18n.expired );
 		} else if ( 'vezmo:secure-payment:processing' === data.type ) {
 			setMessage( params.i18n.processing, 'info' );
+		} else if ( 'vezmo:secure-payment:requires_action' === data.type ) {
+			// Extra verification (3-D Secure) is happening inside the frame.
+			setMessage( params.i18n.verifying, 'info' );
 		}
 	} );
 
@@ -310,6 +336,7 @@
 					return;
 				}
 				session = res.data;
+				log( 'session ready', { amount: session.amount, currency: session.currency, hasSdk: !! session.sdkUrl, url: session.url } );
 				mount();
 			} )
 			.catch( function () {
@@ -365,6 +392,7 @@
 			return;
 		}
 		var started = Date.now();
+		charging.stallTimer = window.setTimeout( showStall, STALL_MS );
 		charging.pollTimer = window.setInterval( function () {
 			if ( ! charging ) {
 				return;
@@ -391,8 +419,10 @@
 				} )
 				.then( function ( res ) {
 					if ( ! charging || ! res || ! res.success || ! res.data ) {
+						log( 'status poll returned no usable answer', res );
 						return;
 					}
+					log( 'status poll:', res.data.status, res.data.redirect ? '(settled)' : '(still waiting)' );
 					if ( res.data.redirect ) {
 						finish( res.data.redirect );
 					} else if ( 'FAILED' === res.data.status ) {
@@ -407,10 +437,38 @@
 	}
 
 	function stopPolling() {
-		if ( charging && charging.pollTimer ) {
+		if ( ! charging ) {
+			return;
+		}
+		if ( charging.pollTimer ) {
 			window.clearInterval( charging.pollTimer );
 			charging.pollTimer = null;
 		}
+		if ( charging.stallTimer ) {
+			window.clearTimeout( charging.stallTimer );
+			charging.stallTimer = null;
+		}
+	}
+
+	/**
+	 * The charge is taking too long. Two things matter here: say so, and give the
+	 * shopper a route that cannot fail the same way — the VezmoPay page itself,
+	 * top-level, with no frame and no cross-window messaging in the path.
+	 */
+	function showStall() {
+		var scope = root();
+		if ( ! scope || scope.querySelector( '.vezmopay-inline-escape' ) || ! session ) {
+			return;
+		}
+		log( 'charge has not settled in', STALL_MS, 'ms — offering the hand-off link' );
+		setMessage( params.i18n.slow, 'info' );
+		var p = document.createElement( 'p' );
+		p.className = 'vezmopay-inline-escape';
+		var a = document.createElement( 'a' );
+		a.href = session.url;
+		a.textContent = params.i18n.continueOnVezmo;
+		p.appendChild( a );
+		scope.appendChild( p );
 	}
 
 	function handOffToPayPage() {
@@ -442,7 +500,8 @@
 		if ( charging ) {
 			return;
 		}
-		charging = { orderId: orderId, orderKey: orderKey, deferred: deferred || null, pollTimer: null };
+		charging = { orderId: orderId, orderKey: orderKey, deferred: deferred || null, pollTimer: null, stallTimer: null };
+		log( 'charge starting for order', orderId, vezmo ? 'via SDK pay()' : 'via frame submit message' );
 		setMessage( params.i18n.processing, 'info' );
 		refreshPayButton();
 		// Start watching the store immediately: the charge is already running

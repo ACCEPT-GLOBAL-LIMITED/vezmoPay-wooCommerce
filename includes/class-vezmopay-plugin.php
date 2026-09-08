@@ -243,6 +243,10 @@ final class Plugin {
 				// The charge is watched server-side too, so a message the frame
 				// cannot deliver never leaves the shopper waiting.
 				'statusUrl'   => \WC_AJAX::get_endpoint( 'vezmopay_status' ),
+				// Mirrors the gateway's Debug setting: with it on, the checkout
+				// traces the payment to the browser console, so a stuck payment
+				// can be diagnosed from what the shopper's browser saw.
+				'debug'       => 'yes' === $gateway->get_option( 'debug' ),
 				'nonce'       => wp_create_nonce( 'vezmopay-checkout' ),
 				'i18n'        => array(
 					/* translators: %s: order total, e.g. $500.00 */
@@ -253,6 +257,9 @@ final class Plugin {
 					'incomplete'  => __( 'Please complete your card details before placing the order.', 'vezmopay-woocommerce' ),
 					'cancelled'   => __( 'The payment was cancelled. You can try again.', 'vezmopay-woocommerce' ),
 					'expired'     => __( 'The payment session expired. Please reload the page and try again.', 'vezmopay-woocommerce' ),
+					'verifying'   => __( 'Completing an extra verification step with your bank…', 'vezmopay-woocommerce' ),
+					'slow'        => __( 'This is taking longer than usual. Your card has not been charged twice — you can finish the payment on the VezmoPay page below.', 'vezmopay-woocommerce' ),
+					'continueOnVezmo' => __( 'Continue on the VezmoPay page →', 'vezmopay-woocommerce' ),
 				),
 			)
 		);
@@ -347,6 +354,10 @@ final class Plugin {
 		if ( is_wp_error( $result ) ) {
 			wp_send_json_error( array( 'message' => $result->get_error_message() ), 502 );
 		}
+
+		$gateway->logger()->debug(
+			'Status poll for order #' . $order->get_id() . ': ' . $result . ' (payment ' . $order->get_meta( '_vezmopay_payment_id' ) . ')'
+		);
 
 		$done = in_array( $result, array( 'CAPTURED', 'PENDING', 'FAILED' ), true );
 		wp_send_json_success(
