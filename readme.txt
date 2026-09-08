@@ -4,7 +4,7 @@ Tags: payments, payment gateway, credit card, ach, woocommerce
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.2.16
+Stable tag: 0.2.17
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -112,6 +112,11 @@ This plugin connects your store to the VezmoPay payment platform, operated by Ve
 VezmoPay is operated by Vezmo Technology, Inc.: [https://vezmo.com](https://vezmo.com) — see the site for terms of service and privacy policy.
 
 == Changelog ==
+
+= 0.2.17 =
+* Fixed a payment that could sit on "Processing your payment…" forever. The checkout was waiting for the payment form to report back, and that message does not always arrive — some stores send no referrer, which is what the form needs to identify your site before it can talk to it. The checkout now also asks your store, which asks VezmoPay directly, so a payment is confirmed (or shown as failed) either way.
+* Cancelled, expired and already-paid payments now end with a clear message instead of a spinner.
+* If nothing settles after three minutes the customer is moved to the pay page, which keeps checking and can finish the payment, rather than being left waiting.
 
 = 0.2.16 =
 * Added a Pay button under the payment fields on the checkout page, showing the order total. The embedded VezmoPay form hides its own submit button, which left the payment area looking unfinished — this places the order, exactly as WooCommerce's own "Place order" button does. Both buttons work; use whichever your customers reach first.

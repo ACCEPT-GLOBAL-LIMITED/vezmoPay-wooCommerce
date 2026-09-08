@@ -32,6 +32,10 @@
 
 	var params = vezmopay_inline_params;
 	var CHARGE_PREFIX = '#vezmopay-charge:';
+	var POLL_INTERVAL_MS = 3500;
+	// Long enough for a slow 3-D Secure challenge, short enough that nobody
+	// stares at a spinner: after this the pay page takes over.
+	var POLL_LIMIT_MS = 3 * 60 * 1000;
 
 	var session = null;      // { clientToken, url, sdkUrl, amount, … }
 	var vezmo = null;        // vezmo.js instance, inline mode only
@@ -207,11 +211,20 @@
 						setMessage( ( evt && evt.message ) || params.i18n.failed, 'error' );
 						failCharge( ( evt && evt.message ) || params.i18n.failed );
 					} );
-					vezmo.on( 'success', function ( evt ) {
-						completeCharge( evt );
+					vezmo.on( 'success', completeCharge );
+					vezmo.on( 'pending', completeCharge );
+					// Terminal states that are NOT success or error. Missing these
+					// was one way the spinner used to run forever.
+					vezmo.on( 'already-paid', completeCharge );
+					vezmo.on( 'cancel', function () {
+						failCharge( params.i18n.cancelled );
 					} );
-					vezmo.on( 'pending', function ( evt ) {
-						completeCharge( evt );
+					vezmo.on( 'expired', function () {
+						failCharge( params.i18n.expired );
+					} );
+					// Progress, not an outcome: keep waiting, say so.
+					vezmo.on( 'processing', function () {
+						setMessage( params.i18n.processing, 'info' );
 					} );
 					window.setTimeout( markReady, 2500 );
 				} )
@@ -266,11 +279,21 @@
 			}
 		} else if ( 'vezmo:secure-payment:ready' === data.type ) {
 			markReady();
-		} else if ( 'vezmo:secure-payment:success' === data.type || 'vezmo:secure-payment:pending' === data.type ) {
+		} else if (
+			'vezmo:secure-payment:success' === data.type ||
+			'vezmo:secure-payment:pending' === data.type ||
+			'vezmo:secure-payment:already-paid' === data.type
+		) {
 			completeCharge( data );
 		} else if ( 'vezmo:secure-payment:error' === data.type ) {
 			setMessage( data.message || params.i18n.failed, 'error' );
 			failCharge( data.message || params.i18n.failed );
+		} else if ( 'vezmo:secure-payment:cancel' === data.type ) {
+			failCharge( params.i18n.cancelled );
+		} else if ( 'vezmo:secure-payment:expired' === data.type ) {
+			failCharge( params.i18n.expired );
+		} else if ( 'vezmo:secure-payment:processing' === data.type ) {
+			setMessage( params.i18n.processing, 'info' );
 		}
 	} );
 
@@ -324,13 +347,107 @@
 	 * Charge, once WooCommerce has created the order.
 	 * ------------------------------------------------------------------ */
 
+	/**
+	 * Ask the STORE what happened, on a timer, for as long as a charge is in
+	 * flight.
+	 *
+	 * A charge must never depend only on the frame telling us it worked. The
+	 * embedded page can only postMessage to a parent it can identify as a
+	 * trusted origin — which it derives from document.referrer, so a store
+	 * sending no referrer gets no events at all — and it has terminal states
+	 * (already paid, expired, cancelled) that arrive as their own event names or
+	 * not at all. Without this poll, a single missed message left the shopper on
+	 * "Processing your payment…" forever. The store asks the VezmoPay API, so it
+	 * knows the truth either way.
+	 */
+	function startPolling() {
+		if ( ! charging || charging.pollTimer ) {
+			return;
+		}
+		var started = Date.now();
+		charging.pollTimer = window.setInterval( function () {
+			if ( ! charging ) {
+				return;
+			}
+			if ( Date.now() - started > POLL_LIMIT_MS ) {
+				// Long enough. The pay page keeps polling, shows the form again
+				// and can finish the payment — better than an endless spinner.
+				handOffToPayPage();
+				return;
+			}
+			var body = new URLSearchParams();
+			body.append( 'nonce', params.nonce );
+			body.append( 'order_id', charging.orderId );
+			body.append( 'order_key', charging.orderKey );
+			window
+				.fetch( params.statusUrl, {
+					method: 'POST',
+					credentials: 'same-origin',
+					headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+					body: body.toString(),
+				} )
+				.then( function ( res ) {
+					return res.json();
+				} )
+				.then( function ( res ) {
+					if ( ! charging || ! res || ! res.success || ! res.data ) {
+						return;
+					}
+					if ( res.data.redirect ) {
+						finish( res.data.redirect );
+					} else if ( 'FAILED' === res.data.status ) {
+						failCharge( params.i18n.failed );
+					}
+					// Anything else: still settling — keep polling.
+				} )
+				.catch( function () {
+					// Transient network error — keep polling.
+				} );
+		}, POLL_INTERVAL_MS );
+	}
+
+	function stopPolling() {
+		if ( charging && charging.pollTimer ) {
+			window.clearInterval( charging.pollTimer );
+			charging.pollTimer = null;
+		}
+	}
+
+	function handOffToPayPage() {
+		if ( ! charging ) {
+			return;
+		}
+		var url = window.location.origin + '/checkout/order-pay/' + charging.orderId + '/?key=' + encodeURIComponent( charging.orderKey );
+		finish( url );
+	}
+
+	/** Settle the charge: resolve the caller's promise, or navigate ourselves. */
+	function finish( url ) {
+		if ( ! charging ) {
+			return;
+		}
+		stopPolling();
+		stopPolling();
+		var d = charging.deferred;
+		charging = null;
+		refreshPayButton();
+		if ( d ) {
+			d.resolve( url );
+			return;
+		}
+		window.location.href = url;
+	}
+
 	function startCharge( orderId, orderKey, deferred ) {
 		if ( charging ) {
 			return;
 		}
-		charging = { orderId: orderId, orderKey: orderKey, deferred: deferred || null };
+		charging = { orderId: orderId, orderKey: orderKey, deferred: deferred || null, pollTimer: null };
 		setMessage( params.i18n.processing, 'info' );
 		refreshPayButton();
+		// Start watching the store immediately: the charge is already running
+		// inside the frame, and this is what settles it if no event reaches us.
+		startPolling();
 
 		if ( vezmo ) {
 			vezmo.pay();
@@ -367,22 +484,15 @@
 			} )
 			.then( function ( res ) {
 				if ( res && res.success && res.data && res.data.redirect ) {
-					var to = res.data.redirect;
-					var d = charging && charging.deferred;
-					charging = null;
-					if ( d ) {
-						d.resolve( to );
-						return;
-					}
-					window.location.href = to;
+					finish( res.data.redirect );
 					return;
 				}
-				// Paid but not yet visible to the API: the pay page keeps polling
-				// and the webhook/cron settle it, so hand over there.
-				window.location.href = window.location.origin + '/checkout/order-pay/' + charging.orderId + '/?key=' + encodeURIComponent( charging.orderKey );
+				// Charged, but the API does not show it settled yet. Do NOT give
+				// up: the poll above keeps asking, and the webhook and cron are
+				// behind it. Only the poll's own time limit hands over.
 			} )
 			.catch( function () {
-				window.location.href = window.location.origin + '/checkout/order-pay/' + charging.orderId + '/?key=' + encodeURIComponent( charging.orderKey );
+				// Same — the poll is the safety net.
 			} );
 	}
 

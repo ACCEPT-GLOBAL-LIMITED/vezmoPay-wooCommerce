@@ -240,6 +240,9 @@ final class Plugin {
 				'apiBase'     => $gateway->api_client()->host(),
 				'sessionUrl'  => \WC_AJAX::get_endpoint( 'vezmopay_session' ),
 				'confirmUrl'  => \WC_AJAX::get_endpoint( 'vezmopay_confirm' ),
+				// The charge is watched server-side too, so a message the frame
+				// cannot deliver never leaves the shopper waiting.
+				'statusUrl'   => \WC_AJAX::get_endpoint( 'vezmopay_status' ),
 				'nonce'       => wp_create_nonce( 'vezmopay-checkout' ),
 				'i18n'        => array(
 					/* translators: %s: order total, e.g. $500.00 */
@@ -248,6 +251,8 @@ final class Plugin {
 					'failed'      => __( 'Payment failed. Please check your card details and try again.', 'vezmopay-woocommerce' ),
 					'unavailable' => __( 'Secure payment fields could not be loaded. Please reload the page or choose another payment method.', 'vezmopay-woocommerce' ),
 					'incomplete'  => __( 'Please complete your card details before placing the order.', 'vezmopay-woocommerce' ),
+					'cancelled'   => __( 'The payment was cancelled. You can try again.', 'vezmopay-woocommerce' ),
+					'expired'     => __( 'The payment session expired. Please reload the page and try again.', 'vezmopay-woocommerce' ),
 				),
 			)
 		);
