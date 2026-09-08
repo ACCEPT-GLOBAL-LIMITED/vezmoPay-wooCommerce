@@ -4,7 +4,7 @@ Tags: payments, payment gateway, credit card, ach, woocommerce
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.2.10
+Stable tag: 0.2.11
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -112,6 +112,10 @@ This plugin connects your store to the VezmoPay payment platform, operated by Ve
 VezmoPay is operated by Vezmo Technology, Inc.: [https://vezmo.com](https://vezmo.com) — see the site for terms of service and privacy policy.
 
 == Changelog ==
+
+= 0.2.11 =
+* Inline payment element and Secure iframe modes now really keep the customer on your store's pay page, instead of quietly redirecting to VezmoPay like Hosted mode did. Embedding needs your store to be one of your VezmoPay trusted origins — "Connect with VezmoPay" registers it — and when it is not, shoppers are still sent to the VezmoPay secure page rather than an empty frame, with the reason shown on the settings screen.
+* At checkout the VezmoPay mark now appears to the left of the payment method name in the block checkout, matching the classic checkout.
 
 = 0.2.10 =
 * The gateway settings screen is branded: the VezmoPay lockup, a tagline, and a chip that states plainly whether you are in Test or Live mode.

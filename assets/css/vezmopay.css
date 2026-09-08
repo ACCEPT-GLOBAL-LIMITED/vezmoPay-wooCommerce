@@ -415,3 +415,21 @@
 		margin: 12px 16px 0;
 	}
 }
+
+/* Manual hand-off under an embedded form: present but quiet, so it only draws
+   the eye of a shopper the embed is not working for. */
+.vezmopay-embed-escape {
+	margin: 10px 0 0;
+	text-align: center;
+	font-size: 13px;
+}
+
+.vezmopay-embed-escape a {
+	color: #5B6BFF;
+	text-decoration: none;
+}
+
+.vezmopay-embed-escape a:hover,
+.vezmopay-embed-escape a:focus {
+	text-decoration: underline;
+}

@@ -70,7 +70,7 @@ class Settings {
 					'iframe'  => __( 'Secure iframe (hosted fields, status polling)', 'vezmopay-woocommerce' ),
 					'hosted'  => __( 'Hosted checkout (redirect to VezmoPay paylink page)', 'vezmopay-woocommerce' ),
 				),
-				'description' => __( 'Element and iframe modes keep the customer on your site (card fields are VezmoPay-hosted either way, keeping you at SAQ-A PCI scope). Hosted mode redirects to the VezmoPay payment page; note VezmoPay does not currently redirect the customer back — the order is completed via webhook.', 'vezmopay-woocommerce' ),
+				'description' => __( 'Element and iframe modes keep the customer on your pay page (card fields are VezmoPay-hosted either way, keeping you at SAQ-A PCI scope). They need this store to be one of your VezmoPay trusted origins — Connect registers it automatically — and when it is not, the shopper is sent to the VezmoPay secure page instead of an empty frame. Hosted mode always redirects, to a VezmoPay paylink page.', 'vezmopay-woocommerce' ),
 			),
 			'environment'         => array(
 				'title'       => __( 'Environment', 'vezmopay-woocommerce' ),
