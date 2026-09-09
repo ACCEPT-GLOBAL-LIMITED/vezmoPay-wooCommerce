@@ -36,6 +36,9 @@ Any future expiry, any CVC, any postal code.
 - [ ] Pay with `4242…`, then (before the webhook lands, or with webhooks blocked) reopen the order-pay page / re-checkout the same cart → no "Couldn't load checkout — Payment is in terminal state CAPTURED": the order is completed from the API and you land on the order-received page.
 - [ ] Same case with the VezmoPay API unreachable (block it) → checkout is NOT blocked; the existing session is still offered.
 - [ ] Open the same pay page in two tabs, pay in tab A, then press Pay in tab B → tab B says the payment is already complete (no "try again", no second charge) and the store forwards to the order-received page.
+- [ ] Set Checkout appearance = **Dark**, place an order → the VezmoPay page renders dark. Switch to **Light**, reload the pay page → it renders light (the same session re-themes; no new payment is created).
+- [ ] Set **Auto** → the VezmoPay page follows the device's light/dark setting.
+- [ ] With appearance = Light, first visit user.dev.vezmo.com and switch the dashboard to dark mode, then pay in the SAME browser → the checkout still renders light (the dashboard's dark mode must not leak into it).
 
 ## 3. Element mode — Blocks checkout
 

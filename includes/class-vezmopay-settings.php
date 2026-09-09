@@ -91,7 +91,7 @@ class Settings {
 					'dark'  => __( 'Dark', 'vezmopay-woocommerce' ),
 					'auto'  => __( 'Auto (match the shopper\'s device)', 'vezmopay-woocommerce' ),
 				),
-				'description' => __( 'Theme for the VezmoPay payment page frame (header, footer, background and messages). The secure card form itself is hosted by VezmoPay and always renders in light mode. Applies to the inline element and iframe modes.', 'vezmopay-woocommerce' ),
+				'description' => __( 'Theme for the VezmoPay payment page — both the brief screen on your store and the hosted secure checkout the shopper is sent to, card form included. Applies to the inline element and iframe modes; hosted-paylink mode always renders light.', 'vezmopay-woocommerce' ),
 			),
 			'connection'          => array(
 				'title'       => __( 'Connection', 'vezmopay-woocommerce' ),

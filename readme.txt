@@ -116,6 +116,7 @@ VezmoPay is operated by Vezmo Technology, Inc.: [https://vezmo.com](https://vezm
 = 0.3.0 =
 * Fix: paying an order that had already been paid showed "Couldn't load checkout — Payment is in terminal state CAPTURED". The plugin now verifies an existing VezmoPay session against the API before reusing it, completes the order if it was already paid, and sends the shopper to the order-received page instead of a dead checkout.
 * A settled payment can no longer be turned into a second chargeable session: an already-paid session is never re-issued under a new attempt key, in either the secure-checkout or hosted-paylink mode.
+* Fix: "Checkout appearance" had no effect on the VezmoPay payment page — the setting was never sent to VezmoPay, so the page always used its own default. It is now sent both as the session default and on every checkout link, so Light / Dark / Auto apply immediately, including to a session created before you changed the setting.
 
 = 0.2.9 =
 * After paying (or a failed/cancelled payment) on the VezmoPay page, the shopper is now returned to your store automatically — to the order-received page on success, or back to a "try again" screen on failure. The order-received page verifies the payment on arrival so it shows as paid immediately.

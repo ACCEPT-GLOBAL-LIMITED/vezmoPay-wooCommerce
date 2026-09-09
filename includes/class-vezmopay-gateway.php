@@ -484,7 +484,7 @@ class Gateway extends \WC_Payment_Gateway {
 		// is blocked by the platform's frame-ancestors CSP until the store origin
 		// is a trusted origin; direct navigation always works.) The order is
 		// completed by webhook + the reconciliation cron.
-		return $this->redirect_to_external( $order, (string) $order->get_meta( '_vezmopay_iframe_url' ) );
+		return $this->redirect_to_external( $order, $this->checkout_url( $order ) );
 	}
 
 	/**
@@ -644,6 +644,12 @@ class Gateway extends \WC_Payment_Gateway {
 			'amount'     => (float) wc_format_decimal( $order->get_total(), 2 ),
 			'currency'   => $order->get_currency(),
 			'ttlMinutes' => self::TOKEN_TTL_MINUTES,
+			// Session-level default color theme. VezmoPay's checkout falls back to
+			// light when no theme is supplied, so without this the appearance
+			// setting could never reach the payment page at all. The per-request
+			// ?theme= appended by checkout_url() outranks this, which is what lets
+			// a changed setting apply to a session that already exists.
+			'theme'      => $this->checkout_theme(),
 			// Auto-return the shopper to the store after VezmoPay settles the
 			// payment. VezmoPay appends ?paymentId=…&status=success|failed.
 			'successUrl' => $this->get_return_url( $order ),
@@ -792,6 +798,26 @@ class Gateway extends \WC_Payment_Gateway {
 	}
 
 	/**
+	 * The VezmoPay checkout URL for this order, carrying the store's appearance
+	 * setting as `?theme=`.
+	 *
+	 * VezmoPay treats a per-request `?theme=` as the highest-precedence source
+	 * (above the session default stored at create time), so appending it here is
+	 * what makes the setting apply immediately — including to a session that was
+	 * created before the merchant changed it.
+	 *
+	 * @param \WC_Order $order Order.
+	 * @return string Empty string when no session URL is stored yet.
+	 */
+	private function checkout_url( $order ) {
+		$url = (string) $order->get_meta( '_vezmopay_iframe_url' );
+		if ( '' === $url ) {
+			return '';
+		}
+		return add_query_arg( 'theme', $this->checkout_theme(), $url );
+	}
+
+	/**
 	 * Send the shopper to the order-received page from inside the receipt template.
 	 *
 	 * `woocommerce_receipt_*` fires while the page is already rendering, so a bare
@@ -852,7 +878,7 @@ class Gateway extends \WC_Payment_Gateway {
 			return;
 		}
 
-		$iframe_url = (string) $order->get_meta( '_vezmopay_iframe_url' );
+		$iframe_url = $this->checkout_url( $order );
 		if ( '' === $iframe_url ) {
 			echo '<div class="woocommerce-error">' . esc_html__( 'VezmoPay checkout is unavailable right now. Please try again.', 'vezmopay-woocommerce' ) . '</div>';
 			return;
