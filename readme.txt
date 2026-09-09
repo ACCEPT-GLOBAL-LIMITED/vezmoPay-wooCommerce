@@ -4,7 +4,7 @@ Tags: payments, payment gateway, credit card, ach, woocommerce
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.3.2
+Stable tag: 0.3.3
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -112,6 +112,13 @@ This plugin connects your store to the VezmoPay payment platform, operated by Ve
 VezmoPay is operated by Vezmo Technology, Inc.: [https://vezmo.com](https://vezmo.com) — see the site for terms of service and privacy policy.
 
 == Changelog ==
+
+= 0.3.3 =
+
+* Hosted checkout can now be switched on from the settings screen. VezmoPay still cannot confirm whether an account is activated for payment links, so hosted mode falls back to the embedded form — but if payment links already work on your account you can tick "My VezmoPay account is activated for payment links" instead of editing code.
+* Fixed the Checkout URL setting bypassing the safety check the API URL setting has. It decides which address may report a payment result to your checkout, so it is now required to be an https VezmoPay address, is rejected with a visible error if it is not, and falls back to the shipped default rather than being used.
+* Fixed hosted mode showing "Loading secure payment fields…" forever on the classic checkout. The plugin read your chosen mode before its settings were loaded, so it always believed it was in inline mode and rendered payment fields hosted mode does not have.
+* Tightened the payment form's origin check: once the form has identified itself, only that address is accepted for the rest of the page.
 
 = 0.3.2 =
 
