@@ -615,7 +615,10 @@
 	   the shopper then has to scroll a box to reach the bank option. The floor
 	   is deliberately below the form's natural height so a genuinely compact
 	   state can still shrink. */
-	height: 760px;
+	/* Matches the height="620" the script sets on the frame it renders. These
+	   disagreed (760 here, 620 there) and CSS won, so the code's value was dead
+	   and the un-resized state was 140px taller than intended. */
+	height: 620px;
 	min-height: 560px;
 }
 

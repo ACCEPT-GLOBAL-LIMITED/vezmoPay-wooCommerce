@@ -134,6 +134,7 @@ Response `data`:
 
 | Capability | Status in velzovo-api |
 |---|---|
+| Account activation / verification status | No merchant endpoint reports whether the account is activated to receive money. `GET /merchant/account/payment-methods` reports toggled methods only, and `POST /merchant/paylinks` succeeds regardless — so the plugin cannot tell that a hosted-checkout redirect will dead-end. **Flagged.** |
 | Refund API (full/partial) | Internal-only; no merchant endpoint. Refund from the Vezmo/Stripe dashboard. |
 | Authorize-then-capture / void | No `capture_method: manual` anywhere; no capture/cancel endpoints. |
 | Tokenization / saved cards / customer vault | No SetupIntent/vault endpoints exposed. |

@@ -259,6 +259,9 @@ final class Plugin {
 				'mode'        => $gateway->integration_mode(),
 				'theme'       => $gateway->checkout_theme(),
 				'apiBase'     => $gateway->api_client()->host(),
+				// The frame's src is on the API origin and is redirected to this
+				// one, so this is the origin we actually exchange messages with.
+				'checkoutOrigin' => $gateway->checkout_origin(),
 				'sessionUrl'  => \WC_AJAX::get_endpoint( 'vezmopay_session' ),
 				'confirmUrl'  => \WC_AJAX::get_endpoint( 'vezmopay_confirm' ),
 				// The charge is watched server-side too, so a message the frame

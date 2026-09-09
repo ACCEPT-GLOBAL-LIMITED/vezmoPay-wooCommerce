@@ -197,10 +197,18 @@ class Gateway extends \WC_Payment_Gateway {
 		// Hosted mode is a one-way trip: the order is created, the cart emptied,
 		// stock reduced and the shopper redirected. An account that cannot take a
 		// paylink payment sends them to "No payment method available" and the
-		// order strands behind a webhook that never comes. When the cached
-		// capability says so, serve the embedded flow instead of stranding them.
-		// Cache only — checkout must never wait on an API call to pick a mode.
-		if ( 'hosted' === $mode && '0' === get_transient( $this->capability_key() ) ) {
+		// order strands behind a webhook that never comes — so hosted runs only
+		// when the account is CONFIRMED capable. Cache only: checkout must never
+		// wait on an API call to pick a mode.
+		$capable = get_transient( $this->capability_key() );
+
+		/**
+		 * Force hosted checkout on when the platform cannot yet confirm the account
+		 * is activated to accept payment-link payments.
+		 *
+		 * @param bool $force Default false.
+		 */
+		if ( 'hosted' === $mode && '1' !== $capable && ! apply_filters( 'vezmopay_force_hosted_mode', false ) ) {
 			return 'element';
 		}
 		return $mode;
@@ -453,6 +461,16 @@ class Gateway extends \WC_Payment_Gateway {
 	}
 
 	/**
+	 * Origin of the Vezmo-hosted checkout, which is where an embedded frame ends
+	 * up: its src is the API origin and the API redirects it here.
+	 *
+	 * @return string Origin, or '' when the configured base is unparsable.
+	 */
+	public function checkout_origin() {
+		return $this->url_origin( $this->checkout_base() );
+	}
+
+	/**
 	 * Availability: configured credentials and a currency the platform handles correctly.
 	 *
 	 * @return bool
@@ -525,9 +543,9 @@ class Gateway extends \WC_Payment_Gateway {
 		// that strand. Warmed here so checkout only ever reads the cache.
 		if ( 'hosted' === $this->configured_mode() && ! $this->paylink_capable( true ) ) {
 			echo '<div class="notice notice-error inline"><p><strong>';
-			echo esc_html__( 'Hosted checkout is not available on this VezmoPay account.', 'vezmopay-woocommerce' );
+			echo esc_html__( 'Hosted checkout is not active.', 'vezmopay-woocommerce' );
 			echo '</strong> ';
-			echo esc_html__( 'Your account cannot accept payment-link payments yet, so customers are being served the embedded payment form instead of being sent to a page they cannot pay on. Complete your VezmoPay account verification, or choose Inline or Secure iframe explicitly.', 'vezmopay-woocommerce' );
+			echo esc_html__( 'VezmoPay does not yet report whether this account is activated for payment-link payments, so customers are being served the embedded payment form instead of a page they may not be able to pay on. If your account is activated and you want the redirect anyway, use the vezmopay_force_hosted_mode filter.', 'vezmopay-woocommerce' );
 			echo '</p></div>';
 		}
 
@@ -1001,16 +1019,18 @@ class Gateway extends \WC_Payment_Gateway {
 			return '1' === $cached;
 		}
 		if ( ! $allow_fetch ) {
-			// Unknown and not allowed to ask: assume capable, so a cold cache
-			// cannot silently change a merchant's chosen mode. The admin screen
-			// and the settings save both warm this with $allow_fetch = true.
-			return true;
+			// Fails SAFE. Serving the embedded form when hosted would have worked is a
+			// mode the merchant did not pick; sending a shopper to a page that cannot
+			// take their money loses the sale and strands the order behind a webhook
+			// that never comes. The admin screen and the settings save both warm this
+			// with $allow_fetch = true, so a configured store answers from cache.
+			return false;
 		}
 
 		$methods = $this->api_client()->get_payment_methods();
 		$capable = false;
 		if ( ! is_wp_error( $methods ) && is_array( $methods ) ) {
-			$capable = $this->methods_indicate_paylink( $methods );
+			$capable = $this->methods_confirm_paylink( $methods );
 		} elseif ( is_wp_error( $methods ) ) {
 			$this->logger->error( 'Could not read account payment methods: ' . $methods->get_error_message() );
 		}
@@ -1020,31 +1040,38 @@ class Gateway extends \WC_Payment_Gateway {
 	}
 
 	/**
-	 * Interpret the account payment-methods response.
+	 * Whether the account is CONFIRMED able to take a payment-link payment.
+	 *
+	 * Only an explicit flag counts. The previous version treated "some payment
+	 * method is toggled on" as capability, which is a different question:
+	 * GET /merchant/account/payment-methods reports the methods a merchant has
+	 * switched on, not whether the account is verified and activated to receive
+	 * money. On an unactivated account card reads enabled, so the old fallback
+	 * returned true, hosted mode passed the gate, and the shopper was redirected
+	 * to a page reading "No payment method available … contact the merchant
+	 * directly" while the order sat pending behind a webhook that never came.
+	 *
+	 * So this now answers "confirmed" rather than "nothing contradicted it", and
+	 * returns false until the platform sends one of these flags — which is the
+	 * correct state today, because today hosted mode does not work on an
+	 * unactivated account. A merchant whose account IS activated can force the
+	 * redirect with the vezmopay_force_hosted_mode filter.
+	 *
+	 * TODO(platform): this needs an account activation/verification flag on the
+	 * merchant API — e.g. GET /merchant/account returning
+	 * { activated, canAcceptPayments, verificationStatus }, or paylinkEnabled
+	 * added to the payment-methods response. Nothing currently reports it:
+	 * POST /merchant/paylinks returns a usable shortCode regardless, so creation
+	 * success is not a signal either. Only this method needs to change once the
+	 * flag exists.
 	 *
 	 * @param array $methods Decoded `data` payload.
 	 * @return bool
 	 */
-	private function methods_indicate_paylink( array $methods ) {
-		// An explicit flag wins if the platform ever sends one.
+	private function methods_confirm_paylink( array $methods ) {
 		foreach ( array( 'paylinkEnabled', 'paylinksEnabled', 'canCreatePaylinks' ) as $flag ) {
 			if ( isset( $methods[ $flag ] ) ) {
 				return (bool) $methods[ $flag ];
-			}
-		}
-
-		// Otherwise: any enabled method at all means the account can be paid.
-		foreach ( $methods as $value ) {
-			if ( is_bool( $value ) && $value ) {
-				return true;
-			}
-			if ( is_array( $value ) ) {
-				if ( ! empty( $value['enabled'] ) ) {
-					return true;
-				}
-				if ( $this->methods_indicate_paylink( $value ) ) {
-					return true;
-				}
 			}
 		}
 		return false;
@@ -1242,6 +1269,7 @@ class Gateway extends \WC_Payment_Gateway {
 		$params = array(
 			'mode'         => $mode,
 			'apiBase'      => $this->api_client()->host(),
+			'checkoutOrigin' => $this->checkout_origin(),
 			'orderId'      => $order->get_id(),
 			'orderKey'     => $order->get_order_key(),
 			'clientToken'  => (string) $order->get_meta( '_vezmopay_client_token' ),

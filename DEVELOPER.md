@@ -24,6 +24,14 @@ plugin assumes a capability that isn't verified there.
 | `assets/js/blocks.js` | — | Registers the Blocks payment method. In element/iframe modes it renders the VezmoPay form inline (delegating to `window.VezmoPayInline`) and charges it from `onCheckoutSuccess`; in hosted mode it is an informational tile and the redirect happens server-side. |
 | `uninstall.php` | — | Deletes the settings option, every `vezmopay_*` transient, and the reconciliation locks / webhook event claims. Order meta is preserved as audit trail. |
 
+## Filters
+
+| Filter | Default | Purpose |
+|---|---|---|
+| `vezmopay_force_hosted_mode` | `false` | Run hosted checkout even though the platform cannot confirm the account is activated for payment-link payments. Hosted mode otherwise downgrades to the embedded form, because an unactivated account returns a usable paylink whose page reads "No payment method available" — the order is created, the cart emptied and stock reduced, and no webhook ever arrives. Set this only if you have confirmed in the VezmoPay dashboard that the account can take payments. |
+| `vezmopay_allowed_api_hosts` | `[ 'vezmo.com' ]` | Host suffixes an API base setting may use, for self-hosted deployments. https is required regardless. |
+| `vezmopay_github_token` | `''` | Read-only token for update checks against a private repository. |
+
 ## Authentication flow
 
 There is one credential pair per environment: a `vzm_…` API key and a secret (no publishable key

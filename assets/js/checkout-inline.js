@@ -252,6 +252,7 @@
 		vezmo = null;
 		frame = null;
 		ready = false;
+		pinnedOrigin = null;
 		mountedFor = session.clientToken;
 
 		// Inline mode: let VezmoPay's SDK own the frame (auto-resize, events,
@@ -260,7 +261,16 @@
 		if ( 'element' === params.mode && session.sdkUrl ) {
 			return loadSdk( session.sdkUrl )
 				.then( function () {
-					vezmo = new Vezmo( params.apiBase ? { apiBase: params.apiBase } : undefined );
+					// Naming the checkout origin is the SDK's strictest posture: it
+					// trusts that origin from the start and pins nothing at runtime.
+					var sdkOpts = {};
+					if ( params.apiBase ) {
+						sdkOpts.apiBase = params.apiBase;
+					}
+					if ( params.checkoutOrigin ) {
+						sdkOpts.checkoutOrigin = params.checkoutOrigin;
+					}
+					vezmo = new Vezmo( sdkOpts );
 					vezmo.mount( host, { clientToken: session.clientToken, theme: params.theme } );
 					// The SDK creates this frame and nothing labels it, so in the
 					// DEFAULT mode a screen reader announced an unlabelled frame
@@ -338,7 +348,20 @@
 		window.setTimeout( markReady, 2500 );
 	}
 
-	function frameOrigin() {
+	// The frame's src is the API origin, and the API 302-redirects it to the
+	// Vezmo-hosted checkout origin — which is why vezmo.js carries the same
+	// pinning logic. So the document we exchange messages with is NOT on
+	// session.url's origin: checking against that alone dropped every message
+	// the frame sent, including the content height, and aimed our submit at an
+	// origin the frame had already left.
+	//
+	// Trusted set, in order of strictness: the checkout origin the merchant has
+	// configured, the API origin the frame started from, and one origin PINNED
+	// from the first message that already proved it came from our own frame
+	// (e.source is unforgeable for a window we created).
+	var pinnedOrigin = null;
+
+	function sessionOrigin() {
 		try {
 			return new URL( session.url ).origin;
 		} catch ( e ) {
@@ -346,21 +369,55 @@
 		}
 	}
 
+	function trustedOrigins() {
+		var list = [];
+		if ( params.checkoutOrigin ) {
+			list.push( params.checkoutOrigin );
+		}
+		var api = sessionOrigin();
+		if ( api ) {
+			list.push( api );
+		}
+		if ( pinnedOrigin ) {
+			list.push( pinnedOrigin );
+		}
+		return list;
+	}
+
+	/** Where to post INTO the frame: wherever it actually ended up. */
+	function frameOrigin() {
+		return pinnedOrigin || params.checkoutOrigin || sessionOrigin();
+	}
+
 	/** Messages from a plain frame (iframe mode, or the inline fallback). */
 	window.addEventListener( 'message', function ( e ) {
 		if ( ! session || ! frame ) {
 			return;
 		}
-		// Fail CLOSED. `origin &&` meant an unparsable session URL (the server used
-		// to allow an empty one) disabled the check entirely, and any frame or
-		// script on the checkout page could then forge a payment result: a fake
-		// `error` mid-charge invites a retry and a double charge, a fake `success`
-		// lands an unpaid order on the success page. The source check is the other
-		// half — an origin can be shared by frames we did not create, and no page
-		// can forge e.source for a window it does not own.
-		var origin = frameOrigin();
-		if ( ! origin || e.origin !== origin || ! frame || e.source !== frame.contentWindow ) {
+		// Fail CLOSED, and in this order:
+		//
+		//   1. SOURCE first. No page can forge e.source for a window it does not
+		//      own, so this alone rejects every other frame, opener and tab —
+		//      which is what stops anything on the checkout page forging a
+		//      payment result (a fake `error` invites a retry and a double
+		//      charge; a fake `success` lands an unpaid order on the success
+		//      page).
+		//   2. ORIGIN against the trusted set, never '*' and never skipped. The
+		//      first message that passes the source check pins its origin, so a
+		//      later navigation of our own frame to a third origin is refused.
+		if ( ! frame || e.source !== frame.contentWindow ) {
 			return;
+		}
+		if ( ! e.origin || 'null' === e.origin ) {
+			return;
+		}
+		if ( trustedOrigins().indexOf( e.origin ) === -1 ) {
+			log( 'ignoring a frame message from an untrusted origin:', e.origin );
+			return;
+		}
+		if ( ! pinnedOrigin ) {
+			pinnedOrigin = e.origin;
+			log( 'pinned the frame origin:', pinnedOrigin );
 		}
 		var data = e.data || {};
 		if ( data.type && 0 === String( data.type ).indexOf( 'vezmo:secure-payment:' ) && 'vezmo:secure-payment:resize' !== data.type ) {
