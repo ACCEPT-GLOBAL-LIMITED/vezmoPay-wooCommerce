@@ -24,6 +24,7 @@
 	var payButton = document.getElementById( 'vezmopay-pay' );
 	var finalized = false;
 	var pollTimer = null;
+	var POLL_LIMIT_MS = 15 * 60 * 1000;
 
 	// The embedded secure page hides its own submit button and charges only when
 	// the merchant page asks it to, so this button is the shopper's way to pay.
@@ -99,6 +100,11 @@
 				body: body.toString(),
 			} )
 			.then( function ( res ) {
+				// `-1` from a rejected nonce is not JSON; flag it instead of
+				// letting the parse error masquerade as a network hiccup.
+				if ( 401 === res.status || 403 === res.status ) {
+					return { __authFailed: true };
+				}
 				return res.json();
 			} );
 	}
@@ -111,6 +117,11 @@
 		setMessage( statusMessage || params.i18n.processing, 'info' );
 		post( params.confirmUrl )
 			.then( function ( res ) {
+				if ( res && res.__authFailed ) {
+					finalized = false;
+					setMessage( params.i18n.expired, 'error' );
+					return;
+				}
 				if ( res && res.success && res.data && res.data.redirect ) {
 					// Only stop the fallback poll once the server has confirmed;
 					// it is the safety net if this confirm call fails.
@@ -127,16 +138,37 @@
 			} );
 	}
 
+	function stopPolling() {
+		if ( pollTimer ) {
+			window.clearInterval( pollTimer );
+			pollTimer = null;
+		}
+	}
+
 	function startPolling() {
 		if ( pollTimer ) {
 			return;
 		}
+		var started = Date.now();
 		pollTimer = window.setInterval( function () {
 			if ( finalized ) {
 				return;
 			}
+			// Bounded, like the iframe poller: an unsettleable payment must not
+			// leave this running for the life of the page.
+			if ( Date.now() - started > POLL_LIMIT_MS ) {
+				stopPolling();
+				return;
+			}
 			post( params.statusUrl )
 				.then( function ( res ) {
+					if ( res && res.__authFailed ) {
+						// A retired nonce, not a network blip. Stop and say so.
+						finalized = true;
+						stopPolling();
+						setMessage( params.i18n.expired, 'error' );
+						return;
+					}
 					if ( ! res || ! res.success || ! res.data ) {
 						return;
 					}

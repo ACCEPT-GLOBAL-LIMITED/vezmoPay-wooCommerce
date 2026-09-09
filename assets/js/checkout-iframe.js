@@ -23,6 +23,19 @@
 	var frameEl = document.getElementById( 'vezmopay-frame' );
 	var payButton = document.getElementById( 'vezmopay-pay' );
 	var done = false;
+	var pollTimer = null;
+	var pollStarted = Date.now();
+	// The poll must not run for the life of the page: a retired nonce or a
+	// payment that never settles used to leave it hammering the store forever.
+	var POLL_LIMIT_MS = 15 * 60 * 1000;
+
+	function stopPolling() {
+		done = true;
+		if ( pollTimer ) {
+			window.clearInterval( pollTimer );
+			pollTimer = null;
+		}
+	}
 
 	function setMessage( text, kind ) {
 		if ( ! messageEl ) {
@@ -161,6 +174,14 @@
 				body: body.toString(),
 			} )
 			.then( function ( res ) {
+				// A dead nonce answers 403 with a body of `-1`, which fails to
+				// parse and used to land in the catch below labelled "transient
+				// network error" — so the page polled forever, saying nothing.
+				if ( 401 === res.status || 403 === res.status ) {
+					stopPolling();
+					setMessage( params.i18n.expired, 'error' );
+					throw new Error( 'auth' );
+				}
 				return res.json();
 			} )
 			.then( function ( res ) {
@@ -168,7 +189,7 @@
 					return;
 				}
 				if ( res.data.redirect ) {
-					done = true;
+					stopPolling();
 					if ( 'PENDING' === res.data.status ) {
 						setMessage( params.i18n.pending, 'info' );
 					}
@@ -178,7 +199,7 @@
 					setMessage( params.i18n.failed, 'error' );
 				} else if ( 'MISMATCH' === res.data.status ) {
 					// Manual review required — polling will never resolve this.
-					done = true;
+					stopPolling();
 					setMessage( params.i18n.review, 'info' );
 				}
 			} )
@@ -187,5 +208,11 @@
 			} );
 	}
 
-	window.setInterval( poll, Math.max( 3000, parseInt( params.pollInterval, 10 ) || 4000 ) );
+	pollTimer = window.setInterval( function () {
+		if ( Date.now() - pollStarted > POLL_LIMIT_MS ) {
+			stopPolling();
+			return;
+		}
+		poll();
+	}, Math.max( 3000, parseInt( params.pollInterval, 10 ) || 4000 ) );
 } )();

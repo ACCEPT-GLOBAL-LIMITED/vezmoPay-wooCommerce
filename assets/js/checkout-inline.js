@@ -457,6 +457,14 @@
 					body: body.toString(),
 				} )
 				.then( function ( res ) {
+					// A rejected nonce answers 403 with `-1`, which is not JSON.
+					// Treating that as a transient error meant polling forever.
+					if ( 401 === res.status || 403 === res.status ) {
+						log( 'status poll rejected our nonce — stopping and handing off' );
+						setMessage( params.i18n.expired, 'error' );
+						handOffToPayPage();
+						throw new Error( 'auth' );
+					}
 					return res.json();
 				} )
 				.then( function ( res ) {
@@ -551,7 +559,6 @@
 			return;
 		}
 		stopPolling();
-		stopPolling();
 		var d = charging.deferred;
 		charging = null;
 		refreshPayButton();
@@ -564,6 +571,13 @@
 
 	function startCharge( orderId, orderKey, deferred, marker ) {
 		if ( charging ) {
+			// A second attempt while one is running. Returning silently left the
+			// Blocks checkout awaiting a promise nobody would ever settle, with no
+			// notice and no way out but a page reload.
+			log( 'ignoring a second charge attempt for order', orderId, '- one is already running' );
+			if ( deferred ) {
+				deferred.reject( params.i18n.processing );
+			}
 			return;
 		}
 		charging = {
@@ -705,6 +719,15 @@
 			return Promise.resolve();
 		},
 		unmount: function () {
+			// Timers must not outlive the form they were watching, and a charge
+			// waiting on this frame can no longer be observed here — so settle it
+			// toward a page that CAN finish the payment rather than leaving the
+			// caller awaiting a promise and three timers running against a form
+			// that no longer exists.
+			if ( charging ) {
+				log( 'form unmounted while a charge was running — handing the shopper off' );
+				handOffToPayPage();
+			}
 			hostEl = null;
 			mountedFor = null;
 			vezmo = null;

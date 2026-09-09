@@ -266,8 +266,38 @@ final class Plugin {
 	}
 
 	/**
+	 * Check the CSRF nonce on a post-charge endpoint without dying on failure.
+	 *
+	 * These two endpoints are authorised by order id + order key, compared with
+	 * hash_equals in get_authorized_order() — that is the capability, and the
+	 * nonce adds nothing on top of it. What it does add is a failure mode AFTER
+	 * the card has been charged: guest checkout that creates an account retires
+	 * the nonce mid-flow, and a hard wp_die( -1 ) then blocked the store from
+	 * confirming a payment the shopper had already made. So: log it, and let the
+	 * order key decide. Everything downstream still re-verifies against the API.
+	 *
+	 * @param string $context Which endpoint, for the log line.
+	 */
+	private function verify_checkout_request( $context ) {
+		if ( false !== check_ajax_referer( 'vezmopay-checkout', 'nonce', false ) ) {
+			return;
+		}
+		$gateway = $this->gateway();
+		if ( $gateway ) {
+			$gateway->logger()->debug(
+				'Checkout ' . $context . ' request arrived with a stale or missing nonce; '
+				. 'proceeding on the order key (hash_equals) instead of refusing a charge that may already have happened.'
+			);
+		}
+	}
+
+	/**
 	 * Create (or return) the cart's VezmoPay payment session, so the form can be
 	 * mounted in the payment box before any order exists.
+	 *
+	 * Keeps the HARD nonce check: this mints a real provider resource and no
+	 * money has moved yet, so a stale nonce here costs a page reload, not a
+	 * payment.
 	 */
 	public function ajax_session() {
 		check_ajax_referer( 'vezmopay-checkout', 'nonce' );
@@ -309,7 +339,7 @@ final class Plugin {
 	}
 
 	public function ajax_confirm() {
-		check_ajax_referer( 'vezmopay-checkout', 'nonce' );
+		$this->verify_checkout_request( 'confirm' );
 
 		$order_id  = isset( $_POST['order_id'] ) ? absint( $_POST['order_id'] ) : 0;
 		$order_key = isset( $_POST['order_key'] ) ? sanitize_text_field( wp_unslash( $_POST['order_key'] ) ) : '';
@@ -340,7 +370,7 @@ final class Plugin {
 	 * AJAX: polling fallback (iframe mode, or element mode when postMessage is blocked).
 	 */
 	public function ajax_status() {
-		check_ajax_referer( 'vezmopay-checkout', 'nonce' );
+		$this->verify_checkout_request( 'status' );
 
 		$order_id  = isset( $_POST['order_id'] ) ? absint( $_POST['order_id'] ) : 0;
 		$order_key = isset( $_POST['order_key'] ) ? sanitize_text_field( wp_unslash( $_POST['order_key'] ) ) : '';

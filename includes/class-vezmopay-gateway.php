@@ -59,6 +59,15 @@ class Gateway extends \WC_Payment_Gateway {
 		$this->logger      = new Logger( 'yes' === $this->get_option( 'debug' ) );
 
 		add_action( 'woocommerce_update_options_payment_gateways_' . $this->id, array( $this, 'process_admin_options' ) );
+		// A saved change of mode or credentials must re-ask, not wait out the TTL.
+		add_action(
+			'woocommerce_update_options_payment_gateways_' . $this->id,
+			function () {
+				delete_transient( 'vezmopay_paylink_capable_test' );
+				delete_transient( 'vezmopay_paylink_capable_live' );
+			},
+			20
+		);
 		add_action( 'woocommerce_receipt_' . $this->id, array( $this, 'receipt_page' ) );
 		add_action( 'woocommerce_thankyou_' . $this->id, array( $this, 'thankyou_page' ) );
 	}
@@ -175,6 +184,41 @@ class Gateway extends \WC_Payment_Gateway {
 	public function integration_mode() {
 		$mode = $this->get_option( 'integration_mode', 'element' );
 		if ( 'embedded' === $mode ) {
+			$mode = 'element';
+		}
+		if ( ! in_array( $mode, array( 'element', 'iframe', 'hosted' ), true ) ) {
+			$mode = 'element';
+		}
+
+		// Hosted mode is a one-way trip: the order is created, the cart emptied,
+		// stock reduced and the shopper redirected. An account that cannot take a
+		// paylink payment sends them to "No payment method available" and the
+		// order strands behind a webhook that never comes. When the cached
+		// capability says so, serve the embedded flow instead of stranding them.
+		// Cache only — checkout must never wait on an API call to pick a mode.
+		if ( 'hosted' === $mode && '0' === get_transient( $this->capability_key() ) ) {
+			return 'element';
+		}
+		return $mode;
+	}
+
+	/**
+	 * Transient key for the paylink capability answer.
+	 *
+	 * @return string
+	 */
+	private function capability_key() {
+		return 'vezmopay_paylink_capable_' . $this->environment();
+	}
+
+	/**
+	 * The mode the merchant actually chose, before any capability downgrade.
+	 *
+	 * @return string
+	 */
+	public function configured_mode() {
+		$mode = $this->get_option( 'integration_mode', 'element' );
+		if ( 'embedded' === $mode ) {
 			return 'element';
 		}
 		return in_array( $mode, array( 'element', 'iframe', 'hosted' ), true ) ? $mode : 'element';
@@ -242,6 +286,11 @@ class Gateway extends \WC_Payment_Gateway {
 	 * Transient TTL for the trusted-origin lookup.
 	 */
 	const EMBED_CHECK_TTL = 10 * MINUTE_IN_SECONDS;
+
+	/**
+	 * Transient TTL for the account capability lookup behind hosted mode.
+	 */
+	const CAPABILITY_TTL = 15 * MINUTE_IN_SECONDS;
 
 	/**
 	 * This store's origin, in the form VezmoPay stores trusted origins as.
@@ -409,6 +458,17 @@ class Gateway extends \WC_Payment_Gateway {
 		if ( in_array( get_woocommerce_currency(), Settings::ZERO_DECIMAL_CURRENCIES, true ) ) {
 			echo '<div class="notice notice-error inline"><p>';
 			echo esc_html__( 'Your store currency is a zero-decimal currency (e.g. JPY, KRW). VezmoPay does not currently handle these correctly, so the gateway will not be offered at checkout.', 'vezmopay-woocommerce' );
+			echo '</p></div>';
+		}
+
+		// Hosted mode selected but the account cannot take a paylink payment: this
+		// is the one check worth an API call, because the alternative is orders
+		// that strand. Warmed here so checkout only ever reads the cache.
+		if ( 'hosted' === $this->configured_mode() && ! $this->paylink_capable( true ) ) {
+			echo '<div class="notice notice-error inline"><p><strong>';
+			echo esc_html__( 'Hosted checkout is not available on this VezmoPay account.', 'vezmopay-woocommerce' );
+			echo '</strong> ';
+			echo esc_html__( 'Your account cannot accept payment-link payments yet, so customers are being served the embedded payment form instead of being sent to a page they cannot pay on. Complete your VezmoPay account verification, or choose Inline or Secure iframe explicitly.', 'vezmopay-woocommerce' );
 			echo '</p></div>';
 		}
 
@@ -843,21 +903,92 @@ class Gateway extends \WC_Payment_Gateway {
 			$existing = $code;
 		}
 
-		// Awaiting payment on the external page.
-		$order->update_status( 'pending', __( 'Awaiting VezmoPay hosted checkout payment.', 'vezmopay-woocommerce' ) );
-		$order->save();
-
-		if ( function_exists( 'wc_maybe_reduce_stock_levels' ) ) {
-			wc_maybe_reduce_stock_levels( $order->get_id() );
-		}
-		if ( isset( WC()->cart ) && WC()->cart ) {
-			WC()->cart->empty_cart();
-		}
+		// Awaiting payment on the external page. Routed through await_payment()
+		// so it gets the status GUARD the inline path has: an unguarded
+		// update_status( 'pending' ) pushed an on-hold ACH order back to pending,
+		// which fires wc_maybe_increase_stock_levels() and restores stock for an
+		// order that is still being paid.
+		$this->await_payment( $order, __( 'Awaiting VezmoPay hosted checkout payment.', 'vezmopay-woocommerce' ) );
+		$order->update_meta_data( '_vezmopay_effective_mode', 'hosted' );
+		$order->save_meta_data();
 
 		return array(
 			'result'   => 'success',
 			'redirect' => $this->checkout_base() . '/checkout/payments-links/' . rawurlencode( $existing ),
 		);
+	}
+
+	/**
+	 * Whether the account can actually take a paylink payment.
+	 *
+	 * Read from the same account endpoint the settings panel already uses, cached
+	 * so checkout never pays for it. Fails CLOSED for hosted mode only, where a
+	 * wrong answer costs a stranded order rather than a fallback.
+	 *
+	 * TODO(platform): confirm which field signals paylink readiness. Until then
+	 * this treats "at least one enabled payment method" as the signal, and an
+	 * unreadable response as not-capable.
+	 *
+	 * @return bool
+	 */
+	public function paylink_capable( $allow_fetch = false ) {
+		if ( ! $this->api_client()->is_configured() ) {
+			return false;
+		}
+
+		$cache_key = $this->capability_key();
+		$cached     = get_transient( $cache_key );
+		if ( '1' === $cached || '0' === $cached ) {
+			return '1' === $cached;
+		}
+		if ( ! $allow_fetch ) {
+			// Unknown and not allowed to ask: assume capable, so a cold cache
+			// cannot silently change a merchant's chosen mode. The admin screen
+			// and the settings save both warm this with $allow_fetch = true.
+			return true;
+		}
+
+		$methods = $this->api_client()->get_payment_methods();
+		$capable = false;
+		if ( ! is_wp_error( $methods ) && is_array( $methods ) ) {
+			$capable = $this->methods_indicate_paylink( $methods );
+		} elseif ( is_wp_error( $methods ) ) {
+			$this->logger->error( 'Could not read account payment methods: ' . $methods->get_error_message() );
+		}
+
+		set_transient( $cache_key, $capable ? '1' : '0', self::CAPABILITY_TTL );
+		return $capable;
+	}
+
+	/**
+	 * Interpret the account payment-methods response.
+	 *
+	 * @param array $methods Decoded `data` payload.
+	 * @return bool
+	 */
+	private function methods_indicate_paylink( array $methods ) {
+		// An explicit flag wins if the platform ever sends one.
+		foreach ( array( 'paylinkEnabled', 'paylinksEnabled', 'canCreatePaylinks' ) as $flag ) {
+			if ( isset( $methods[ $flag ] ) ) {
+				return (bool) $methods[ $flag ];
+			}
+		}
+
+		// Otherwise: any enabled method at all means the account can be paid.
+		foreach ( $methods as $value ) {
+			if ( is_bool( $value ) && $value ) {
+				return true;
+			}
+			if ( is_array( $value ) ) {
+				if ( ! empty( $value['enabled'] ) ) {
+					return true;
+				}
+				if ( $this->methods_indicate_paylink( $value ) ) {
+					return true;
+				}
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -1281,6 +1412,41 @@ class Gateway extends \WC_Payment_Gateway {
 	 * @return string|\WP_Error Payment status (CAPTURED|PENDING|FAILED|INITIATED|REFUNDED).
 	 */
 	public function reconcile_order_with_api( $order ) {
+		// Four actors can reach this at once — the webhook, the five-minute cron,
+		// the browser poll every 3.5s, and thankyou_page() on every
+		// order-received load. mark_order_paid()'s is_paid() guard reads an
+		// in-memory object, so two passes both saw "unpaid" and both called
+		// payment_complete(): duplicate emails, duplicate notes, and two stock
+		// reductions that each read _order_stock_reduced = no.
+		//
+		// add_option() is atomic on the options table's unique index, so exactly
+		// one caller gets the lock and the rest back off.
+		$lock = 'vezmopay_recon_' . $order->get_id();
+		if ( ! add_option( $lock, time(), '', 'no' ) ) {
+			$this->logger->debug( 'Reconciliation for order #' . $order->get_id() . ' is already running; skipping this pass.' );
+			return 'LOCKED';
+		}
+
+		try {
+			return $this->reconcile_locked( $order );
+		} finally {
+			delete_option( $lock );
+		}
+	}
+
+	/**
+	 * The reconcile itself, run under the lock taken above.
+	 *
+	 * @param \WC_Order $order Order.
+	 * @return string|\WP_Error
+	 */
+	private function reconcile_locked( $order ) {
+		// Re-read: another pass may have completed this order between the last
+		// read and the lock being taken.
+		$order       = wc_get_order( $order->get_id() );
+		if ( ! $order ) {
+			return new \WP_Error( 'vezmopay_no_order', __( 'Order not found.', 'vezmopay-woocommerce' ) );
+		}
 		$environment = $order->get_meta( '_vezmopay_environment' );
 		$client      = $this->api_client( in_array( $environment, array( 'test', 'live' ), true ) ? $environment : null );
 
@@ -1479,6 +1645,13 @@ class Gateway extends \WC_Payment_Gateway {
 	 * @param string    $note       Order note.
 	 */
 	public function mark_order_paid( $order, $payment_id, $note ) {
+		// Re-read from storage rather than trusting the in-memory object: this is
+		// the check that decides whether payment_complete() runs, and a stale
+		// object is exactly how it ran twice.
+		$fresh = wc_get_order( $order->get_id() );
+		if ( $fresh ) {
+			$order = $fresh;
+		}
 		if ( $order->is_paid() ) {
 			return;
 		}
