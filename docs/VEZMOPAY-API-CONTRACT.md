@@ -49,6 +49,9 @@ Errors: `{ "success": false, "message": "…", "errors": [...], "data": null }`.
 
 `POST /api/v1/merchant/secure-payments` — Bearer auth, scope `secure-payment.create`, throttled 60/min.
 Optional header `Idempotency-Key` (1–255 printable ASCII; same key + different body → 422).
+Same key on a payment that already settled (`CAPTURED` / `REFUNDED` / `PARTIALLY_REFUNDED`) → **409**.
+A 409 means "this order is already paid" — reconcile and stop; it must never be retried under a new
+key, or the shopper gets a second chargeable session.
 
 Request body:
 

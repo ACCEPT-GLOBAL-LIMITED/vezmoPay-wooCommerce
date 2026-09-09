@@ -463,6 +463,18 @@ class Gateway extends \WC_Payment_Gateway {
 
 		$result = $this->ensure_secure_payment( $order );
 		if ( is_wp_error( $result ) ) {
+			// Already paid / settling: the reconcile inside ensure_secure_payment has
+			// updated the order, so send the shopper to the order-received page
+			// instead of a checkout that could only 409 (or double-charge them).
+			if ( $this->is_settled_error( $result ) ) {
+				if ( isset( WC()->cart ) && WC()->cart ) {
+					WC()->cart->empty_cart();
+				}
+				return array(
+					'result'   => 'success',
+					'redirect' => $this->get_return_url( $order ),
+				);
+			}
 			$this->handle_start_failure( $order, $result );
 			return array( 'result' => 'failure' );
 		}
@@ -514,6 +526,25 @@ class Gateway extends \WC_Payment_Gateway {
 	 * @return array
 	 */
 	private function process_payment_hosted( $order ) {
+		// Same trap as the element/iframe path: WooCommerce hands us the same
+		// pending order again while the cart is unchanged, so an already-paid
+		// paylink must not be re-issued — and the `pending` status set below must
+		// not roll a completed order backwards.
+		$settled = $this->settled_state( $order );
+		if ( is_wp_error( $settled ) ) {
+			if ( $this->is_settled_error( $settled ) ) {
+				if ( isset( WC()->cart ) && WC()->cart ) {
+					WC()->cart->empty_cart();
+				}
+				return array(
+					'result'   => 'success',
+					'redirect' => $this->get_return_url( $order ),
+				);
+			}
+			$this->handle_start_failure( $order, $settled );
+			return array( 'result' => 'failure' );
+		}
+
 		$existing = $order->get_meta( '_vezmopay_paylink_code' );
 		if ( '' === $existing ) {
 			$payload = array(
@@ -574,16 +605,32 @@ class Gateway extends \WC_Payment_Gateway {
 	/**
 	 * Create (or reuse) the VezmoPay secure payment for element/iframe modes.
 	 *
-	 * Idempotent per attempt: the Idempotency-Key is derived from the order key plus an
-	 * attempt counter that is bumped after a failed/expired attempt (the API rejects
-	 * reuse of a key with a different body and refuses checkout on terminal payments).
+	 * Idempotent per attempt: the Idempotency-Key is derived from the order key plus
+	 * an attempt counter, bumped only when the API rejects the key for a CHANGED body
+	 * (422 — e.g. the cart total was edited). A settled payment (409) never bumps the
+	 * counter: a new key there would open a second chargeable session for an order
+	 * that is already paid.
 	 *
 	 * @param \WC_Order $order Order.
-	 * @return true|\WP_Error
+	 * @return true|\WP_Error WP_Error 'vezmopay_already_paid' / 'vezmopay_payment_pending'
+	 *                        when the order must go to the order-received page instead.
 	 */
 	public function ensure_secure_payment( $order ) {
 		$expires = (int) $order->get_meta( '_vezmopay_token_expires' );
 		$token   = (string) $order->get_meta( '_vezmopay_client_token' );
+
+		// A session already exists for this order: confirm with the API that it is
+		// still payable BEFORE handing it back to the shopper. WooCommerce reuses
+		// the same pending order (and order key) while the cart is unchanged, and
+		// the local `is_paid()` flag only flips once the webhook or the thank-you
+		// reconcile lands — so an ALREADY CAPTURED session can still look pending
+		// here. Reusing its token (or idempotently re-creating it, which returns
+		// the same row) sends the shopper to a checkout that can only fail with
+		// "Payment is in terminal state CAPTURED".
+		$settled = $this->settled_state( $order );
+		if ( is_wp_error( $settled ) ) {
+			return $settled;
+		}
 
 		// Reuse a live token so page refreshes don't mint new payments.
 		if ( '' !== $token && $expires > time() + MINUTE_IN_SECONDS ) {
@@ -631,13 +678,27 @@ class Gateway extends \WC_Payment_Gateway {
 		$idempotency_key = 'wc-' . $order->get_order_key() . '-a' . $attempt;
 		$data            = $this->api_client()->create_secure_payment( $payload, $idempotency_key );
 
-		// 409/422 mean the previous attempt reached a terminal state or the body changed
-		// (e.g. cart total edited): advance the attempt counter and retry once.
-		if ( is_wp_error( $data ) && in_array( $data->get_error_code(), array( 'vezmopay_http_409', 'vezmopay_http_422' ), true ) ) {
+		// 409 means the payment behind this idempotency key already settled — it can
+		// only have happened between the check above and this call (the shopper paid
+		// in another tab). NEVER bump the attempt counter here: that would mint a
+		// second, chargeable session for an order that is already paid.
+		if ( is_wp_error( $data ) && 'vezmopay_http_409' === $data->get_error_code() ) {
+			$settled = $this->settled_state( $order );
+			if ( is_wp_error( $settled ) ) {
+				return $settled;
+			}
+			// The API says settled but our reconcile disagrees (webhook lag on the
+			// platform side): stop rather than open a new payment window.
+			return new \WP_Error( 'vezmopay_already_paid', __( 'This order has already been paid.', 'vezmopay-woocommerce' ) );
+		}
+
+		// 422 means the body changed for a key we already used (e.g. the cart total
+		// was edited): advance the attempt counter and retry once with a fresh key.
+		if ( is_wp_error( $data ) && 'vezmopay_http_422' === $data->get_error_code() ) {
 			$attempt++;
 			$order->update_meta_data( '_vezmopay_attempt', $attempt );
 			// Persist the bump immediately: if the retry below also fails, the next
-			// request must not collide with the same terminal idempotency key again.
+			// request must not collide with the same stale idempotency key again.
 			$order->save_meta_data();
 			$idempotency_key = 'wc-' . $order->get_order_key() . '-a' . $attempt;
 			$data            = $this->api_client()->create_secure_payment( $payload, $idempotency_key );
@@ -667,6 +728,96 @@ class Gateway extends \WC_Payment_Gateway {
 	}
 
 	/**
+	 * Is the VezmoPay session already spent? Asks the API (the authoritative side)
+	 * and applies whatever it reports to the order, so a paid-but-still-pending
+	 * order is completed here instead of being handed another checkout.
+	 *
+	 * Only runs when the order already carries a VezmoPay reference — a first
+	 * payment attempt costs no extra API call. Transport/API failures are treated
+	 * as "not settled" so a VezmoPay outage can never block a fresh checkout.
+	 *
+	 * @param \WC_Order $order Order.
+	 * @return true|\WP_Error `true` when the order may proceed to checkout; a
+	 *                        WP_Error ('vezmopay_already_paid' /
+	 *                        'vezmopay_payment_pending' / 'vezmopay_amount_mismatch')
+	 *                        when it must not.
+	 */
+	private function settled_state( $order ) {
+		if ( '' === (string) $order->get_meta( '_vezmopay_payment_id' ) && '' === (string) $order->get_meta( '_vezmopay_paylink_code' ) ) {
+			return true;
+		}
+
+		$state = $this->reconcile_order_with_api( $order );
+		if ( is_wp_error( $state ) ) {
+			$this->logger->debug( 'Could not verify existing VezmoPay session for order #' . $order->get_id() . ': ' . $state->get_error_message() );
+			return true;
+		}
+
+		switch ( $state ) {
+			case 'CAPTURED':
+			case 'REFUNDED':
+				return new \WP_Error( 'vezmopay_already_paid', __( 'This order has already been paid.', 'vezmopay-woocommerce' ) );
+
+			case 'PENDING':
+				// AUTHORIZED / bank settlement in flight (ACH). A second checkout
+				// would charge the shopper twice.
+				return new \WP_Error( 'vezmopay_payment_pending', __( 'A payment for this order is still being confirmed.', 'vezmopay-woocommerce' ) );
+
+			case 'MISMATCH':
+				// apply_payment_state already put the order on-hold and noted it.
+				return new \WP_Error( 'vezmopay_amount_mismatch', __( 'This order is on hold for review and cannot be paid again right now.', 'vezmopay-woocommerce' ) );
+
+			default:
+				// INITIATED / FAILED — no money moved; the session is still usable
+				// (the checkout revives a FAILED row for an explicit retry).
+				return true;
+		}
+	}
+
+	/**
+	 * Did `ensure_secure_payment()` stop because the order is already settled (or
+	 * settling), rather than because starting the payment failed?
+	 *
+	 * @param \WP_Error $error Error.
+	 * @return bool
+	 */
+	private function is_settled_error( $error ) {
+		// 'vezmopay_amount_mismatch' is deliberately NOT here: that order is on-hold
+		// for manual review, so it gets the error message, not the thank-you page.
+		return in_array(
+			$error->get_error_code(),
+			array( 'vezmopay_already_paid', 'vezmopay_payment_pending' ),
+			true
+		);
+	}
+
+	/**
+	 * Send the shopper to the order-received page from inside the receipt template.
+	 *
+	 * `woocommerce_receipt_*` fires while the page is already rendering, so a bare
+	 * `wp_safe_redirect()` can land after the headers went out — leaving a blank
+	 * page and a shopper with nowhere to go. Redirect properly when we still can,
+	 * and fall back to a visible link plus a client-side hop when we cannot.
+	 *
+	 * @param \WC_Order $order Order.
+	 */
+	private function forward_to_order_received( $order ) {
+		$url = $this->get_return_url( $order );
+
+		if ( ! headers_sent() ) {
+			wp_safe_redirect( $url );
+			exit;
+		}
+
+		echo '<p>' . esc_html__( 'This order is already paid — taking you back to your order…', 'vezmopay-woocommerce' ) . '</p>';
+		echo '<a class="button" href="' . esc_url( $url ) . '">' . esc_html__( 'Continue', 'vezmopay-woocommerce' ) . '</a>';
+		wp_print_inline_script_tag(
+			'window.location.replace(' . wp_json_encode( $url ) . ');',
+			array( 'id' => 'vezmopay-paid-redirect' )
+		);
+	}
+
+	/**
 	 * Render the element/iframe on the order-pay ("receipt") page.
 	 *
 	 * @param int $order_id Order id.
@@ -678,8 +829,8 @@ class Gateway extends \WC_Payment_Gateway {
 		}
 
 		if ( $order->is_paid() ) {
-			wp_safe_redirect( $this->get_return_url( $order ) );
-			exit;
+			$this->forward_to_order_received( $order );
+			return;
 		}
 
 		// Returned here after a failed/cancelled payment (VezmoPay cancelUrl).
@@ -690,6 +841,13 @@ class Gateway extends \WC_Payment_Gateway {
 		// Refresh the session if the token expired while the customer idled.
 		$ready = $this->ensure_secure_payment( $order );
 		if ( is_wp_error( $ready ) ) {
+			// Already paid / settling (the reconcile inside ensure_secure_payment may
+			// have just completed the order): forward to the order-received page
+			// rather than rendering a checkout for a spent session.
+			if ( $this->is_settled_error( $ready ) ) {
+				$this->forward_to_order_received( $order );
+				return;
+			}
 			echo '<div class="woocommerce-error">' . esc_html( $this->customer_facing_error( $ready ) ) . '</div>';
 			return;
 		}
@@ -978,7 +1136,11 @@ class Gateway extends \WC_Payment_Gateway {
 	 * @return string
 	 */
 	private function customer_facing_error( $error ) {
-		if ( 'vezmopay_transport' === $error->get_error_code() ) {
+		// Our own, already customer-safe messages (transport detail + the
+		// settled-order states) pass through verbatim; anything from the API is
+		// reduced to a generic line so provider wording never reaches the shopper.
+		$own = array( 'vezmopay_transport', 'vezmopay_already_paid', 'vezmopay_payment_pending', 'vezmopay_amount_mismatch' );
+		if ( in_array( $error->get_error_code(), $own, true ) ) {
 			return $error->get_error_message();
 		}
 		return __( 'We could not start your VezmoPay payment. Please try again or choose a different payment method.', 'vezmopay-woocommerce' );

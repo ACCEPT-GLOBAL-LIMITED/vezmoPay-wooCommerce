@@ -33,6 +33,9 @@ Any future expiry, any CVC, any postal code.
 - [ ] Pay with `4000 0027 6000 3184` → 3DS challenge appears **inside** the VezmoPay frame; complete it → order completes as above.
 - [ ] Pay with `4000 0000 0000 0002` → decline message shown inside/under the element; order stays Pending; retrying with `4242…` on the same page succeeds.
 - [ ] Refresh the pay page before paying → no new VezmoPay payment is created (same `_vezmopay_payment_id`, token reused).
+- [ ] Pay with `4242…`, then (before the webhook lands, or with webhooks blocked) reopen the order-pay page / re-checkout the same cart → no "Couldn't load checkout — Payment is in terminal state CAPTURED": the order is completed from the API and you land on the order-received page.
+- [ ] Same case with the VezmoPay API unreachable (block it) → checkout is NOT blocked; the existing session is still offered.
+- [ ] Open the same pay page in two tabs, pay in tab A, then press Pay in tab B → tab B says the payment is already complete (no "try again", no second charge) and the store forwards to the order-received page.
 
 ## 3. Element mode — Blocks checkout
 
@@ -51,6 +54,7 @@ Any future expiry, any CVC, any postal code.
 - [ ] Set Integration mode = **Hosted checkout**. Place order → redirected to the VezmoPay paylink page (`…/checkout/payments-links/{code}`); order is Pending with the "paylink created" note; stock reduced; cart emptied.
 - [ ] Pay on the hosted page → order flips to paid via webhook (or polling reconciliation). Confirm the customer is **not** redirected back — expected platform limitation — and receives the WooCommerce confirmation email.
 - [ ] Click "Place order" again for the same order (order-pay retry) → same paylink code reused, no duplicate paylink.
+- [ ] Pay the hosted paylink, then click "Place order" again for that order → no second paylink and the order is NOT rolled back to Pending; the shopper goes to the order-received page.
 - [ ] Repeat one hosted payment starting from the Blocks checkout.
 
 ## 6. ACH / pending flow
