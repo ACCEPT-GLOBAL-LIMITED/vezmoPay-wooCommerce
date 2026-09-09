@@ -78,6 +78,11 @@ final class Plugin {
 	const CRON_HOOK = 'vezmopay_reconcile_pending';
 
 	/**
+	 * How long the settings screen's account panel is cached (per environment).
+	 */
+	const ACCOUNT_PANEL_TTL = 5 * MINUTE_IN_SECONDS;
+
+	/**
 	 * Register hooks.
 	 */
 	private function __construct() {
@@ -115,7 +120,15 @@ final class Plugin {
 
 		// Background reconciliation (webhook safety net; sole automatic path for hosted mode).
 		add_filter( 'cron_schedules', array( $this, 'cron_schedules' ) ); // phpcs:ignore WordPress.WP.CronInterval.CronSchedulesInterval -- 5 min is required to settle hosted-checkout orders promptly.
-		add_action( 'init', array( $this, 'maybe_schedule_cron' ) );
+		// NOT on `init`: maybe_schedule_cron() used to touch WC()->payment_gateways
+		// there, whose constructor runs apply_filters( 'woocommerce_payment_gateways' )
+		// and caches the result for the request — on every front-end and admin
+		// request, purely to read one `enabled` flag, and early enough to freeze
+		// the gateway list before a plugin registering later on `init` could join
+		// it (which can make another gateway vanish from checkout).
+		add_action( 'admin_init', array( $this, 'maybe_schedule_cron' ) );
+		add_action( 'woocommerce_update_options_payment_gateways_' . self::GATEWAY_ID, array( $this, 'maybe_schedule_cron' ), 30 );
+		add_action( 'woocommerce_update_options_payment_gateways_' . self::GATEWAY_ID, array( $this, 'flush_account_panel_cache' ), 30 );
 		add_action( self::CRON_HOOK, array( $this, 'reconcile_pending_orders' ) );
 
 		// Manual "check status now" action on the order edit screen.
@@ -258,6 +271,7 @@ final class Plugin {
 					'cancelled'   => __( 'The payment was cancelled. You can try again.', 'vezmopay-woocommerce' ),
 					'expired'     => __( 'The payment session expired. Please reload the page and try again.', 'vezmopay-woocommerce' ),
 					'verifying'   => __( 'Completing an extra verification step with your bank…', 'vezmopay-woocommerce' ),
+					'frameTitle'  => __( 'VezmoPay secure payment', 'vezmopay-woocommerce' ),
 					'slow'        => __( 'This is taking longer than usual. Your card has not been charged twice — you can finish the payment on the VezmoPay page below.', 'vezmopay-woocommerce' ),
 					'continueOnVezmo' => __( 'Continue on the VezmoPay page →', 'vezmopay-woocommerce' ),
 				),
@@ -433,39 +447,65 @@ final class Plugin {
 	 * renders the other card.
 	 */
 	public function ajax_account_get() {
-		$client = $this->account_ajax_gateway()->api_client();
+		$gateway = $this->account_ajax_gateway();
+		$client  = $gateway->api_client();
+
+		// Cached briefly: this panel cost TWO blocking round trips (each preceded
+		// by a login on a cold token cache) on every settings-screen load, and
+		// double that when saving. The values change rarely and the merchant can
+		// still force a read by saving, which busts the cache.
+		$cache_key = 'vezmopay_account_panel_' . $gateway->environment();
+		$cached    = get_transient( $cache_key );
+		if ( is_array( $cached ) ) {
+			wp_send_json_success( $cached );
+		}
 
 		$methods  = $client->get_payment_methods();
 		$three_ds = $client->get_three_ds();
 
-		wp_send_json_success(
-			array(
-				'methods' => is_wp_error( $methods )
-					? array(
-						'ok'      => false,
-						'message' => $methods->get_error_message(),
-					)
-					: array(
-						'ok'   => true,
-						'data' => $methods,
-					),
-				'threeDs' => is_wp_error( $three_ds )
-					? array(
-						'ok'      => false,
-						'message' => $three_ds->get_error_message(),
-					)
-					: array(
-						'ok'   => true,
-						'data' => $three_ds,
-					),
-			)
+		$payload = array(
+			'methods' => is_wp_error( $methods )
+				? array(
+					'ok'      => false,
+					'message' => $methods->get_error_message(),
+				)
+				: array(
+					'ok'   => true,
+					'data' => $methods,
+				),
+			'threeDs' => is_wp_error( $three_ds )
+				? array(
+					'ok'      => false,
+					'message' => $three_ds->get_error_message(),
+				)
+				: array(
+					'ok'   => true,
+					'data' => $three_ds,
+				),
 		);
+
+		// Only cache a good read — an error must not be served for minutes.
+		if ( ! is_wp_error( $methods ) && ! is_wp_error( $three_ds ) ) {
+			set_transient( $cache_key, $payload, self::ACCOUNT_PANEL_TTL );
+		}
+
+		wp_send_json_success( $payload );
 	}
 
 	/**
 	 * AJAX: apply a settings change (payment-method toggle or 3-D Secure mode).
 	 */
+	/**
+	 * Drop the cached account panel (after a change, or a settings save).
+	 */
+	public function flush_account_panel_cache() {
+		delete_transient( 'vezmopay_account_panel_test' );
+		delete_transient( 'vezmopay_account_panel_live' );
+	}
+
 	public function ajax_account_update() {
+		// Whatever this changes, the cached panel is now stale.
+		$this->flush_account_panel_cache();
 		$client = $this->account_ajax_gateway()->api_client();
 
 		$kind = isset( $_POST['kind'] ) ? sanitize_key( wp_unslash( $_POST['kind'] ) ) : '';
@@ -561,11 +601,10 @@ final class Plugin {
 	 * Ensure the reconciliation event is scheduled while the gateway is enabled.
 	 */
 	public function maybe_schedule_cron() {
-		$gateway = null;
-		if ( function_exists( 'WC' ) && WC()->payment_gateways ) {
-			$gateway = $this->gateway();
-		}
-		$enabled = $gateway && 'yes' === $gateway->get_option( 'enabled' );
+		// Read the flag straight from the option. Building the gateway registry
+		// for this is what made the old `init` hook expensive and order-sensitive.
+		$settings = get_option( 'woocommerce_' . self::GATEWAY_ID . '_settings', array() );
+		$enabled  = is_array( $settings ) && isset( $settings['enabled'] ) && 'yes' === $settings['enabled'];
 
 		if ( $enabled && ! wp_next_scheduled( self::CRON_HOOK ) ) {
 			wp_schedule_event( time() + MINUTE_IN_SECONDS, 'vezmopay_five_minutes', self::CRON_HOOK );
@@ -586,14 +625,31 @@ final class Plugin {
 			return;
 		}
 
+		// Least-recently-checked first. Taking the NEWEST 25 every run, with no
+		// record of what had been checked, meant abandoned orders sat in the
+		// window and occupied the same slots forever: a store taking more than 25
+		// VezmoPay orders per five minutes never reached an older paid-but-
+		// unreconciled one — and in hosted mode this cron is the only automatic
+		// path when a webhook is lost.
 		$orders = wc_get_orders(
 			array(
 				'limit'          => 25,
 				'status'         => array( 'pending', 'on-hold' ),
 				'payment_method' => Plugin::GATEWAY_ID,
 				'date_created'   => '>' . ( time() - 7 * DAY_IN_SECONDS ),
-				'orderby'        => 'date',
-				'order'          => 'DESC',
+				'meta_key'       => '_vezmopay_last_reconciled', // phpcs:ignore WordPress.DB.SlowMetaQuery.SlowMetaQuery -- ordering by this meta IS the fix; the alternative is starving older orders.
+				'orderby'        => array( 'meta_value_num' => 'ASC', 'ID' => 'ASC' ),
+				'meta_query'     => array( // phpcs:ignore WordPress.DB.SlowMetaQuery.SlowMetaQuery -- see above.
+					'relation' => 'OR',
+					array(
+						'key'     => '_vezmopay_last_reconciled',
+						'compare' => 'NOT EXISTS',
+					),
+					array(
+						'key'     => '_vezmopay_last_reconciled',
+						'compare' => 'EXISTS',
+					),
+				),
 			)
 		);
 
@@ -602,6 +658,12 @@ final class Plugin {
 			if ( ! $has_ref ) {
 				continue;
 			}
+
+			// Stamp BEFORE the call: an order whose reconcile throws must still go
+			// to the back of the queue, or it blocks everything behind it.
+			$order->update_meta_data( '_vezmopay_last_reconciled', time() );
+			$order->save_meta_data();
+
 			$result = $gateway->reconcile_order_with_api( $order );
 			if ( is_wp_error( $result ) ) {
 				$gateway->logger()->debug( 'Cron reconcile failed for order #' . $order->get_id() . ': ' . $result->get_error_message() );

@@ -253,6 +253,14 @@
 				.then( function () {
 					vezmo = new Vezmo( params.apiBase ? { apiBase: params.apiBase } : undefined );
 					vezmo.mount( host, { clientToken: session.clientToken, theme: params.theme } );
+					// The SDK creates this frame and nothing labels it, so in the
+					// DEFAULT mode a screen reader announced an unlabelled frame
+					// containing the whole card form (WCAG 4.1.2). Only the
+					// fallback frame was ever titled.
+					var mounted = host.querySelector( 'iframe' );
+					if ( mounted && ! mounted.getAttribute( 'title' ) ) {
+						mounted.setAttribute( 'title', params.i18n.frameTitle );
+					}
 					[ 'ready', 'processing', 'success', 'error', 'pending', 'already-paid', 'expired', 'cancel' ].forEach(
 						function ( name ) {
 							vezmo.on( name, function ( evt ) {
@@ -297,13 +305,28 @@
 		frame.id = 'vezmopay-inline-frame';
 		frame.src = session.url;
 		frame.width = '100%';
-		frame.height = '720';
+		// A starting height only — the checkout reports its real content height and
+		// the resize handler applies it. Lowered from 720 because on this path the
+		// hosted page appears not to emit `resize` when it is mounted WITHOUT the
+		// SDK, which left roughly 300px of dead space under the form.
+		// TODO(platform): confirm whether the hosted checkout emits
+		// vezmo:secure-payment:resize when embedded directly (no vezmo.js). If it
+		// does not, either have it emit, or answer the request-resize ping below.
+		frame.height = '620';
 		// Mirrors vezmo.js: `payment *` survives the checkout redirect for
 		// Apple/Google Pay, and storage-access lets captcha / 3-D Secure run in
 		// a third-party frame.
 		frame.setAttribute( 'allow', 'payment *; storage-access *' );
-		frame.setAttribute( 'title', 'VezmoPay secure payment' );
+		frame.setAttribute( 'title', params.i18n.frameTitle );
 		frame.addEventListener( 'load', markReady );
+		frame.addEventListener( 'load', function () {
+			// Harmless if unimplemented (unknown message types are ignored), and it
+			// gives the platform a place to answer with a height.
+			var target = frameOrigin();
+			if ( target && frame.contentWindow ) {
+				frame.contentWindow.postMessage( { type: 'vezmo:secure-payment:request-resize' }, target );
+			}
+		} );
 		host.appendChild( frame );
 		window.setTimeout( markReady, 2500 );
 	}
@@ -361,6 +384,13 @@
 		} else if ( 'vezmo:secure-payment:requires_action' === data.type ) {
 			// Extra verification (3-D Secure) is happening inside the frame.
 			setMessage( params.i18n.verifying, 'info' );
+			if ( charging ) {
+				charging.awaitingAction = true;
+				if ( charging.stallTimer ) {
+					window.clearTimeout( charging.stallTimer );
+					charging.stallTimer = null;
+				}
+			}
 		}
 	} );
 
@@ -433,13 +463,33 @@
 		if ( ! charging || charging.pollTimer ) {
 			return;
 		}
-		var started = Date.now();
+		// Count FOREGROUND time only. Date.now() runs while the tab is hidden but
+		// the payment inside the frame does not stop, so a shopper who switched to
+		// Messages to copy a 3-D Secure code came back to a blown limit and an
+		// iframe — holding their live challenge — navigated away.
+		charging.elapsed = 0;
+		charging.lastTick = Date.now();
+		charging.visibility = function () {
+			charging.lastTick = Date.now();
+		};
+		document.addEventListener( 'visibilitychange', charging.visibility );
+
 		charging.stallTimer = window.setTimeout( showStall, STALL_MS );
 		charging.pollTimer = window.setInterval( function () {
 			if ( ! charging ) {
 				return;
 			}
-			if ( Date.now() - started > POLL_LIMIT_MS ) {
+			if ( ! document.hidden ) {
+				charging.elapsed += Date.now() - charging.lastTick;
+			}
+			charging.lastTick = Date.now();
+
+			// An extra verification step owns the shopper's attention until it
+			// reports back; timing it out destroys the challenge.
+			if ( charging.awaitingAction ) {
+				return;
+			}
+			if ( charging.elapsed > POLL_LIMIT_MS ) {
 				// Long enough. The pay page keeps polling, shows the form again
 				// and can finish the payment — better than an endless spinner.
 				handOffToPayPage();
@@ -502,6 +552,10 @@
 			window.clearTimeout( charging.confirmTimer );
 			charging.confirmTimer = null;
 		}
+		if ( charging.visibility ) {
+			document.removeEventListener( 'visibilitychange', charging.visibility );
+			charging.visibility = null;
+		}
 	}
 
 	/**
@@ -515,6 +569,17 @@
 			return;
 		}
 		log( 'charge has not settled in', STALL_MS, 'ms — offering the hand-off link' );
+		// The classic checkout has form.checkout .block()ed for the duration of the
+		// charge, and that overlay swallows clicks — including this link, in exactly
+		// the stalled case it exists for. Lift the overlay; the Pay button stays
+		// disabled, so the only newly clickable thing is the way out.
+		if ( $ && $.fn && $.fn.unblock ) {
+			var stalledForm = $( 'form.checkout' );
+			if ( stalledForm.length ) {
+				stalledForm.removeClass( 'processing' ).unblock();
+				refreshPayButton();
+			}
+		}
 		setMessage( params.i18n.slow, 'info' );
 		var p = document.createElement( 'p' );
 		p.className = 'vezmopay-inline-escape';
@@ -558,6 +623,7 @@
 		if ( ! charging ) {
 			return;
 		}
+		charging.awaitingAction = false;
 		stopPolling();
 		var d = charging.deferred;
 		charging = null;
@@ -622,6 +688,7 @@
 		if ( ! charging ) {
 			return;
 		}
+		charging.awaitingAction = false;
 		charging.sawSuccess = true;
 		log( 'form reported success — confirming with the store' );
 
@@ -766,10 +833,19 @@
 		// throws away our frame — remount, and rebuild the session if the total
 		// moved underneath us.
 		$( document.body ).on( 'updated_checkout', function () {
-			mountedFor = null;
 			if ( ! selected() ) {
 				return;
 			}
+			// WooCommerce replaces the payment fragment on every country, state,
+			// postcode, shipping-method and coupon change. Remounting there threw
+			// away everything the shopper had typed into the card form for no
+			// reason — the clientToken had not changed. Remount only when the
+			// container really lost its frame.
+			var liveHost = container();
+			if ( liveHost && liveHost.querySelector( 'iframe' ) ) {
+				return;
+			}
+			mountedFor = null;
 			if ( session ) {
 				mount();
 			} else {

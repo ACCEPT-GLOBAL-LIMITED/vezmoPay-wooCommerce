@@ -157,6 +157,13 @@
 		window.vezmopayEmbedEvents.length = 0;
 	}
 
+	// Stop the page's early collector now that we are listening ourselves: each
+	// retained MessageEvent holds a reference to the frame's Window, and nothing
+	// used to remove that listener.
+	if ( window.vezmopayStopEarlyEvents ) {
+		window.vezmopayStopEarlyEvents();
+	}
+
 	function poll() {
 		if ( done ) {
 			return;

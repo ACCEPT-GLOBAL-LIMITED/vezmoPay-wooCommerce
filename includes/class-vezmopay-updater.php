@@ -41,6 +41,22 @@ class Updater {
 	const CACHE_TTL = 6 * HOUR_IN_SECONDS;
 
 	/**
+	 * The only hosts a plugin package may be downloaded from.
+	 *
+	 * WordPress performs NO signature verification on third-party update
+	 * packages, and this plugin is a payment gateway: anything that can shape
+	 * the release response — a stolen token, another plugin's pre_http_request
+	 * filter, DNS interception — could otherwise install arbitrary PHP.
+	 */
+	const PACKAGE_HOSTS = array( 'github.com', 'api.github.com', 'objects.githubusercontent.com' );
+
+	/**
+	 * Marker the release notes use to publish the package digest, e.g.
+	 * `vezmopay-sha256: <64 hex>`.
+	 */
+	const CHECKSUM_PATTERN = '/vezmopay-sha256[:=\s]+([a-f0-9]{64})/i';
+
+	/**
 	 * Plugin basename, e.g. vezmopay-woocommerce/vezmopay-woocommerce.php.
 	 *
 	 * @var string
@@ -76,6 +92,9 @@ class Updater {
 		add_filter( 'site_transient_update_plugins', array( $this, 'inject_transient' ) );
 		add_filter( 'plugins_api', array( $this, 'plugin_details' ), 20, 3 );
 		add_filter( 'upgrader_source_selection', array( $this, 'fix_source_dir' ), 10, 4 );
+		// Runs BEFORE core downloads the package: last chance to refuse a host,
+		// and the only place the downloaded file can be checksummed.
+		add_filter( 'upgrader_pre_download', array( $this, 'verify_package' ), 10, 4 );
 
 		// Auto-updates are controlled by WordPress's native per-plugin toggle on
 		// the Plugins screen. Deliberately NO auto_update_plugin filter here:
@@ -140,9 +159,23 @@ class Updater {
 			}
 		}
 
+		// A package we will not download is not a package. Refusing here keeps
+		// the bad URL out of the update transient entirely.
+		if ( '' !== $package && ! self::package_host_allowed( $package ) ) {
+			$this->log_error( 'Refusing release package from an unexpected host: ' . $package );
+			$package = '';
+		}
+
+		$body_text = isset( $body['body'] ) ? (string) $body['body'] : '';
+		$checksum  = '';
+		if ( preg_match( self::CHECKSUM_PATTERN, $body_text, $m ) ) {
+			$checksum = strtolower( $m[1] );
+		}
+
 		$release = array(
 			'version'   => ltrim( (string) $body['tag_name'], 'vV' ),
 			'package'   => $package,
+			'checksum'  => $checksum,
 			'url'       => isset( $body['html_url'] ) ? (string) $body['html_url'] : '',
 			'changelog' => isset( $body['body'] ) ? (string) $body['body'] : '',
 			'published' => isset( $body['published_at'] ) ? (string) $body['published_at'] : '',
@@ -150,6 +183,95 @@ class Updater {
 
 		set_transient( self::CACHE_KEY, $release, self::CACHE_TTL );
 		return $release;
+	}
+
+	/**
+	 * Whether a package URL may be downloaded at all.
+	 *
+	 * @param string $url Package URL.
+	 * @return bool
+	 */
+	public static function package_host_allowed( $url ) {
+		$scheme = wp_parse_url( $url, PHP_URL_SCHEME );
+		$host   = wp_parse_url( $url, PHP_URL_HOST );
+		if ( 'https' !== strtolower( (string) $scheme ) || ! $host ) {
+			return false;
+		}
+		return in_array( strtolower( (string) $host ), self::PACKAGE_HOSTS, true );
+	}
+
+	/**
+	 * Gate the update download: allow-listed https host, and a digest that
+	 * matches the one published with the release when there is one.
+	 *
+	 * WordPress verifies no signature on third-party packages, so this is the
+	 * only barrier between a shaped release response and arbitrary PHP landing
+	 * in a payment gateway. Returning a WP_Error here aborts the update.
+	 *
+	 * TODO(platform): publishing `vezmopay-sha256: <digest>` in every release
+	 * body is a release-step change; until every release carries one, a release
+	 * WITHOUT a digest is still installed (host-checked only) so updates keep
+	 * working. Once the release step always publishes it, make it mandatory.
+	 *
+	 * @param bool|\WP_Error $reply       Whether to short-circuit the download.
+	 * @param string         $package     Package URL.
+	 * @param \WP_Upgrader   $upgrader    Upgrader instance.
+	 * @param array          $hook_extra  Extra args.
+	 * @return bool|\WP_Error|string
+	 */
+	public function verify_package( $reply, $package, $upgrader, $hook_extra = array() ) {
+		// Only our own plugin's download.
+		if ( empty( $hook_extra['plugin'] ) || $hook_extra['plugin'] !== $this->basename ) {
+			return $reply;
+		}
+		if ( ! is_string( $package ) || '' === $package ) {
+			return $reply;
+		}
+
+		if ( ! self::package_host_allowed( $package ) ) {
+			$this->log_error( 'Refusing to download an update package from ' . $package );
+			return new \WP_Error(
+				'vezmopay_update_host',
+				__( 'The VezmoPay update package is not hosted where this plugin expects it. Update aborted.', 'vezmopay-woocommerce' )
+			);
+		}
+
+		$release  = get_transient( self::CACHE_KEY );
+		$checksum = is_array( $release ) && ! empty( $release['checksum'] ) ? (string) $release['checksum'] : '';
+		if ( '' === $checksum ) {
+			return $reply;
+		}
+
+		// Download it ourselves so the bytes can be hashed, then hand core the
+		// local file it would otherwise have fetched.
+		$file = download_url( $package, 300 );
+		if ( is_wp_error( $file ) ) {
+			return $file;
+		}
+
+		$actual = hash_file( 'sha256', $file );
+		if ( ! is_string( $actual ) || ! hash_equals( $checksum, strtolower( $actual ) ) ) {
+			wp_delete_file( $file );
+			$this->log_error( 'Update package digest mismatch; expected ' . $checksum . ', got ' . (string) $actual );
+			return new \WP_Error(
+				'vezmopay_update_checksum',
+				__( 'The VezmoPay update package did not match the checksum published with the release. Update aborted.', 'vezmopay-woocommerce' )
+			);
+		}
+
+		return $file;
+	}
+
+	/**
+	 * Log an updater problem through the gateway logger when one exists.
+	 *
+	 * @param string $message Message.
+	 */
+	private function log_error( $message ) {
+		$gateway = Plugin::instance()->gateway();
+		if ( $gateway ) {
+			$gateway->logger()->error( 'Updater: ' . $message );
+		}
 	}
 
 	/**
@@ -180,7 +302,13 @@ class Updater {
 			return $transient;
 		}
 
-		$release = $this->latest_release();
+		// CACHE ONLY. This filter runs on ordinary admin page loads and on
+		// front-end cron paths, not just during real update checks — calling
+		// latest_release() here meant a 15-second blocking GitHub request on
+		// routine requests, against an anonymous limit of 60/hour that shared
+		// hosts share. The network read belongs to check_update() alone.
+		$cached  = get_transient( self::CACHE_KEY );
+		$release = is_array( $cached ) && ! empty( $cached ) ? $cached : null;
 		$item    = (object) array(
 			'id'           => 'github.com/' . self::REPO,
 			'slug'         => $this->slug,
@@ -232,6 +360,9 @@ class Updater {
 
 		$release = $this->latest_release();
 		if ( ! $release || '' === $release['package'] ) {
+			return $update;
+		}
+		if ( ! self::package_host_allowed( $release['package'] ) ) {
 			return $update;
 		}
 

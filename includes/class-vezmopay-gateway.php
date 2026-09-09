@@ -1208,6 +1208,7 @@ class Gateway extends \WC_Payment_Gateway {
 						'UTF-8'
 					)
 				),
+				'frameTitle' => __( 'VezmoPay secure payment', 'vezmopay-woocommerce' ),
 				'processing' => __( 'Processing your payment…', 'vezmopay-woocommerce' ),
 				'pending'    => __( 'Your bank payment is processing. We will email you when it completes.', 'vezmopay-woocommerce' ),
 				'failed'     => __( 'Payment failed. Please try again or use a different payment method.', 'vezmopay-woocommerce' ),
@@ -1245,10 +1246,30 @@ class Gateway extends \WC_Payment_Gateway {
 		// catches an element added later, and every message is queued for the
 		// script to replay.
 		wp_print_inline_script_tag(
+			// Bounded (a MessageEvent keeps the frame's Window alive) and removable
+			// — the collector used to run for the life of the page, and only one
+			// of the two embed scripts ever drained it.
+			// NO AMPERSANDS. WordPress texturizes an inline script body, so a `&&`
+			// is emitted as `&#038;&#038;` and the WHOLE snippet dies with
+			// "SyntaxError: Invalid or unexpected token" — which is exactly what
+			// had happened to this collector since it was introduced: it never
+			// ran, so nothing was ever queued and vezmopayFrameLoaded was never
+			// set. Nested ifs instead of `&&`, and keep it that way.
 			'window.vezmopayEmbedEvents=[];' .
-			'window.addEventListener("message",function(e){window.vezmopayEmbedEvents.push(e);});' .
+			'window.vezmopayEarlyEventHandler=function(e){' .
+			'if(window.vezmopayEmbedEvents.length<50){window.vezmopayEmbedEvents.push(e);}' .
+			'};' .
+			'window.addEventListener("message",window.vezmopayEarlyEventHandler);' .
+			'window.vezmopayStopEarlyEvents=function(){' .
+			'if(window.vezmopayEarlyEventHandler){' .
+			'window.removeEventListener("message",window.vezmopayEarlyEventHandler);' .
+			'window.vezmopayEarlyEventHandler=null;' .
+			'}' .
+			'window.vezmopayEmbedEvents=[];' .
+			'};' .
 			'document.addEventListener("load",function(e){' .
-			'if(e.target&&e.target.id==="vezmopay-frame"){window.vezmopayFrameLoaded=true;}' .
+			'var t=e.target;' .
+			'if(t){if(t.id==="vezmopay-frame"){window.vezmopayFrameLoaded=true;}}' .
 			'},true);',
 			array( 'id' => 'vezmopay-embed-early' )
 		);

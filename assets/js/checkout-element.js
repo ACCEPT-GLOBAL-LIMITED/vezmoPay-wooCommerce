@@ -199,8 +199,14 @@
 		var frame = document.createElement( 'iframe' );
 		frame.id = 'vezmopay-frame';
 		frame.src = params.iframeUrl;
-		frame.setAttribute( 'allow', 'payment' );
-		frame.setAttribute( 'title', 'VezmoPay secure payment' );
+		// `payment *` and `storage-access *`, matching every other embed in the
+		// plugin: bare `payment` scopes the permission to the frame's src origin,
+		// which breaks wallets across the checkout redirect, and WITHOUT storage
+		// access the 3-D Secure challenge cannot complete in a third-party frame.
+		// This is the ad-blocker fallback path, so it runs exactly when things are
+		// already degraded.
+		frame.setAttribute( 'allow', 'payment *; storage-access *' );
+		frame.setAttribute( 'title', ( params.i18n && params.i18n.frameTitle ) || 'VezmoPay secure payment' );
 		frame.addEventListener( 'load', markReady );
 		container.appendChild( frame );
 
@@ -220,6 +226,14 @@
 	function init() {
 		if ( ! container ) {
 			return;
+		}
+
+		// The page's early collector holds a MessageEvent — and through it the
+		// frame's Window — for every message posted before this script parsed. This
+		// path never drained it, so it grew from the first resize onward. Take it
+		// down; the SDK has its own listener from here.
+		if ( window.vezmopayStopEarlyEvents ) {
+			window.vezmopayStopEarlyEvents();
 		}
 
 		if ( typeof Vezmo === 'undefined' ) {
