@@ -4,7 +4,7 @@ Tags: payments, payment gateway, credit card, ach, woocommerce
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.2.19
+Stable tag: 0.3.0
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -112,6 +112,24 @@ This plugin connects your store to the VezmoPay payment platform, operated by Ve
 VezmoPay is operated by Vezmo Technology, Inc.: [https://vezmo.com](https://vezmo.com) — see the site for terms of service and privacy policy.
 
 == Changelog ==
+
+= 0.3.0 =
+
+Security and reliability release. Update promptly — this fixes two ways an order could be completed without the right money being taken, and closes an unauthenticated endpoint.
+
+* Payments can no longer be reused. A second cart of the same value in one shopping session could receive the first cart's already-captured payment and complete without a new charge. Each payment session is now unique, and a payment that has already been paid can never be attached to another order.
+* Payment results from the payment form are now verified strictly. A misconfigured session could switch the browser's origin check off, which let anything else on the checkout page claim a payment had succeeded or failed.
+* Amounts are checked against the currency, and an answer the store cannot read is treated as a mismatch instead of a pass. Payment links are checked the same way and are re-created when an order's total changes, so a stale link cannot pay an order in full at the old price.
+* Your webhook secret is now enforced. With a secret saved, deliveries without a valid signature are rejected — previously the signature header could simply be left out.
+* An order can no longer be completed twice by two things checking it at once (duplicate emails, notes and stock reductions).
+* Hosted checkout is no longer offered by an account that cannot accept payment-link payments; those customers were sent to a page they could not pay on, and the order was stranded.
+* Checkout no longer gets stuck: a second payment attempt, an expired security token, a backgrounded tab during bank verification, and a form that unmounts mid-charge all now resolve instead of leaving a spinner.
+* Plugin updates are only downloaded from GitHub over https, and are checked against a digest published with the release before anything is installed.
+* Faster admin and front end: no blocking GitHub request on ordinary page loads, the settings account panel is cached, and the gateway registry is no longer built on every request.
+* Accessibility: the payment form's frame is now labelled for screen readers in the default mode (WCAG 4.1.2).
+* Card details typed into the payment form are no longer discarded when the checkout totals refresh.
+* Refunds: WooCommerce now shows why refunds cannot be issued from the store instead of silently offering nothing.
+* Housekeeping: API host validation, a rate limit on payment-session creation, complete uninstall cleanup, 28 newly translatable strings, and corrected developer documentation.
 
 = 0.2.19 =
 * Fixed a successful payment not showing the order-received page. The checkout asked the store to confirm the payment first, and if that one request failed — a slow response, or a security token retired because checkout created an account mid-flow — the customer was left waiting on the checkout page even though they had paid. A successful payment now always reaches the order-received page, which verifies the payment with VezmoPay as it loads.
