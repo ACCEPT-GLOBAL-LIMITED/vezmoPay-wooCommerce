@@ -280,6 +280,7 @@ final class Plugin {
 					'expired'     => __( 'The payment session expired. Please reload the page and try again.', 'vezmopay-woocommerce' ),
 					'verifying'   => __( 'Completing an extra verification step with your bank…', 'vezmopay-woocommerce' ),
 					'frameTitle'  => __( 'VezmoPay secure payment', 'vezmopay-woocommerce' ),
+					'notReady'    => __( 'The payment form did not finish loading, so your card was not charged. Reload the page and try again, or use the VezmoPay page link below.', 'vezmopay-woocommerce' ),
 					'slow'        => __( 'This is taking longer than usual. Your card has not been charged twice — you can finish the payment on the VezmoPay page below.', 'vezmopay-woocommerce' ),
 					'continueOnVezmo' => __( 'Continue on the VezmoPay page →', 'vezmopay-woocommerce' ),
 				),

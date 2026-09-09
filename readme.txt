@@ -4,7 +4,7 @@ Tags: payments, payment gateway, credit card, ach, woocommerce
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.3.0
+Stable tag: 0.3.1
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -112,6 +112,11 @@ This plugin connects your store to the VezmoPay payment platform, operated by Ve
 VezmoPay is operated by Vezmo Technology, Inc.: [https://vezmo.com](https://vezmo.com) — see the site for terms of service and privacy policy.
 
 == Changelog ==
+
+= 0.3.1 =
+
+* Fixed inline and iframe payments freezing on "Processing your payment…". The VezmoPay payment form ignores a charge request until Stripe's card fields have finished loading inside it — and it says nothing when it does, while already reporting itself ready. On a slow connection, or where js.stripe.com is blocked by an extension or network, the charge was simply never started and the checkout waited forever. The checkout now waits for the form to acknowledge the charge and asks again until it does (up to eight times over twenty seconds), so the payment goes through as soon as the form is ready.
+* If the form never loads, the customer is told plainly that their card was not charged and offered the VezmoPay page instead of being left on a spinner.
 
 = 0.3.0 =
 

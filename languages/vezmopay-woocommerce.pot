@@ -2,14 +2,14 @@
 # This file is distributed under the GPL-2.0-or-later.
 msgid ""
 msgstr ""
-"Project-Id-Version: VezmoPay for WooCommerce 0.3.0\n"
+"Project-Id-Version: VezmoPay for WooCommerce 0.3.1\n"
 "Report-Msgid-Bugs-To: https://github.com/ACCEPT-GLOBAL-LIMITED/vezmoPay-wooCommerce/issues\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-09-09T11:51:56+00:00\n"
+"POT-Creation-Date: 2026-09-09T13:17:48+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: vezmopay-woocommerce\n"
@@ -75,13 +75,13 @@ msgstr ""
 
 #: includes/class-vezmopay-checkout-session.php:197
 #: includes/class-vezmopay-gateway.php:1152
-#: includes/class-vezmopay-plugin.php:379
+#: includes/class-vezmopay-plugin.php:380
 msgid "VezmoPay returned an incomplete payment session."
 msgstr ""
 
 #: includes/class-vezmopay-connect.php:71
 #: includes/class-vezmopay-connect.php:250
-#: includes/class-vezmopay-plugin.php:478
+#: includes/class-vezmopay-plugin.php:479
 msgid "You are not allowed to do that."
 msgstr ""
 
@@ -550,159 +550,163 @@ msgid "Completing an extra verification step with your bank…"
 msgstr ""
 
 #: includes/class-vezmopay-plugin.php:283
-msgid "This is taking longer than usual. Your card has not been charged twice — you can finish the payment on the VezmoPay page below."
+msgid "The payment form did not finish loading, so your card was not charged. Reload the page and try again, or use the VezmoPay page link below."
 msgstr ""
 
 #: includes/class-vezmopay-plugin.php:284
+msgid "This is taking longer than usual. Your card has not been charged twice — you can finish the payment on the VezmoPay page below."
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php:285
 msgid "Continue on the VezmoPay page →"
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:355
+#: includes/class-vezmopay-plugin.php:356
 msgid "VezmoPay is not accepting inline payments."
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:363
+#: includes/class-vezmopay-plugin.php:364
 msgid "Too many payment attempts. Please wait a moment and reload the page."
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:408
-#: includes/class-vezmopay-plugin.php:439
+#: includes/class-vezmopay-plugin.php:409
+#: includes/class-vezmopay-plugin.php:440
 msgid "Invalid order."
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:482
+#: includes/class-vezmopay-plugin.php:483
 msgid "Connect your VezmoPay account first."
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:560
+#: includes/class-vezmopay-plugin.php:561
 msgid "Invalid payment method."
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:568
+#: includes/class-vezmopay-plugin.php:569
 msgid "Invalid setting."
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:600
+#: includes/class-vezmopay-plugin.php:601
 msgid "Loading your VezmoPay account settings…"
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:601
+#: includes/class-vezmopay-plugin.php:602
 msgid "We couldn't load your VezmoPay account settings. Make sure your API key has the account.read permission, or manage them in your VezmoPay console."
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:602
+#: includes/class-vezmopay-plugin.php:603
 msgid "Payment methods"
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:603
+#: includes/class-vezmopay-plugin.php:604
 msgid "Choose which methods are offered to your customers at checkout (this store, payment links, invoices and products). Cards are always on."
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:604
+#: includes/class-vezmopay-plugin.php:605
 msgid "Apple Pay and Google Pay appear automatically for eligible customers on supported devices when enabled. Disabling a method hides it everywhere immediately."
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:605
+#: includes/class-vezmopay-plugin.php:606
 msgid "Cards"
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:606
+#: includes/class-vezmopay-plugin.php:607
 msgid "Visa, Mastercard, Amex and more. Always on — the baseline payment method for every checkout."
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:607
+#: includes/class-vezmopay-plugin.php:608
 msgid "Bank transfer (ACH)"
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:608
+#: includes/class-vezmopay-plugin.php:609
 msgid "Let US customers pay directly from a bank account. Lower fees; USD only."
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:609
+#: includes/class-vezmopay-plugin.php:610
 msgid "Apple Pay"
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:610
+#: includes/class-vezmopay-plugin.php:611
 msgid "One-tap checkout for customers on Apple devices (rides the card rail)."
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:611
+#: includes/class-vezmopay-plugin.php:612
 msgid "Google Pay"
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:612
+#: includes/class-vezmopay-plugin.php:613
 msgid "One-tap checkout for customers on Google / Android (rides the card rail)."
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:613
+#: includes/class-vezmopay-plugin.php:614
 msgid "Always on"
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:614
+#: includes/class-vezmopay-plugin.php:615
 msgid "Managed by Vezmo"
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:615
+#: includes/class-vezmopay-plugin.php:616
 msgid "Not available yet"
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:616
+#: includes/class-vezmopay-plugin.php:617
 msgid "Complete account verification to enable this method."
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:617
+#: includes/class-vezmopay-plugin.php:618
 msgid "3D Secure (card authentication)"
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:618
+#: includes/class-vezmopay-plugin.php:619
 msgid "3D Secure is on"
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:619
+#: includes/class-vezmopay-plugin.php:620
 msgid "3D Secure is off"
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:620
+#: includes/class-vezmopay-plugin.php:621
 msgid "Every card payment is authenticated with 3D Secure, reducing fraud and shifting chargeback liability to the card issuer."
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:621
+#: includes/class-vezmopay-plugin.php:622
 msgid "3D Secure is only requested when the card issuer or regulations require it."
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:622
+#: includes/class-vezmopay-plugin.php:623
 msgid "3D Secure is required on your account. Contact support if you need to change this."
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:623
+#: includes/class-vezmopay-plugin.php:624
 msgid "Cards from regions with regulatory requirements (e.g. Europe/SCA) are always authenticated regardless of this setting — turning it off only stops requesting 3D Secure on other cards."
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:624
+#: includes/class-vezmopay-plugin.php:625
 msgid "The change could not be saved: "
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:639
+#: includes/class-vezmopay-plugin.php:640
 msgid "Every 5 minutes (VezmoPay)"
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:727
+#: includes/class-vezmopay-plugin.php:728
 msgid "Check VezmoPay payment status"
 msgstr ""
 
 #. translators: %s: error message
-#: includes/class-vezmopay-plugin.php:747
+#: includes/class-vezmopay-plugin.php:748
 #, php-format
 msgid "VezmoPay status check failed: %s"
 msgstr ""
 
 #. translators: %s: payment status reported by VezmoPay
-#: includes/class-vezmopay-plugin.php:755
+#: includes/class-vezmopay-plugin.php:756
 #, php-format
 msgid "VezmoPay status check: %s"
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:770
+#: includes/class-vezmopay-plugin.php:771
 msgid "Settings"
 msgstr ""
 

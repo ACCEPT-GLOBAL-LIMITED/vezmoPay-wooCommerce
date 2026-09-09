@@ -36,6 +36,15 @@
 	// A charge that has not resolved by here is not going to resolve on its own
 	// message: show the shopper a way out rather than a spinner.
 	var STALL_MS = 20000;
+	// The embedded form posts `processing` the moment it accepts a charge, so the
+	// ABSENCE of it means our submit was dropped — and it is dropped for a real
+	// reason: the form's handler begins `if (!stripe || !elements) return;` and
+	// posts NOTHING, while the page announces `ready` on mount without waiting
+	// for Stripe.js to load inside the frame. That window is brief on a fast
+	// connection and indefinite when js.stripe.com is slow or blocked. Re-send
+	// until the form answers.
+	var SUBMIT_RETRY_MS = 2500;
+	var SUBMIT_RETRY_MAX = 8;
 	// Long enough for a slow 3-D Secure challenge, short enough that nobody
 	// stares at a spinner: after this the pay page takes over.
 	var POLL_LIMIT_MS = 75 * 1000;
@@ -285,9 +294,7 @@
 						failCharge( params.i18n.expired );
 					} );
 					// Progress, not an outcome: keep waiting, say so.
-					vezmo.on( 'processing', function () {
-						setMessage( params.i18n.processing, 'info' );
-					} );
+					vezmo.on( 'processing', noteProcessing );
 					window.setTimeout( markReady, 2500 );
 				} )
 				.catch( function () {
@@ -380,7 +387,7 @@
 		} else if ( 'vezmo:secure-payment:expired' === data.type ) {
 			failCharge( params.i18n.expired );
 		} else if ( 'vezmo:secure-payment:processing' === data.type ) {
-			setMessage( params.i18n.processing, 'info' );
+			noteProcessing();
 		} else if ( 'vezmo:secure-payment:requires_action' === data.type ) {
 			// Extra verification (3-D Secure) is happening inside the frame.
 			setMessage( params.i18n.verifying, 'info' );
@@ -552,6 +559,10 @@
 			window.clearTimeout( charging.confirmTimer );
 			charging.confirmTimer = null;
 		}
+		if ( charging.submitTimer ) {
+			window.clearTimeout( charging.submitTimer );
+			charging.submitTimer = null;
+		}
 		if ( charging.visibility ) {
 			document.removeEventListener( 'visibilitychange', charging.visibility );
 			charging.visibility = null;
@@ -654,6 +665,9 @@
 			stallTimer: null,
 			confirmTimer: null,
 			sawSuccess: false,
+			sawProcessing: false,
+			submitTries: 0,
+			submitTimer: null,
 			returnUrl: ( marker && marker.returnUrl ) || '',
 			payUrl: ( marker && marker.payUrl ) || '',
 		};
@@ -664,6 +678,12 @@
 		// inside the frame, and this is what settles it if no event reaches us.
 		startPolling();
 
+		sendSubmit();
+		scheduleSubmitRetry();
+	}
+
+	/** Ask the mounted form to charge. Repeatable — see scheduleSubmitRetry(). */
+	function sendSubmit() {
 		if ( vezmo ) {
 			vezmo.pay();
 			return;
@@ -680,7 +700,52 @@
 		}
 		// Nothing mounted to charge — the order exists, so send the shopper to
 		// the pay page, which renders the form again and can complete it.
-		window.location.href = window.location.origin + '/checkout/order-pay/' + charging.orderId + '/?key=' + encodeURIComponent( charging.orderKey );
+		finish( payPageUrl() );
+	}
+
+	/**
+	 * Re-send the submit until the form acknowledges it with `processing`.
+	 *
+	 * Safe to repeat: the form ignores a submit while a charge is running
+	 * (`if (paymentLoading) return;`) and the PaymentIntent behind it is minted
+	 * idempotently, so at most one charge results. Stops at the first
+	 * acknowledgement, at any terminal event, or after SUBMIT_RETRY_MAX tries —
+	 * at which point the shopper is told the form did not load, rather than
+	 * being left with a spinner.
+	 */
+	function scheduleSubmitRetry() {
+		if ( ! charging || charging.sawProcessing ) {
+			return;
+		}
+		if ( charging.submitTries >= SUBMIT_RETRY_MAX ) {
+			log( 'form never acknowledged the submit after', charging.submitTries, 'tries' );
+			setMessage( params.i18n.notReady, 'error' );
+			showStall();
+			return;
+		}
+		charging.submitTimer = window.setTimeout( function () {
+			if ( ! charging || charging.sawProcessing ) {
+				return;
+			}
+			charging.submitTries++;
+			log( 'no `processing` from the form — re-sending the submit, try', charging.submitTries );
+			sendSubmit();
+			scheduleSubmitRetry();
+		}, SUBMIT_RETRY_MS );
+	}
+
+	/** The form accepted the charge; stop re-sending. */
+	function noteProcessing() {
+		if ( ! charging || charging.sawProcessing ) {
+			return;
+		}
+		charging.sawProcessing = true;
+		if ( charging.submitTimer ) {
+			window.clearTimeout( charging.submitTimer );
+			charging.submitTimer = null;
+		}
+		log( 'form acknowledged the charge' );
+		setMessage( params.i18n.processing, 'info' );
 	}
 
 	/** Ask the STORE whether the order is paid; never trust this page's word. */
@@ -690,6 +755,7 @@
 		}
 		charging.awaitingAction = false;
 		charging.sawSuccess = true;
+		noteProcessing();
 		log( 'form reported success — confirming with the store' );
 
 		// The payment succeeded. Confirming server-side is the right thing to do,
