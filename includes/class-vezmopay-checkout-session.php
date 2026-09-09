@@ -32,6 +32,23 @@ class Checkout_Session {
 	const SESSION_KEY = 'vezmopay_checkout_session';
 
 	/**
+	 * Session key holding the idempotency key of a creation request that is in
+	 * flight, so ONLY an identical retry can reuse it.
+	 */
+	const PENDING_KEY = 'vezmopay_checkout_pending_key';
+
+	/**
+	 * The only status a freshly created, unpaid secure payment may report before
+	 * it is bound to an order.
+	 *
+	 * TODO(platform): confirm that a created-but-unpaid secure payment always
+	 * reports exactly INITIATED. Anything else is refused here, which costs a
+	 * fallback to the pay page (still payable) rather than risking a bind to a
+	 * payment that has already been captured.
+	 */
+	const BINDABLE_STATUS = 'INITIATED';
+
+	/**
 	 * Rebuild the session when fewer than this many seconds of the token remain.
 	 */
 	const MIN_REMAINING = 120;
@@ -74,7 +91,26 @@ class Checkout_Session {
 			return null;
 		}
 		$stored = WC()->session->get( self::SESSION_KEY );
-		return is_array( $stored ) ? $stored : null;
+		if ( ! is_array( $stored ) ) {
+			return null;
+		}
+
+		// Every consumer of this array dereferences these keys, and a session can
+		// hold a record written by an older version of the plugin (or a partially
+		// written one). Treat anything incomplete as absent rather than trusting
+		// a half-built payment session.
+		foreach ( array( 'paymentId', 'clientToken', 'url', 'amount', 'currency', 'environment', 'expires' ) as $required ) {
+			if ( ! isset( $stored[ $required ] ) ) {
+				return null;
+			}
+		}
+		if ( '' === (string) $stored['paymentId'] || '' === (string) $stored['clientToken'] || '' === (string) $stored['url'] ) {
+			return null;
+		}
+		if ( ! is_numeric( $stored['amount'] ) || ! is_numeric( $stored['expires'] ) ) {
+			return null;
+		}
+		return $stored;
 	}
 
 	/**
@@ -83,6 +119,9 @@ class Checkout_Session {
 	public function forget() {
 		if ( isset( WC()->session ) && WC()->session ) {
 			WC()->session->set( self::SESSION_KEY, null );
+			// The key dies with the session it created. Leaving it behind is what
+			// let a captured payment be replayed onto the next order.
+			WC()->session->set( self::PENDING_KEY, null );
 		}
 	}
 
@@ -143,11 +182,15 @@ class Checkout_Session {
 			'ttlMinutes' => Gateway::TOKEN_TTL_MINUTES,
 		);
 
-		// A fresh idempotency key per (cart, amount): reusing one with a changed
-		// body is rejected by the API, and the amount is exactly what changes.
-		$key  = 'wc-cart-' . substr( hash( 'sha256', ( WC()->session ? WC()->session->get_customer_id() : '' ) . '|' . $amount . '|' . $currency ), 0, 32 );
+		$key  = $this->creation_key( $amount, $currency, $environment );
 		$data = $this->gateway->api_client( $environment )->create_secure_payment( $payload, $key );
 		if ( is_wp_error( $data ) ) {
+			// Keep the pending key ONLY for a transport failure, where the request
+			// may have reached the API and a retry must be idempotent. Any other
+			// error means the next attempt starts clean with a new key.
+			if ( 'vezmopay_transport' !== $data->get_error_code() ) {
+				$this->clear_pending_key();
+			}
 			return $data;
 		}
 		if ( empty( $data['securePayment']['clientToken'] ) || empty( $data['payment']['id'] ) ) {
@@ -156,6 +199,7 @@ class Checkout_Session {
 
 		$secure  = $data['securePayment'];
 		$session = array(
+			'idemKey'     => $key,
 			'paymentId'   => (string) $data['payment']['id'],
 			'clientToken' => (string) $secure['clientToken'],
 			'url'         => isset( $secure['url'] ) ? esc_url_raw( $secure['url'] ) : '',
@@ -169,7 +213,64 @@ class Checkout_Session {
 		if ( isset( WC()->session ) && WC()->session ) {
 			WC()->session->set( self::SESSION_KEY, $session );
 		}
+		// The key is now spent on a real payment; it must never open a second one.
+		$this->clear_pending_key();
 		return $session;
+	}
+
+	/**
+	 * The idempotency key for a creation request.
+	 *
+	 * A key that is a pure function of customer, amount and currency — with a
+	 * request body that is equally stable — means the API replays its stored
+	 * response, so a second cart of the same value received the FIRST cart's
+	 * already-captured payment and completed for free. So: a random key per
+	 * creation, remembered only while that exact request is in flight, and reused
+	 * only to re-send an identical request that failed in transit (which is what
+	 * idempotency keys are for).
+	 *
+	 * @param float  $amount      Cart total.
+	 * @param string $currency    Store currency.
+	 * @param string $environment 'test'|'live'.
+	 * @return string
+	 */
+	private function creation_key( $amount, $currency, $environment ) {
+		$session = isset( WC()->session ) ? WC()->session : null;
+		$pending = $session ? $session->get( self::PENDING_KEY ) : null;
+
+		if (
+			is_array( $pending )
+			&& ! empty( $pending['key'] )
+			&& isset( $pending['amount'], $pending['currency'], $pending['environment'] )
+			&& abs( (float) $pending['amount'] - $amount ) < 0.001
+			&& $pending['currency'] === $currency
+			&& $pending['environment'] === $environment
+		) {
+			return (string) $pending['key'];
+		}
+
+		$key = 'wc-cart-' . wp_generate_uuid4();
+		if ( $session ) {
+			$session->set(
+				self::PENDING_KEY,
+				array(
+					'key'         => $key,
+					'amount'      => $amount,
+					'currency'    => $currency,
+					'environment' => $environment,
+				)
+			);
+		}
+		return $key;
+	}
+
+	/**
+	 * Drop the in-flight key so the next creation starts from a new one.
+	 */
+	private function clear_pending_key() {
+		if ( isset( WC()->session ) && WC()->session ) {
+			WC()->session->set( self::PENDING_KEY, null );
+		}
 	}
 
 	/**
@@ -188,14 +289,18 @@ class Checkout_Session {
 			return false;
 		}
 
+		// ONE validation path, shared with get(): a subset re-implemented here
+		// silently dropped the environment check, so a session created against
+		// test could be bound to an order stamped live — and the environment
+		// written below would then send reconciliation to the wrong API.
 		$total = (float) wc_format_decimal( $order->get_total(), 2 );
-		if ( abs( (float) $session['amount'] - $total ) > 0.001 ) {
+		if ( ! $this->is_usable( $session, $this->gateway->environment(), $total ) ) {
 			return false;
 		}
 		if ( $session['currency'] !== $order->get_currency() ) {
 			return false;
 		}
-		if ( (int) $session['expires'] <= time() + self::MIN_REMAINING ) {
+		if ( ! $this->is_bindable( $session, $order ) ) {
 			return false;
 		}
 
@@ -209,6 +314,44 @@ class Checkout_Session {
 
 		// One session, one order: never let a second order inherit this payment.
 		$this->forget();
+		return true;
+	}
+
+	/**
+	 * Whether the session's payment is still an unpaid payment we may bind.
+	 *
+	 * Read live from the API rather than trusted from the session: a payment that
+	 * has already been captured must never be attached to a second order, and the
+	 * session cannot know that it was. Fails CLOSED — an unreadable or
+	 * non-INITIATED payment refuses the bind, and process_payment() then falls
+	 * back to the pay-page flow, which creates its own session.
+	 *
+	 * @param array     $session Stored session.
+	 * @param \WC_Order $order   Order being bound.
+	 * @return bool
+	 */
+	private function is_bindable( $session, $order ) {
+		$payment = $this->gateway
+			->api_client( $session['environment'] )
+			->get_payment( $session['paymentId'] );
+
+		if ( is_wp_error( $payment ) ) {
+			$this->gateway->logger()->error(
+				'Refusing to bind payment ' . $session['paymentId'] . ' to order #' . $order->get_id()
+				. ': could not read its state (' . $payment->get_error_message() . ').'
+			);
+			return false;
+		}
+
+		$status = isset( $payment['status'] ) ? strtoupper( (string) $payment['status'] ) : '';
+		if ( self::BINDABLE_STATUS !== $status ) {
+			$this->gateway->logger()->error(
+				'Refusing to bind payment ' . $session['paymentId'] . ' to order #' . $order->get_id()
+				. ': status is ' . ( '' === $status ? 'unknown' : $status ) . ', not ' . self::BINDABLE_STATUS . '.'
+			);
+			return false;
+		}
+
 		return true;
 	}
 }

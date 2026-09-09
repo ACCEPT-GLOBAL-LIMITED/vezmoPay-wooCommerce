@@ -783,6 +783,24 @@ class Gateway extends \WC_Payment_Gateway {
 	 */
 	private function process_payment_hosted( $order ) {
 		$existing = $order->get_meta( '_vezmopay_paylink_code' );
+
+		// A stored link is only reusable while it is still for THIS money. The
+		// code used to be reused unconditionally, so a link minted for a $10
+		// order kept collecting $10 after the total changed.
+		if ( '' !== $existing && ! $this->paylink_matches_order( $order ) ) {
+			$order->add_order_note(
+				sprintf(
+					/* translators: %s: paylink code */
+					__( 'Order total or currency changed since VezmoPay paylink %s was created; creating a new link for the current total.', 'vezmopay-woocommerce' ),
+					$existing
+				)
+			);
+			$order->delete_meta_data( '_vezmopay_paylink_code' );
+			$order->delete_meta_data( '_vezmopay_paylink_id' );
+			$order->save();
+			$existing = '';
+		}
+
 		if ( '' === $existing ) {
 			$payload = array(
 				'title'       => $this->payment_title( $order ),
@@ -809,6 +827,9 @@ class Gateway extends \WC_Payment_Gateway {
 			}
 
 			$order->update_meta_data( '_vezmopay_paylink_code', $code );
+			// Record what the link is FOR, so a later total change is detectable.
+			$order->update_meta_data( '_vezmopay_paylink_amount', (float) wc_format_decimal( $order->get_total(), 2 ) );
+			$order->update_meta_data( '_vezmopay_paylink_currency', strtoupper( $order->get_currency() ) );
 			if ( ! empty( $paylink['id'] ) ) {
 				$order->update_meta_data( '_vezmopay_paylink_id', (string) $paylink['id'] );
 			}
@@ -837,6 +858,28 @@ class Gateway extends \WC_Payment_Gateway {
 			'result'   => 'success',
 			'redirect' => $this->checkout_base() . '/checkout/payments-links/' . rawurlencode( $existing ),
 		);
+	}
+
+	/**
+	 * Whether the stored paylink was created for the order's current money.
+	 *
+	 * A link created before this meta existed reports false, so it is replaced
+	 * rather than trusted.
+	 *
+	 * @param \WC_Order $order Order.
+	 * @return bool
+	 */
+	private function paylink_matches_order( $order ) {
+		$amount   = $order->get_meta( '_vezmopay_paylink_amount' );
+		$currency = (string) $order->get_meta( '_vezmopay_paylink_currency' );
+
+		if ( '' === (string) $amount || '' === $currency ) {
+			return false;
+		}
+		if ( abs( (float) $amount - (float) wc_format_decimal( $order->get_total(), 2 ) ) >= 0.005 ) {
+			return false;
+		}
+		return $currency === strtoupper( $order->get_currency() );
 	}
 
 	/**
@@ -1260,6 +1303,19 @@ class Gateway extends \WC_Payment_Gateway {
 			}
 			$status = isset( $paylink['status'] ) ? strtoupper( (string) $paylink['status'] ) : '';
 			if ( 'PAID' === $status ) {
+				// The same tamper guard the payment path runs. Without it, a
+				// still-valid link for an abandoned $10 order paid $10 while the
+				// order total had since been raised — and the order completed in
+				// full. Fails closed on a response that cannot be checked.
+				if ( ! $this->amounts_agree( $order, $paylink ) ) {
+					$this->hold_for_mismatch(
+						$order,
+						isset( $paylink['amount'] ) ? (float) $paylink['amount'] : null,
+						isset( $paylink['currency'] ) ? strtoupper( (string) $paylink['currency'] ) : null,
+						__( 'payment link', 'vezmopay-woocommerce' )
+					);
+					return 'MISMATCH';
+				}
 				$this->mark_order_paid( $order, '', __( 'VezmoPay paylink reported as paid.', 'vezmopay-woocommerce' ) );
 				return 'CAPTURED';
 			}
@@ -1280,17 +1336,17 @@ class Gateway extends \WC_Payment_Gateway {
 		$status     = isset( $payment['status'] ) ? strtoupper( (string) $payment['status'] ) : '';
 		$payment_id = isset( $payment['id'] ) ? (string) $payment['id'] : (string) $order->get_meta( '_vezmopay_payment_id' );
 
-		// Guard against amount tampering / mismatched sessions.
-		if ( isset( $payment['amount'] ) && abs( (float) $payment['amount'] - (float) $order->get_total() ) > 0.01 ) {
-			$order->add_order_note(
-				sprintf(
-					/* translators: 1: amount from VezmoPay, 2: order total */
-					__( 'VezmoPay amount mismatch: provider reports %1$s but the order total is %2$s. Order NOT completed automatically — review manually.', 'vezmopay-woocommerce' ),
-					wc_price( (float) $payment['amount'], array( 'currency' => $order->get_currency() ) ),
-					wc_price( (float) $order->get_total(), array( 'currency' => $order->get_currency() ) )
-				)
+		// The plugin's ONLY tamper check, so it fails closed: a response with no
+		// amount used to skip the guard and complete the order, and a matching
+		// number in the wrong currency used to pass it (100.00 USD satisfied a
+		// 100.00 EUR order). An unverifiable response is a mismatch, not a pass.
+		if ( ! $this->amounts_agree( $order, $payment ) ) {
+			$this->hold_for_mismatch(
+				$order,
+				isset( $payment['amount'] ) ? (float) $payment['amount'] : null,
+				isset( $payment['currency'] ) ? strtoupper( (string) $payment['currency'] ) : null,
+				__( 'payment', 'vezmopay-woocommerce' )
 			);
-			$order->update_status( 'on-hold' );
 			return 'MISMATCH';
 		}
 
@@ -1325,6 +1381,93 @@ class Gateway extends \WC_Payment_Gateway {
 			case 'INITIATED':
 			default:
 				return 'INITIATED';
+		}
+	}
+
+	/**
+	 * Whether a payment id really is a captured payment for this order's money.
+	 *
+	 * Used to decide whether an id that arrived in an unauthenticated webhook
+	 * payload may be stored as the order's transaction reference. Reads the
+	 * payment server-to-server and fails closed.
+	 *
+	 * @param \WC_Order $order      Order.
+	 * @param string    $payment_id Candidate payment id from a payload.
+	 * @return bool
+	 */
+	public function payment_belongs_to_order( $order, $payment_id ) {
+		$payment_id = (string) $payment_id;
+		if ( '' === $payment_id ) {
+			return false;
+		}
+
+		$environment = $order->get_meta( '_vezmopay_environment' );
+		$payment     = $this->api_client( in_array( $environment, array( 'test', 'live' ), true ) ? $environment : null )
+			->get_payment( $payment_id );
+
+		if ( is_wp_error( $payment ) ) {
+			return false;
+		}
+		$status = isset( $payment['status'] ) ? strtoupper( (string) $payment['status'] ) : '';
+		if ( 'CAPTURED' !== $status ) {
+			return false;
+		}
+		return $this->amounts_agree( $order, $payment );
+	}
+
+	/**
+	 * Whether a provider record's money matches the order's, to the cent and in
+	 * the same currency.
+	 *
+	 * Returns FALSE when either field is missing: an amount we cannot read is not
+	 * an amount that agrees.
+	 *
+	 * @param \WC_Order $order  Order.
+	 * @param array     $record Payment or paylink record from the API.
+	 * @return bool
+	 */
+	private function amounts_agree( $order, array $record ) {
+		$amount   = isset( $record['amount'] ) ? (float) $record['amount'] : null;
+		$currency = isset( $record['currency'] ) ? strtoupper( (string) $record['currency'] ) : null;
+
+		if ( null === $amount || null === $currency ) {
+			return false;
+		}
+		if ( abs( $amount - (float) $order->get_total() ) >= 0.005 ) {
+			return false;
+		}
+		return $currency === strtoupper( $order->get_currency() );
+	}
+
+	/**
+	 * Park an order for manual review when the provider's money does not match.
+	 *
+	 * @param \WC_Order   $order    Order.
+	 * @param float|null  $amount   Amount the provider reported, null when absent.
+	 * @param string|null $currency Currency the provider reported, null when absent.
+	 * @param string      $source   Human label for what was read ('payment', 'payment link').
+	 */
+	private function hold_for_mismatch( $order, $amount, $currency, $source ) {
+		$reported = ( null === $amount || null === $currency )
+			? __( 'an amount it did not report', 'vezmopay-woocommerce' )
+			: sprintf(
+				'%s %s',
+				wp_strip_all_tags( wc_price( $amount, array( 'currency' => $currency ) ) ),
+				$currency
+			);
+
+		$order->add_order_note(
+			sprintf(
+				/* translators: 1: what was read (payment / payment link), 2: amount and currency VezmoPay reported, 3: order total, 4: order currency */
+				__( 'VezmoPay %1$s mismatch: provider reports %2$s but the order total is %3$s %4$s. Order NOT completed automatically — review manually.', 'vezmopay-woocommerce' ),
+				$source,
+				$reported,
+				wp_strip_all_tags( wc_price( (float) $order->get_total(), array( 'currency' => $order->get_currency() ) ) ),
+				strtoupper( $order->get_currency() )
+			)
+		);
+		if ( ! $order->has_status( 'on-hold' ) ) {
+			$order->update_status( 'on-hold' );
 		}
 	}
 

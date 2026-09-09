@@ -321,8 +321,15 @@
 		if ( ! session || ! frame ) {
 			return;
 		}
+		// Fail CLOSED. `origin &&` meant an unparsable session URL (the server used
+		// to allow an empty one) disabled the check entirely, and any frame or
+		// script on the checkout page could then forge a payment result: a fake
+		// `error` mid-charge invites a retry and a double charge, a fake `success`
+		// lands an unpaid order on the success page. The source check is the other
+		// half — an origin can be shared by frames we did not create, and no page
+		// can forge e.source for a window it does not own.
 		var origin = frameOrigin();
-		if ( origin && e.origin !== origin ) {
+		if ( ! origin || e.origin !== origin || ! frame || e.source !== frame.contentWindow ) {
 			return;
 		}
 		var data = e.data || {};
@@ -365,7 +372,8 @@
 		fetchSession()
 			.then( function ( res ) {
 				loading = false;
-				if ( ! res || ! res.success || ! res.data || ! res.data.clientToken ) {
+				// No URL means no frame to mount and nothing to pin messages to.
+				if ( ! res || ! res.success || ! res.data || ! res.data.clientToken || ! res.data.url ) {
 					setMessage( ( res && res.data && res.data.message ) || params.i18n.unavailable, 'error' );
 					return;
 				}
@@ -581,7 +589,13 @@
 			return;
 		}
 		if ( frame && frame.contentWindow ) {
-			frame.contentWindow.postMessage( { type: 'vezmo:secure-payment:submit' }, frameOrigin() || '*' );
+			var target = frameOrigin();
+			if ( ! target ) {
+				// Without a known origin we will not broadcast into the frame.
+				failCharge( params.i18n.unavailable );
+				return;
+			}
+			frame.contentWindow.postMessage( { type: 'vezmo:secure-payment:submit' }, target );
 			return;
 		}
 		// Nothing mounted to charge — the order exists, so send the shopper to

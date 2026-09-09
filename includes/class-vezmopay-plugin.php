@@ -282,6 +282,17 @@ final class Plugin {
 			wp_send_json_error( array( 'message' => $session->get_error_message() ), 502 );
 		}
 
+		// A session with no checkout URL cannot be mounted, and the browser's
+		// origin check for the frame's messages is derived from that URL — so
+		// handing one out would disable the check rather than fail visibly.
+		if ( empty( $session['url'] ) ) {
+			$gateway->logger()->error( 'VezmoPay returned a payment session with no checkout URL; refusing to start an inline payment.' );
+			wp_send_json_error(
+				array( 'message' => __( 'VezmoPay returned an incomplete payment session.', 'vezmopay-woocommerce' ) ),
+				502
+			);
+		}
+
 		// Only what the browser needs to mount the frame. The payment id stays
 		// server-side: the order is bound to it in process_payment(), so nothing
 		// the browser sends can point an order at a different payment.
