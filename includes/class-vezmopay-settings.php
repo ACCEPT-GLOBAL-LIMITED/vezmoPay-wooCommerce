@@ -72,6 +72,13 @@ class Settings {
 				),
 				'description' => __( 'Inline and iframe both keep the customer on your own pay page — inline lets the VezmoPay SDK drive the form (auto-sizing and payment events), iframe embeds the same page and confirms by polling. Card fields are VezmoPay-hosted either way, keeping you at SAQ-A PCI scope. Each mode falls back on its own when it cannot run: inline drops to the iframe if the SDK is unavailable, and both send the shopper to the VezmoPay secure page — never an empty frame — until this store is one of your VezmoPay trusted origins, which Connect registers automatically. Hosted always redirects, to a VezmoPay paylink page.', 'vezmopay-woocommerce' ),
 			),
+			'force_hosted'        => array(
+				'title'       => __( 'Hosted checkout override', 'vezmopay-woocommerce' ),
+				'type'        => 'checkbox',
+				'default'     => 'no',
+				'label'       => __( 'My VezmoPay account is activated for payment links', 'vezmopay-woocommerce' ),
+				'description' => __( 'VezmoPay cannot yet confirm this automatically, so hosted checkout otherwise falls back to the embedded payment form. Tick this only if payment links already work on your account — if they do not, customers will be sent to a page where they cannot pay and the order will sit unpaid. Only applies to Hosted checkout.', 'vezmopay-woocommerce' ),
+			),
 			'environment'         => array(
 				'title'       => __( 'Environment', 'vezmopay-woocommerce' ),
 				'type'        => 'select',

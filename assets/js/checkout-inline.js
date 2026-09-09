@@ -322,13 +322,11 @@
 		frame.id = 'vezmopay-inline-frame';
 		frame.src = session.url;
 		frame.width = '100%';
-		// A starting height only — the checkout reports its real content height and
-		// the resize handler applies it. Lowered from 720 because on this path the
-		// hosted page appears not to emit `resize` when it is mounted WITHOUT the
-		// SDK, which left roughly 300px of dead space under the form.
-		// TODO(platform): confirm whether the hosted checkout emits
-		// vezmo:secure-payment:resize when embedded directly (no vezmo.js). If it
-		// does not, either have it emit, or answer the request-resize ping below.
+		// A starting height only: the checkout reports its real content height on
+		// its own — it does emit vezmo:secure-payment:resize when embedded
+		// directly, with or without the SDK — and the resize handler applies it
+		// inline, which beats this. The dead space this used to leave was our
+		// own origin check rejecting those messages, not a missing emit.
 		frame.height = '620';
 		// Mirrors vezmo.js: `payment *` survives the checkout redirect for
 		// Apple/Google Pay, and storage-access lets captcha / 3-D Secure run in
@@ -336,14 +334,12 @@
 		frame.setAttribute( 'allow', 'payment *; storage-access *' );
 		frame.setAttribute( 'title', params.i18n.frameTitle );
 		frame.addEventListener( 'load', markReady );
-		frame.addEventListener( 'load', function () {
-			// Harmless if unimplemented (unknown message types are ignored), and it
-			// gives the platform a place to answer with a height.
-			var target = frameOrigin();
-			if ( target && frame.contentWindow ) {
-				frame.contentWindow.postMessage( { type: 'vezmo:secure-payment:request-resize' }, target );
-			}
-		} );
+		// No request-resize ping. It fired on `load` at frameOrigin(), which
+		// before any message resolves to the CHECKOUT origin while the frame is
+		// typically still on the API origin — so the browser dropped it as a
+		// targetOrigin mismatch, and it was never answered by anything. The page
+		// reports its height unprompted, so nothing is lost by removing it, and
+		// broadcasting with '*' to make it land is not worth it.
 		host.appendChild( frame );
 		window.setTimeout( markReady, 2500 );
 	}
@@ -369,7 +365,20 @@
 		}
 	}
 
+	/**
+	 * Origins allowed to send us a payment result.
+	 *
+	 * Before anything is pinned this is the bootstrap set: the checkout origin
+	 * the merchant configured, and the API origin the frame's src starts on.
+	 * Once the first source-verified message pins an origin the set NARROWS to
+	 * that one alone — the frame has told us where it actually settled, so
+	 * nothing else needs to be trusted for the rest of the page's life, and a
+	 * later navigation of our own frame to another origin is refused.
+	 */
 	function trustedOrigins() {
+		if ( pinnedOrigin ) {
+			return [ pinnedOrigin ];
+		}
 		var list = [];
 		if ( params.checkoutOrigin ) {
 			list.push( params.checkoutOrigin );
@@ -377,9 +386,6 @@
 		var api = sessionOrigin();
 		if ( api ) {
 			list.push( api );
-		}
-		if ( pinnedOrigin ) {
-			list.push( pinnedOrigin );
 		}
 		return list;
 	}

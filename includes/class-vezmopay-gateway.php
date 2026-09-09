@@ -45,10 +45,6 @@ class Gateway extends \WC_Payment_Gateway {
 		$this->icon               = VEZMOPAY_WC_PLUGIN_URL . 'assets/img/vezmopay-icon.png';
 		$this->method_title       = __( 'VezmoPay', 'vezmopay-woocommerce' );
 		$this->method_description = __( 'Accept payments through VezmoPay — hosted checkout, inline payment element, or secure iframe. Card data never touches your server.', 'vezmopay-woocommerce' );
-		// Inline and iframe modes render the VezmoPay form in the payment box on
-		// the checkout page itself, the way Stripe's plugin does — so WooCommerce
-		// must ask us for fields. Hosted mode has nothing to show there.
-		$this->has_fields         = 'hosted' !== $this->integration_mode();
 		// 'refunds' is declared so WooCommerce actually CALLS process_refund(),
 		// which explains that VezmoPay has no refund API. Without it the method
 		// was unreachable and the limitation was silently absent — the merchant
@@ -62,8 +58,20 @@ class Gateway extends \WC_Payment_Gateway {
 		$this->description = $this->get_option( 'description' );
 		$this->logger      = new Logger( 'yes' === $this->get_option( 'debug' ) );
 
+		// AFTER init_settings(). get_option() reads $this->settings, which
+		// init_settings() populates — computing this above it meant
+		// integration_mode() always saw the default 'element', so has_fields was
+		// always true and WooCommerce asked hosted mode for payment fields it
+		// has none of. Nothing above this line may call get_option().
+		//
+		// Inline and iframe render the VezmoPay form in the payment box on the
+		// checkout page itself, the way Stripe's plugin does, so WooCommerce must
+		// ask us for fields. Hosted mode has nothing to show there.
+		$this->has_fields = 'hosted' !== $this->integration_mode();
+
 		add_action( 'woocommerce_update_options_payment_gateways_' . $this->id, array( $this, 'process_admin_options' ) );
-		// A saved change of mode or credentials must re-ask, not wait out the TTL.
+		// A saved change of mode, credentials or the hosted override must re-ask,
+		// not wait out the TTL.
 		add_action(
 			'woocommerce_update_options_payment_gateways_' . $this->id,
 			function () {
@@ -108,6 +116,19 @@ class Gateway extends \WC_Payment_Gateway {
 	 * nothing until the shopper actually picks VezmoPay.
 	 */
 	public function payment_fields() {
+		// Belt and braces: hosted mode has no embedded form, and the inline script
+		// is deliberately not enqueued for it — so rendering the scaffolding here
+		// would leave a "Loading secure payment fields…" spinner that nothing
+		// ever resolves. Guard it here too, so a wrong has_fields cannot produce
+		// that again.
+		if ( 'hosted' === $this->integration_mode() ) {
+			$description = $this->get_description();
+			if ( $description ) {
+				echo '<p class="vezmopay-inline-description">' . wp_kses_post( wpautop( wptexturize( $description ) ) ) . '</p>';
+			}
+			return;
+		}
+
 		$description = $this->get_description();
 		if ( $description ) {
 			echo '<p class="vezmopay-inline-description">' . wp_kses_post( wpautop( wptexturize( $description ) ) ) . '</p>';
@@ -202,13 +223,22 @@ class Gateway extends \WC_Payment_Gateway {
 		// wait on an API call to pick a mode.
 		$capable = get_transient( $this->capability_key() );
 
+		// The merchant's own override, because the only people who can answer
+		// "is this account activated?" today are merchants, and a settings
+		// checkbox is something a store owner can actually reach — a PHP filter
+		// in a child theme is not.
+		$forced = 'yes' === $this->get_option( 'force_hosted', 'no' );
+
 		/**
 		 * Force hosted checkout on when the platform cannot yet confirm the account
-		 * is activated to accept payment-link payments.
+		 * is activated to accept payment-link payments. Defaults to the merchant's
+		 * "Hosted checkout override" setting.
 		 *
-		 * @param bool $force Default false.
+		 * @param bool $force Whether to run hosted mode regardless.
 		 */
-		if ( 'hosted' === $mode && '1' !== $capable && ! apply_filters( 'vezmopay_force_hosted_mode', false ) ) {
+		$forced = (bool) apply_filters( 'vezmopay_force_hosted_mode', $forced );
+
+		if ( 'hosted' === $mode && '1' !== $capable && ! $forced ) {
 			return 'element';
 		}
 		return $mode;
@@ -289,44 +319,77 @@ class Gateway extends \WC_Payment_Gateway {
 	 * @return string
 	 */
 	private function validated_api_base( $base, $default ) {
-		$base = untrailingslashit( trim( $base ) );
+		return $this->validated_vezmo_base( $base, $default, 'API base' );
+	}
+
+	/**
+	 * Keep a configured VezmoPay base URL to https on a VezmoPay host.
+	 *
+	 * Governs BOTH bases, because both name the same vendor and both are now
+	 * security-load-bearing: the API base carries the secure-payment clientToken
+	 * in a URL path, and the checkout base became the first entry in the set of
+	 * origins allowed to report a payment outcome (and the default target for
+	 * outbound postMessage) when 0.3.2 started deriving checkout_origin() from
+	 * it. A base that fails the check falls back to the shipped default rather
+	 * than being used. Self-hosted deployments allow their own host through the
+	 * filter.
+	 *
+	 * @param string $base    Configured base.
+	 * @param string $default Shipped default for this environment.
+	 * @param string $context Human label for the log line ('API base', 'checkout base').
+	 * @return string
+	 */
+	private function validated_vezmo_base( $base, $default, $context ) {
+		$base = untrailingslashit( trim( (string) $base ) );
 		if ( '' === $base ) {
 			return $default;
 		}
 
 		/**
-		 * Host suffixes an API base may use. Add your own for a self-hosted
-		 * VezmoPay deployment; https is required regardless.
+		 * Host suffixes a VezmoPay base URL may use — API and checkout alike. Add
+		 * your own for a self-hosted deployment; https is required regardless.
 		 *
 		 * @param string[] $suffixes Allowed host suffixes.
 		 */
 		$allowed = (array) apply_filters( 'vezmopay_allowed_api_hosts', array( 'vezmo.com' ) );
 
-		$scheme = strtolower( (string) wp_parse_url( $base, PHP_URL_SCHEME ) );
-		$host   = strtolower( (string) wp_parse_url( $base, PHP_URL_HOST ) );
-
-		$ok = 'https' === $scheme && '' !== $host;
-		if ( $ok ) {
-			$ok = false;
-			foreach ( $allowed as $suffix ) {
-				$suffix = strtolower( ltrim( (string) $suffix, '.' ) );
-				if ( '' === $suffix ) {
-					continue;
-				}
-				if ( $host === $suffix || substr( $host, -strlen( '.' . $suffix ) ) === '.' . $suffix ) {
-					$ok = true;
-					break;
-				}
-			}
-		}
-
-		if ( ! $ok ) {
+		if ( ! self::host_matches_allowed( $base, $allowed ) ) {
 			$this->logger->error(
-				'Ignoring API base "' . $base . '": it must be an https URL on an allowed VezmoPay host. Using ' . $default . ' instead.'
+				'Ignoring ' . $context . ' "' . $base . '": it must be an https URL on an allowed VezmoPay host. Using ' . $default . ' instead.'
 			);
 			return $default;
 		}
 		return $base;
+	}
+
+	/**
+	 * Whether a URL is https on one of the allowed host suffixes.
+	 *
+	 * Static so the settings-field validators can reuse it without a gateway
+	 * instance, and so the same comparison decides both save-time rejection and
+	 * runtime fallback.
+	 *
+	 * @param string   $url     URL to check.
+	 * @param string[] $allowed Allowed host suffixes.
+	 * @return bool
+	 */
+	public static function host_matches_allowed( $url, array $allowed ) {
+		$scheme = strtolower( (string) wp_parse_url( $url, PHP_URL_SCHEME ) );
+		$host   = strtolower( (string) wp_parse_url( $url, PHP_URL_HOST ) );
+
+		if ( 'https' !== $scheme || '' === $host ) {
+			return false;
+		}
+		foreach ( $allowed as $suffix ) {
+			$suffix = strtolower( ltrim( (string) $suffix, '.' ) );
+			if ( '' === $suffix ) {
+				continue;
+			}
+			if ( $host === $suffix || substr( $host, -strlen( '.' . $suffix ) ) === '.' . $suffix ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -337,16 +400,21 @@ class Gateway extends \WC_Payment_Gateway {
 	 */
 	public function checkout_base() {
 		$environment = $this->environment();
-		$base        = untrailingslashit( $this->get_option( $environment . '_checkout_base', 'live' === $environment ? Settings::DEFAULT_LIVE_CHECKOUT : Settings::DEFAULT_TEST_CHECKOUT ) );
+		$default     = 'live' === $environment ? Settings::DEFAULT_LIVE_CHECKOUT : Settings::DEFAULT_TEST_CHECKOUT;
+		$base        = untrailingslashit( (string) $this->get_option( $environment . '_checkout_base', $default ) );
 
 		// Self-heal installs that persisted the earlier wrong default: dev.vezmo.com
 		// is the marketing site, not the merchant app — the app dev host is
 		// user.dev.vezmo.com. Never a legitimate checkout host, so safe to correct.
+		// Runs BEFORE validation, so a self-healed value is still checked.
 		if ( 'https://dev.vezmo.com' === $base || 'http://dev.vezmo.com' === $base ) {
 			$base = Settings::DEFAULT_TEST_CHECKOUT;
 		}
 
-		return $base;
+		// Same allow-list as the API base. This value decides which origin may
+		// report a payment outcome to the checkout page, so it cannot be the one
+		// setting that goes unchecked.
+		return $this->validated_vezmo_base( $base, $default, 'checkout base' );
 	}
 
 	/**
@@ -461,6 +529,66 @@ class Gateway extends \WC_Payment_Gateway {
 	}
 
 	/**
+	 * Reject a bad checkout base at the settings screen instead of silently
+	 * falling back at runtime.
+	 *
+	 * WooCommerce calls validate_{key}_field() on save and surfaces a thrown
+	 * exception as an admin error, keeping the previous stored value.
+	 *
+	 * @param string $key   Field key.
+	 * @param string $value Submitted value.
+	 * @return string
+	 * @throws \Exception When the value is not an https URL on an allowed host.
+	 */
+	public function validate_test_checkout_base_field( $key, $value ) {
+		return $this->validate_checkout_base_field( $key, $value, Settings::DEFAULT_TEST_CHECKOUT );
+	}
+
+	/**
+	 * Live counterpart of validate_test_checkout_base_field().
+	 *
+	 * @param string $key   Field key.
+	 * @param string $value Submitted value.
+	 * @return string
+	 * @throws \Exception When the value is not an https URL on an allowed host.
+	 */
+	public function validate_live_checkout_base_field( $key, $value ) {
+		return $this->validate_checkout_base_field( $key, $value, Settings::DEFAULT_LIVE_CHECKOUT );
+	}
+
+	/**
+	 * Shared checkout-base validation for both environments.
+	 *
+	 * @param string $key      Field key.
+	 * @param string $value    Submitted value.
+	 * @param string $fallback Shipped default, shown in the error message.
+	 * @return string
+	 * @throws \Exception When the value is not an https URL on an allowed host.
+	 */
+	private function validate_checkout_base_field( $key, $value, $fallback ) {
+		$clean = untrailingslashit( trim( (string) $this->validate_text_field( $key, $value ) ) );
+		if ( '' === $clean ) {
+			return '';
+		}
+
+		/** This filter is documented in validated_vezmo_base(). */
+		$allowed = (array) apply_filters( 'vezmopay_allowed_api_hosts', array( 'vezmo.com' ) );
+		if ( ! self::host_matches_allowed( $clean, $allowed ) ) {
+			throw new \Exception(
+				esc_html(
+					sprintf(
+						/* translators: 1: submitted URL, 2: shipped default URL */
+						__( '“%1$s” is not a valid VezmoPay checkout URL. It must be an https address on a VezmoPay host (for example %2$s). This address decides which origin may report a payment result to your checkout, so it was not saved.', 'vezmopay-woocommerce' ),
+						$clean,
+						$fallback
+					)
+				)
+			);
+		}
+		return $clean;
+	}
+
+	/**
 	 * Origin of the Vezmo-hosted checkout, which is where an embedded frame ends
 	 * up: its src is the API origin and the API redirects it here.
 	 *
@@ -493,6 +621,35 @@ class Gateway extends \WC_Payment_Gateway {
 	/* ---------------------------------------------------------------------
 	 * Admin.
 	 * ------------------------------------------------------------------- */
+
+	/**
+	 * Form fields, minus anything that does not apply to this configuration.
+	 *
+	 * Filtering here rather than in admin_options() means a hidden field is
+	 * neither rendered NOR processed on save, so its stored value survives —
+	 * unsetting it at render time only would have let the next save read the
+	 * absent checkbox as "no" and silently drop a merchant's override.
+	 *
+	 * @return array
+	 */
+	public function get_form_fields() {
+		$fields = parent::get_form_fields();
+		if ( isset( $fields['force_hosted'] ) && ! $this->show_force_hosted() ) {
+			unset( $fields['force_hosted'] );
+		}
+		return $fields;
+	}
+
+	/**
+	 * Whether the hosted-checkout override is worth showing: hosted is the
+	 * configured mode, and the platform has not confirmed the account can take
+	 * payment-link payments.
+	 *
+	 * @return bool
+	 */
+	private function show_force_hosted() {
+		return 'hosted' === $this->configured_mode() && '1' !== get_transient( $this->capability_key() );
+	}
 
 	/**
 	 * Settings screen with an unmistakable environment banner.
@@ -545,7 +702,7 @@ class Gateway extends \WC_Payment_Gateway {
 			echo '<div class="notice notice-error inline"><p><strong>';
 			echo esc_html__( 'Hosted checkout is not active.', 'vezmopay-woocommerce' );
 			echo '</strong> ';
-			echo esc_html__( 'VezmoPay does not yet report whether this account is activated for payment-link payments, so customers are being served the embedded payment form instead of a page they may not be able to pay on. If your account is activated and you want the redirect anyway, use the vezmopay_force_hosted_mode filter.', 'vezmopay-woocommerce' );
+			echo esc_html__( 'VezmoPay does not yet report whether this account is activated for payment-link payments, so customers are being served the embedded payment form instead of a page they may not be able to pay on. If payment links already work on your account, tick “My VezmoPay account is activated for payment links” below to use the redirect anyway.', 'vezmopay-woocommerce' );
 			echo '</p></div>';
 		}
 
