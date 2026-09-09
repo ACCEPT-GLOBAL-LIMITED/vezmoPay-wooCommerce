@@ -12,10 +12,19 @@ defined( 'WP_UNINSTALL_PLUGIN' ) || exit;
 
 delete_option( 'woocommerce_vezmopay_settings' );
 
-// Remove cached access tokens (transients are prefixed vezmopay_token_).
+// Remove EVERY transient this plugin creates, not just the access tokens: the
+// release lookup, the trusted-origin and capability answers, the account panel,
+// the connect state nonces and the webhook throttles were all left behind.
 global $wpdb;
 $wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- uninstall-time cleanup of dynamically named transients.
 	"DELETE FROM {$wpdb->options}
-	 WHERE option_name LIKE '\_transient\_vezmopay\_token\_%'
-	    OR option_name LIKE '\_transient\_timeout\_vezmopay\_token\_%'"
+	 WHERE option_name LIKE '\_transient\_vezmopay\_%'
+	    OR option_name LIKE '\_transient\_timeout\_vezmopay\_%'"
+);
+
+// Reconciliation locks and webhook event claims are plain options.
+$wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- uninstall-time cleanup of dynamically named options.
+	"DELETE FROM {$wpdb->options}
+	 WHERE option_name LIKE 'vezmopay\_recon\_%'
+	    OR option_name LIKE 'vezmopay\_evt\_%'"
 );

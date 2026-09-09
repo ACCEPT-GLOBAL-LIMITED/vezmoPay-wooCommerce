@@ -2,9 +2,12 @@
 /**
  * Cart & Checkout Blocks integration.
  *
- * All three VezmoPay modes complete payment after a server-side redirect (to the pay
- * page or the hosted checkout), so the Blocks payment method is an express "choose and
- * continue" tile — no client-side tokenization happens in the checkout form itself.
+ * Element and iframe modes render the VezmoPay form INSIDE this payment method and
+ * charge it after the Store API has created the order (see blocks.js's InlineContent
+ * and window.VezmoPayInline) — the shopper never leaves the checkout. Only hosted mode
+ * is a "choose and continue" tile, where process_payment() redirects server-side.
+ * No client-side tokenization happens either way: VezmoPay's embed owns the card
+ * fields and the charge, so the plugin never handles card data.
  *
  * @package VezmoPay
  */

@@ -209,7 +209,7 @@ VezmoPay is operated by Vezmo Technology, Inc.: [https://vezmo.com](https://vezm
 * HPOS and Cart & Checkout Blocks compatibility.
 * Idempotent payment creation, amount-mismatch guard, zero-decimal currency guard, redacted debug logging.
 
-= Updates =
+== Updates ==
 
 New releases are published on GitHub and appear on your WordPress Plugins screen like any other update — update with one click, or use the Plugins screen's native "Enable auto-updates" toggle for automatic background updates.
 

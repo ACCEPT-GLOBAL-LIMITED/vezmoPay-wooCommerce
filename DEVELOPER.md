@@ -9,18 +9,20 @@ plugin assumes a capability that isn't verified there.
 | File | Class | Responsibility |
 |---|---|---|
 | `vezmopay-woocommerce.php` | — | Plugin header, PSR-ish autoloader for `VezmoPay\WooCommerce\*`, HPOS + Blocks compatibility declarations, boots `Plugin` on `plugins_loaded` (priority 11). |
-| `includes/class-vezmopay-plugin.php` | `Plugin` | Singleton orchestrator. Registers the gateway, the REST webhook route, Blocks support, the `wc_ajax_vezmopay_confirm` / `wc_ajax_vezmopay_status` checkout AJAX endpoints (guest-safe: order key must match), the admin test-connection AJAX action, and the Settings action link. |
+| `includes/class-vezmopay-plugin.php` | `Plugin` | Singleton orchestrator. Registers the gateway, the REST webhook route, Blocks support, the `wc_ajax_vezmopay_session` / `_confirm` / `_status` checkout AJAX endpoints (guest-safe: the order key must match, compared with `hash_equals`; `_session` is rate-limited and keeps a hard nonce check, `_confirm`/`_status` log a stale nonce rather than refusing a charge that already happened), the admin account/test-connection AJAX actions, the reconciliation cron, and the Settings action link. |
 | `includes/class-vezmopay-gateway.php` | `Gateway` | `WC_Payment_Gateway` implementation. Mode selection, credential resolution (constants > options), availability guards, `process_payment()`, the pay-page renderer (`receipt_page`), reconciliation (`reconcile_order_with_api`, `apply_payment_state`, `mark_order_paid`), and the explanatory `process_refund()` stub. |
 | `includes/class-vezmopay-api-client.php` | `Api_Client` | Thin HTTP client over `wp_remote_request`. Login, token caching, 401 retry, envelope unwrapping, and the four endpoint helpers (`create_secure_payment`, `create_paylink`, `get_paylink`, `get_payment`, plus `list_payments`). |
 | `includes/class-vezmopay-settings.php` | `Settings` | Static definition of the gateway form fields, default host constants, and the `ZERO_DECIMAL_CURRENCIES` list. |
-| `includes/class-vezmopay-webhook.php` | `Webhook` | REST controller for `POST /wp-json/vezmopay/v1/webhook`. Signature check (when sent), order lookup by stored meta, event-id dedupe, and delegation to `Gateway::reconcile_order_with_api()`. |
+| `includes/class-vezmopay-webhook.php` | `Webhook` | REST controller for `POST /wp-json/vezmopay/v1/webhook`. Signature check (**mandatory once a webhook secret is configured**), per-sender throttle, order lookup by stored meta, atomic event-id claim, and delegation to `Gateway::reconcile_order_with_api()`. |
 | `includes/class-vezmopay-connect.php` | `Connect` | Manual-key onboarding: the "Test connection" AJAX handler (performs the real login exchange). Placeholder home for an OAuth handshake if the platform ever ships one. |
 | `includes/class-vezmopay-logger.php` | `Logger` | `WC_Logger` wrapper. Debug lines only when enabled; errors always. Redacts key/secret/token fields in context arrays and `vzm_` / `whsec_` / `Bearer` material in free-form strings. |
-| `includes/blocks/class-vezmopay-blocks-support.php` | `Blocks_Support` | `AbstractPaymentMethodType` for the Checkout Block. Informational tile only — all modes finalize after a server-side redirect. |
-| `assets/js/checkout-element.js` | — | Element mode: mounts vezmo.js, listens for SDK events, AJAX-confirms, and runs a parallel status poll as fallback. Degrades to a raw iframe if the SDK fails to load. |
-| `assets/js/checkout-iframe.js` | — | Iframe mode: status polling only (the iframe itself is rendered server-side). |
-| `assets/js/blocks.js` | — | Registers the Blocks payment method (title, description, test-mode badge). |
-| `uninstall.php` | — | Deletes the settings option and cached token transients. Order meta is preserved as audit trail. |
+| `includes/blocks/class-vezmopay-blocks-support.php` | `Blocks_Support` | `AbstractPaymentMethodType` for the Checkout Block. Exposes the mode and the shared checkout script, so element/iframe render the payment form in the block itself; only hosted mode is an informational tile with a server-side redirect. |
+| `assets/js/checkout-inline.js` | — | **The primary path for both element and iframe modes since 0.2.15.** Creates/reuses the cart-level payment session over `wc_ajax_vezmopay_session`, mounts the VezmoPay form in the payment box on the checkout page (vezmo.js in element mode, a plain frame in iframe mode), and — after WooCommerce has created the order — charges it and confirms server-side. Exposes `window.VezmoPayInline` so `blocks.js` drives the same flow on the Cart & Checkout Blocks. |
+| `assets/js/checkout-element.js` | — | Element mode on the **pay page**, which is now the fallback (no JS session, a stalled charge handed off, or a shopper arriving at order-pay directly): mounts vezmo.js, listens for SDK events, AJAX-confirms, and runs a parallel status poll. Degrades to a raw iframe if the SDK fails to load. |
+| `assets/js/checkout-iframe.js` | — | Iframe mode on the **pay page** (fallback, as above): drives the server-rendered frame's Pay button, applies its auto-resize, and polls the status endpoint. |
+| `assets/js/admin-account.js` | — | Loads and saves the settings screen's account panel (payment methods, 3-D Secure) over `wp_ajax_vezmopay_account_get` / `_update`. The panel is cached server-side for five minutes per environment. |
+| `assets/js/blocks.js` | — | Registers the Blocks payment method. In element/iframe modes it renders the VezmoPay form inline (delegating to `window.VezmoPayInline`) and charges it from `onCheckoutSuccess`; in hosted mode it is an informational tile and the redirect happens server-side. |
+| `uninstall.php` | — | Deletes the settings option, every `vezmopay_*` transient, and the reconciliation locks / webhook event claims. Order meta is preserved as audit trail. |
 
 ## Authentication flow
 
@@ -48,10 +50,38 @@ Mode is a gateway setting (`integration_mode`: `element` | `iframe` | `hosted`).
 `_vezmopay_environment` / `_vezmopay_mode` on the order so later reconciliation uses the same
 environment the payment was created in.
 
-### 1. Element (default)
+### 1. Element (default) — on the checkout page
 
 ```
-checkout submit
+checkout page, VezmoPay selected
+  → checkout-inline.js → wc_ajax vezmopay_session
+      → Checkout_Session::get(): POST /merchant/secure-payments for the CART total
+        (random idempotency key per creation, cached in the WC session)
+  → mounts vezmo.js in the payment box (iframe mode: a plain frame)
+  → shopper presses "Place order" (or the plugin's Pay button, same action)
+  → WooCommerce CREATES THE ORDER, then process_payment()
+      → Checkout_Session::bind_to_order(): re-validates amount, currency, expiry,
+        environment AND that the payment is still INITIATED, then stamps the
+        references onto the order
+      → returns '#vezmopay-charge:<base64url payload>' (order id, key, and the
+        store's own success and pay-page URLs)
+  → checkout-inline.js charges the mounted form (vezmo.pay() or a submit message)
+  → on success: wc_ajax vezmopay_confirm → Gateway::reconcile_order_with_api()
+      → GET /merchant/payment/{id}  ← API re-verification, never trusts the browser
+      → apply_payment_state(): amount AND currency must match → payment_complete()
+  → the shopper lands on the order-received page (which re-verifies on arrival, so
+    a failed confirm call cannot strand a paid order)
+```
+
+Fallbacks, in order: no usable session (JS off or blocked) → the pay-page flow
+below; a stalled charge → the pay page after 75 s of foreground time, with a
+"continue on the VezmoPay page" link at 20 s; an untrusted store origin → the
+VezmoPay secure page instead of an empty frame.
+
+### 1b. Element on the pay page (fallback)
+
+```
+order-pay page
   → process_payment()
       → ensure_secure_payment(): POST /merchant/secure-payments
         (Idempotency-Key: wc-{order_key}-a{attempt}; stores payment id, clientToken,

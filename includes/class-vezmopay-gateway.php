@@ -49,7 +49,11 @@ class Gateway extends \WC_Payment_Gateway {
 		// the checkout page itself, the way Stripe's plugin does — so WooCommerce
 		// must ask us for fields. Hosted mode has nothing to show there.
 		$this->has_fields         = 'hosted' !== $this->integration_mode();
-		$this->supports           = array( 'products' );
+		// 'refunds' is declared so WooCommerce actually CALLS process_refund(),
+		// which explains that VezmoPay has no refund API. Without it the method
+		// was unreachable and the limitation was silently absent — the merchant
+		// saw no refund control and no reason why.
+		$this->supports           = array( 'products', 'refunds' );
 
 		$this->init_form_fields();
 		$this->init_settings();
@@ -258,8 +262,63 @@ class Gateway extends \WC_Payment_Gateway {
 	 */
 	public function api_client( $environment = null ) {
 		$environment = in_array( $environment, array( 'test', 'live' ), true ) ? $environment : $this->environment();
-		$base        = $this->get_option( $environment . '_api_base', 'live' === $environment ? Settings::DEFAULT_LIVE_API : Settings::DEFAULT_TEST_API );
+		$default     = 'live' === $environment ? Settings::DEFAULT_LIVE_API : Settings::DEFAULT_TEST_API;
+		$base        = $this->validated_api_base( (string) $this->get_option( $environment . '_api_base', $default ), $default );
 		return new Api_Client( $base, $this->credential( $environment, 'key' ), $this->credential( $environment, 'secret' ), $environment, $this->logger );
+	}
+
+	/**
+	 * Keep the API base to https on a VezmoPay host.
+	 *
+	 * These are free-text settings fields, and the secure-payment clientToken is
+	 * sent in a URL PATH to whatever host they name — so a mistyped or tampered
+	 * value leaks a payment credential to a third party in plain sight. A base
+	 * that fails the check falls back to the shipped default rather than being
+	 * used. Self-hosted deployments can allow their own host through the filter.
+	 *
+	 * @param string $base    Configured base.
+	 * @param string $default Shipped default for this environment.
+	 * @return string
+	 */
+	private function validated_api_base( $base, $default ) {
+		$base = untrailingslashit( trim( $base ) );
+		if ( '' === $base ) {
+			return $default;
+		}
+
+		/**
+		 * Host suffixes an API base may use. Add your own for a self-hosted
+		 * VezmoPay deployment; https is required regardless.
+		 *
+		 * @param string[] $suffixes Allowed host suffixes.
+		 */
+		$allowed = (array) apply_filters( 'vezmopay_allowed_api_hosts', array( 'vezmo.com' ) );
+
+		$scheme = strtolower( (string) wp_parse_url( $base, PHP_URL_SCHEME ) );
+		$host   = strtolower( (string) wp_parse_url( $base, PHP_URL_HOST ) );
+
+		$ok = 'https' === $scheme && '' !== $host;
+		if ( $ok ) {
+			$ok = false;
+			foreach ( $allowed as $suffix ) {
+				$suffix = strtolower( ltrim( (string) $suffix, '.' ) );
+				if ( '' === $suffix ) {
+					continue;
+				}
+				if ( $host === $suffix || substr( $host, -strlen( '.' . $suffix ) ) === '.' . $suffix ) {
+					$ok = true;
+					break;
+				}
+			}
+		}
+
+		if ( ! $ok ) {
+			$this->logger->error(
+				'Ignoring API base "' . $base . '": it must be an https URL on an allowed VezmoPay host. Using ' . $default . ' instead.'
+			);
+			return $default;
+		}
+		return $base;
 	}
 
 	/**

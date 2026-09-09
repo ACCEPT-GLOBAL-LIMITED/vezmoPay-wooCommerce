@@ -162,6 +162,7 @@ class Settings {
 				'title'       => __( 'Test API base URL', 'vezmopay-woocommerce' ),
 				'type'        => 'url',
 				'default'     => self::DEFAULT_TEST_API,
+				'custom_attributes' => array( 'pattern' => 'https://.*' ),
 				'description' => __( 'Only change this if VezmoPay gives you a different host.', 'vezmopay-woocommerce' ),
 				'desc_tip'    => true,
 			),
@@ -169,6 +170,7 @@ class Settings {
 				'title'    => __( 'Live API base URL', 'vezmopay-woocommerce' ),
 				'type'     => 'url',
 				'default'  => self::DEFAULT_LIVE_API,
+				'custom_attributes' => array( 'pattern' => 'https://.*' ),
 				'desc_tip' => true,
 			),
 			'test_checkout_base'  => array(

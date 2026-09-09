@@ -2,17 +2,16 @@
 # This file is distributed under the GPL-2.0-or-later.
 msgid ""
 msgstr ""
-"Project-Id-Version: VezmoPay for WooCommerce 0.1.0\n"
+"Project-Id-Version: VezmoPay for WooCommerce 0.2.19\n"
 "Report-Msgid-Bugs-To: https://github.com/ACCEPT-GLOBAL-LIMITED/vezmoPay-wooCommerce/issues\n"
-"POT-Creation-Date: 2026-07-15T00:00:00+00:00\n"
-"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
-"Language: \n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"X-Generator: VezmoPay build tooling\n"
+"POT-Creation-Date: 2026-09-09T11:46:09+00:00\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: vezmopay-woocommerce\n"
 
 #. Plugin Name of the plugin
@@ -40,750 +39,903 @@ msgstr ""
 msgid "https://vezmo.com"
 msgstr ""
 
-
-#: vezmopay-woocommerce.php:77
-msgid "VezmoPay for WooCommerce requires WooCommerce to be installed and active."
+#: includes/blocks/class-vezmopay-blocks-support.php:108
+#: includes/class-vezmopay-gateway.php:46
+#: includes/class-vezmopay-gateway.php:493
+#: includes/class-vezmopay-settings.php:54
+#: assets/js/blocks.js:33
+msgid "VezmoPay"
 msgstr ""
 
-#: includes/class-vezmopay-api-client.php:126
+#: includes/class-vezmopay-api-client.php:135
 msgid "VezmoPay login succeeded but no access token was returned."
 msgstr ""
 
-#: includes/class-vezmopay-api-client.php:162
+#: includes/class-vezmopay-api-client.php:171
 msgid "VezmoPay API credentials are not configured."
 msgstr ""
 
-#: includes/class-vezmopay-api-client.php:225
+#: includes/class-vezmopay-api-client.php:234
 msgid "Could not reach the VezmoPay API. Please try again."
 msgstr ""
 
-#: includes/class-vezmopay-api-client.php:235
+#: includes/class-vezmopay-api-client.php:244
 msgid "Unexpected response from the VezmoPay API."
 msgstr ""
 
-#: includes/class-vezmopay-connect.php:34
+#: includes/class-vezmopay-checkout-session.php:164
+msgid "This cart total cannot be processed by VezmoPay."
+msgstr ""
+
+#. translators: %s: site name
+#: includes/class-vezmopay-checkout-session.php:177
+#, php-format
+msgid "%s — checkout"
+msgstr ""
+
+#: includes/class-vezmopay-checkout-session.php:197
+#: includes/class-vezmopay-gateway.php:1152
+#: includes/class-vezmopay-plugin.php:379
+msgid "VezmoPay returned an incomplete payment session."
+msgstr ""
+
+#: includes/class-vezmopay-connect.php:71
+#: includes/class-vezmopay-connect.php:250
+#: includes/class-vezmopay-plugin.php:478
 msgid "You are not allowed to do that."
 msgstr ""
 
-#: includes/class-vezmopay-connect.php:40
+#: includes/class-vezmopay-connect.php:76
+msgid "VezmoPay gateway is not available."
+msgstr ""
+
+#: includes/class-vezmopay-connect.php:167
+msgid "The connect token could not be exchanged. It may have expired — try connecting again."
+msgstr ""
+
+#: includes/class-vezmopay-connect.php:196
+#: includes/class-vezmopay-connect.php:266
+#: includes/class-vezmopay-connect.php:290
+msgid "live"
+msgstr ""
+
+#: includes/class-vezmopay-connect.php:196
+#: includes/class-vezmopay-connect.php:266
+#: includes/class-vezmopay-connect.php:290
+msgid "test"
+msgstr ""
+
+#. translators: %s: environment name
+#: includes/class-vezmopay-connect.php:199
+#, php-format
+msgid "Connected with VezmoPay! Your %s API credentials were created and saved automatically."
+msgstr ""
+
+#: includes/class-vezmopay-connect.php:202
+msgid "Your webhook was registered automatically too — no copy-paste needed."
+msgstr ""
+
+#: includes/class-vezmopay-connect.php:205
+msgid "Your store was added to your VezmoPay trusted origins, so the embedded payment form can render here."
+msgstr ""
+
+#: includes/class-vezmopay-connect.php:207
+msgid "Note: connecting deactivates any previous API key for your VezmoPay account."
+msgstr ""
+
+#: includes/class-vezmopay-connect.php:211
+msgid "One manual step left: trust this store in VezmoPay."
+msgstr ""
+
+#. translators: %s: this store's origin URL
+#: includes/class-vezmopay-connect.php:216
+#, php-format
+msgid "The embedded payment form only renders on origins in your VezmoPay trusted-origins list, and it could not be added automatically. In your VezmoPay console open Settings → Developer Settings → Trusted Origins and add: %s"
+msgstr ""
+
+#: includes/class-vezmopay-connect.php:227
+msgid "Connection cancelled — no changes were made."
+msgstr ""
+
+#: includes/class-vezmopay-connect.php:228
+msgid "The connect request could not be verified (it may have expired). Please try again."
+msgstr ""
+
+#: includes/class-vezmopay-connect.php:229
+msgid "VezmoPay did not return a connect token. Please try again."
+msgstr ""
+
+#: includes/class-vezmopay-connect.php:230
+msgid "The connect token could not be exchanged for credentials. It may have expired — please try again."
+msgstr ""
+
+#: includes/class-vezmopay-connect.php:256
 msgid "Gateway not available."
 msgstr ""
 
 #. translators: %s: environment name
-#: includes/class-vezmopay-connect.php:49
+#: includes/class-vezmopay-connect.php:265
 #, php-format
 msgid "Save your %s API key and secret first, then test the connection."
 msgstr ""
 
-#. translators: %s: environment name
-#: includes/class-vezmopay-connect.php:50 includes/class-vezmopay-connect.php:74
-msgid "live"
-msgstr ""
-
-#. translators: %s: environment name
-#: includes/class-vezmopay-connect.php:50 includes/class-vezmopay-connect.php:74
-msgid "test"
-msgstr ""
-
 #. translators: %s: error detail from the API
-#: includes/class-vezmopay-connect.php:62
+#: includes/class-vezmopay-connect.php:278
 #, php-format
 msgid "Connection failed: %s"
 msgstr ""
 
 #. translators: %s: environment name
-#: includes/class-vezmopay-connect.php:73
+#: includes/class-vezmopay-connect.php:289
 #, php-format
 msgid "Connected to VezmoPay (%s environment). Credentials are valid."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:45 includes/class-vezmopay-settings.php:51 includes/blocks/class-vezmopay-blocks-support.php:74 assets/js/blocks.js:21
-msgid "VezmoPay"
-msgstr ""
-
-#: includes/class-vezmopay-gateway.php:46
+#: includes/class-vezmopay-gateway.php:47
 msgid "Accept payments through VezmoPay — hosted checkout, inline payment element, or secure iframe. Card data never touches your server."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:178
-msgid "VezmoPay is in TEST mode."
+#: includes/class-vezmopay-gateway.php:116
+#: assets/js/blocks.js:175
+msgid "Test mode — no real money will move."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:180
-msgid "No real money will move. Switch the Environment setting to Live when you are ready."
+#: includes/class-vezmopay-gateway.php:120
+msgid "Loading secure payment fields…"
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:184
-msgid "VezmoPay is in LIVE mode."
-msgstr ""
-
-#: includes/class-vezmopay-gateway.php:189
-msgid "Your store currency is a zero-decimal currency (e.g. JPY, KRW). VezmoPay does not currently handle these correctly, so the gateway will not be offered at checkout."
-msgstr ""
-
-#: includes/class-vezmopay-gateway.php:228 includes/class-vezmopay-settings.php:116
-msgid "Test connection"
-msgstr ""
-
-#: includes/class-vezmopay-gateway.php:232
-msgid "Validates the saved API key and secret for the selected environment against the VezmoPay API. Save your changes first."
-msgstr ""
-
-#: includes/class-vezmopay-gateway.php:253
-msgid "Order not found."
-msgstr ""
-
-#: includes/class-vezmopay-gateway.php:259
-msgid "This order total cannot be processed by VezmoPay."
-msgstr ""
-
-#. translators: 1: order number, 2: site name
-#: includes/class-vezmopay-gateway.php:299
-#, php-format
-msgid "Order %1$s at %2$s"
-msgstr ""
-
-#: includes/class-vezmopay-gateway.php:314
-msgid "VezmoPay did not return a payment link. Please try again."
-msgstr ""
-
-#. translators: %s: paylink code
-#: includes/class-vezmopay-gateway.php:325
-#, php-format
-msgid "VezmoPay paylink created (%s). Customer redirected to the hosted checkout. The order will be completed by webhook when VezmoPay confirms payment."
-msgstr ""
-
-#: includes/class-vezmopay-gateway.php:333
-msgid "Awaiting VezmoPay hosted checkout payment."
-msgstr ""
-
-#: includes/class-vezmopay-gateway.php:407
-msgid "VezmoPay returned an incomplete payment session."
-msgstr ""
-
-#: includes/class-vezmopay-gateway.php:465
-msgid "Processing your payment…"
-msgstr ""
-
-#: includes/class-vezmopay-gateway.php:466
-msgid "Your bank payment is processing. We will email you when it completes."
-msgstr ""
-
-#: includes/class-vezmopay-gateway.php:467
-msgid "Payment failed. Please try again or use a different payment method."
-msgstr ""
-
-#: includes/class-vezmopay-gateway.php:468
-msgid "This payment session expired. Reloading…"
-msgstr ""
-
-#: includes/class-vezmopay-gateway.php:469
-msgid "Something went wrong. Please try again."
-msgstr ""
-
-#: includes/class-vezmopay-gateway.php:485
-msgid "Test mode — no real money will move"
-msgstr ""
-
-#: includes/class-vezmopay-gateway.php:491
-msgid "VezmoPay secure payment"
+#: includes/class-vezmopay-gateway.php:126
+#: assets/js/blocks.js:193
+msgid "Pay"
 msgstr ""
 
 #: includes/class-vezmopay-gateway.php:495
-msgid "JavaScript is disabled. After paying in the secure form above, your order will be confirmed by email once VezmoPay notifies us."
+msgid "Modern payments for your WooCommerce store."
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php:499
+#: includes/class-vezmopay-gateway.php:1346
+#: includes/class-vezmopay-gateway.php:1422
+msgid "Test mode"
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php:499
+msgid "Live mode"
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php:508
+msgid "VezmoPay is in TEST mode."
 msgstr ""
 
 #: includes/class-vezmopay-gateway.php:510
-msgid "Your VezmoPay payment is being confirmed. You will receive an email as soon as it completes."
+msgid "No real money will move. Switch the Environment setting to Live when you are ready."
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php:514
+msgid "VezmoPay is in LIVE mode."
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php:519
+msgid "Your store currency is a zero-decimal currency (e.g. JPY, KRW). VezmoPay does not currently handle these correctly, so the gateway will not be offered at checkout."
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php:528
+msgid "Hosted checkout is not available on this VezmoPay account."
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php:530
+msgid "Your account cannot accept payment-link payments yet, so customers are being served the embedded payment form instead of being sent to a page they cannot pay on. Complete your VezmoPay account verification, or choose Inline or Secure iframe explicitly."
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php:539
+msgid "Embedded checkout is not active."
 msgstr ""
 
 #: includes/class-vezmopay-gateway.php:547
-msgid "VezmoPay paylink reported as paid."
-msgstr ""
-
-#: includes/class-vezmopay-gateway.php:553
-msgid "No VezmoPay payment reference on this order."
-msgstr ""
-
-#. translators: 1: amount from VezmoPay, 2: order total
-#: includes/class-vezmopay-gateway.php:572
-#, php-format
-msgid "VezmoPay amount mismatch: provider reports %1$s but the order total is %2$s. Order NOT completed automatically — review manually."
-msgstr ""
-
-#: includes/class-vezmopay-gateway.php:583
-msgid "VezmoPay payment captured."
-msgstr ""
-
-#: includes/class-vezmopay-gateway.php:588
-msgid "VezmoPay payment authorized / bank settlement pending (e.g. ACH). Awaiting final confirmation."
-msgstr ""
-
-#: includes/class-vezmopay-gateway.php:598
-msgid "VezmoPay reported the payment as failed."
-msgstr ""
-
-#: includes/class-vezmopay-gateway.php:604
-msgid "VezmoPay reports this payment as refunded (refund performed on the VezmoPay side)."
-msgstr ""
-
-#. translators: %s: transaction id
-#: includes/class-vezmopay-gateway.php:626
-#, php-format
-msgid "Transaction ID: %s"
-msgstr ""
-
-#: includes/class-vezmopay-gateway.php:647
-msgid "VezmoPay does not currently provide a refund API. Please issue the refund from your VezmoPay dashboard; the order will be marked refunded when the plugin next verifies the payment."
-msgstr ""
-
-#. translators: 1: site name, 2: order number
-#: includes/class-vezmopay-gateway.php:665
-#, php-format
-msgid "%1$s — Order %2$s"
-msgstr ""
-
-#: includes/class-vezmopay-gateway.php:684
-msgid "We could not start your VezmoPay payment. Please try again or choose a different payment method."
-msgstr ""
-
-#: includes/class-vezmopay-plugin.php:137 includes/class-vezmopay-plugin.php:165
-msgid "Invalid order."
-msgstr ""
-
-#: includes/class-vezmopay-plugin.php:200
-msgid "Settings"
-msgstr ""
-
-#: includes/class-vezmopay-settings.php:42
-msgid "Enable/Disable"
-msgstr ""
-
-#: includes/class-vezmopay-settings.php:44
-msgid "Enable VezmoPay"
-msgstr ""
-
-#: includes/class-vezmopay-settings.php:48
-msgid "Title"
-msgstr ""
-
-#: includes/class-vezmopay-settings.php:50
-msgid "Payment method title shown to customers at checkout."
-msgstr ""
-
-#: includes/class-vezmopay-settings.php:55
-msgid "Description"
-msgstr ""
-
-#: includes/class-vezmopay-settings.php:57
-msgid "Payment method description shown to customers at checkout."
-msgstr ""
-
-#: includes/class-vezmopay-settings.php:58
-msgid "Pay securely by card or US bank account via VezmoPay."
-msgstr ""
-
-#: includes/class-vezmopay-settings.php:62
-msgid "Integration mode"
-msgstr ""
-
-#: includes/class-vezmopay-settings.php:66
-msgid "Inline payment element (vezmo.js on the pay page)"
-msgstr ""
-
-#: includes/class-vezmopay-settings.php:67
-msgid "Secure iframe (hosted fields, status polling)"
-msgstr ""
-
-#: includes/class-vezmopay-settings.php:68
-msgid "Hosted checkout (redirect to VezmoPay paylink page)"
-msgstr ""
-
-#: includes/class-vezmopay-settings.php:70
-msgid "Element and iframe modes keep the customer on your site (card fields are VezmoPay-hosted either way, keeping you at SAQ-A PCI scope). Hosted mode redirects to the VezmoPay payment page; note VezmoPay does not currently redirect the customer back — the order is completed via webhook."
-msgstr ""
-
-#: includes/class-vezmopay-settings.php:73
-msgid "Environment"
-msgstr ""
-
-#: includes/class-vezmopay-settings.php:77
-msgid "Test"
-msgstr ""
-
-#: includes/class-vezmopay-settings.php:78
-msgid "Live"
-msgstr ""
-
-#: includes/class-vezmopay-settings.php:80
-msgid "VezmoPay marks keys as Test or Live when you create them in the dashboard. Use a Test-environment key here while testing."
-msgstr ""
-
-#: includes/class-vezmopay-settings.php:83
-msgid "Connection"
-msgstr ""
-
-#: includes/class-vezmopay-settings.php:85
-msgid "Create an API key in your VezmoPay dashboard (Settings → API Keys) and paste the key and secret below. The key needs the secure-payment.create, paylink.create, paylink.read and payment.read permissions. Note: creating a new key in the dashboard deactivates your previous key."
-msgstr ""
-
-#: includes/class-vezmopay-settings.php:88
-msgid "Test API key"
-msgstr ""
-
-#: includes/class-vezmopay-settings.php:92
-msgid "Starts with vzm_. Can also be set via the VEZMOPAY_TEST_API_KEY constant in wp-config.php."
-msgstr ""
-
-#: includes/class-vezmopay-settings.php:95
-msgid "Test API secret"
-msgstr ""
-
-#: includes/class-vezmopay-settings.php:99
-msgid "Can also be set via the VEZMOPAY_TEST_API_SECRET constant in wp-config.php."
-msgstr ""
-
-#: includes/class-vezmopay-settings.php:102
-msgid "Live API key"
-msgstr ""
-
-#: includes/class-vezmopay-settings.php:106
-msgid "Starts with vzm_. Can also be set via the VEZMOPAY_LIVE_API_KEY constant in wp-config.php."
-msgstr ""
-
-#: includes/class-vezmopay-settings.php:109
-msgid "Live API secret"
-msgstr ""
-
-#: includes/class-vezmopay-settings.php:113
-msgid "Can also be set via the VEZMOPAY_LIVE_API_SECRET constant in wp-config.php."
-msgstr ""
-
-#: includes/class-vezmopay-settings.php:121
-msgid "Advanced"
-msgstr ""
-
-#: includes/class-vezmopay-settings.php:126
-msgid "Test API base URL"
-msgstr ""
-
-#: includes/class-vezmopay-settings.php:129
-msgid "Only change this if VezmoPay gives you a different host."
-msgstr ""
-
-#: includes/class-vezmopay-settings.php:133
-msgid "Live API base URL"
-msgstr ""
-
-#: includes/class-vezmopay-settings.php:139
-msgid "Test hosted checkout URL"
-msgstr ""
-
-#: includes/class-vezmopay-settings.php:142
-msgid "Host of the VezmoPay hosted payment page (hosted mode only)."
-msgstr ""
-
-#: includes/class-vezmopay-settings.php:146
-msgid "Live hosted checkout URL"
-msgstr ""
-
-#: includes/class-vezmopay-settings.php:152
-msgid "Webhooks"
-msgstr ""
-
-#. translators: %s: webhook URL
-#: includes/class-vezmopay-settings.php:156
-#, php-format
-msgid "In your VezmoPay dashboard, register a webhook endpoint pointing at %s subscribed to the payment.success and payment.failed events, then paste the whsec_ secret below (it is shown only once). Webhooks are the source of truth for order completion — the plugin also independently verifies every event against the VezmoPay API before updating an order."
-msgstr ""
-
-#: includes/class-vezmopay-settings.php:161
-msgid "Webhook secret"
-msgstr ""
-
-#: includes/class-vezmopay-settings.php:165
-msgid "whsec_… value from the VezmoPay dashboard. Used to verify webhook signatures when VezmoPay sends them."
-msgstr ""
-
-#: includes/class-vezmopay-settings.php:168
-msgid "Debug logging"
-msgstr ""
-
-#: includes/class-vezmopay-settings.php:170
-msgid "Log API requests and webhook activity (secrets are redacted)"
-msgstr ""
-
-#: includes/class-vezmopay-settings.php:172
-msgid "View logs under WooCommerce → Status → Logs (source: vezmopay)."
-msgstr ""
-
-#: assets/js/blocks.js:35
-msgid "(Test mode)"
-msgstr ""
-
-#: includes/class-vezmopay-plugin.php
-msgid "Every 5 minutes (VezmoPay)"
-msgstr ""
-
-#: includes/class-vezmopay-plugin.php
-msgid "Check VezmoPay payment status"
-msgstr ""
-
-#. translators: %s: error message
-#: includes/class-vezmopay-plugin.php
-msgid "VezmoPay status check failed: %s"
-msgstr ""
-
-#. translators: %s: payment status reported by VezmoPay
-#: includes/class-vezmopay-plugin.php
-msgid "VezmoPay status check: %s"
-msgstr ""
-
-#: includes/class-vezmopay-gateway.php
-msgid "We received your payment, but this order needs a quick manual review before it is confirmed. Please contact us — do not pay again."
-msgstr ""
-
-#. translators: %s: error detail from the VezmoPay API
-#: includes/class-vezmopay-gateway.php
-msgid "VezmoPay could not start the payment: %s"
-msgstr ""
-
-#: includes/class-vezmopay-gateway.php
-msgid "Your VezmoPay API key is missing a required permission: element/iframe modes need secure-payment.create, hosted mode needs paylink.create. Assign it to the key in the VezmoPay admin."
-msgstr ""
-
-#. translators: %s: technical error detail (shown to store managers only)
-#: includes/class-vezmopay-gateway.php
-msgid "VezmoPay (visible to store managers only): %s"
-msgstr ""
-
-#: includes/class-vezmopay-connect.php
-msgid "VezmoPay gateway is not available."
-msgstr ""
-
-#: includes/class-vezmopay-connect.php
-msgid "The connect token could not be exchanged. It may have expired — try connecting again."
-msgstr ""
-
-#. translators: %s: environment name
-#: includes/class-vezmopay-connect.php
-msgid "Connected with VezmoPay! Your %s API credentials were created and saved automatically."
-msgstr ""
-
-#: includes/class-vezmopay-connect.php
-msgid "Note: connecting deactivates any previous API key for your VezmoPay account."
-msgstr ""
-
-#: includes/class-vezmopay-connect.php
-msgid "Connection cancelled — no changes were made."
-msgstr ""
-
-#: includes/class-vezmopay-connect.php
-msgid "The connect request could not be verified (it may have expired). Please try again."
-msgstr ""
-
-#: includes/class-vezmopay-connect.php
-msgid "VezmoPay did not return a connect token. Please try again."
-msgstr ""
-
-#: includes/class-vezmopay-connect.php
-msgid "The connect token could not be exchanged for credentials. It may have expired — please try again."
-msgstr ""
-
-#: includes/class-vezmopay-gateway.php
-msgid "Connect with VezmoPay"
-msgstr ""
-
-#. translators: %s: environment name
-#: includes/class-vezmopay-gateway.php
-msgid "Credentials saved (%s environment)"
-msgstr ""
-
-#: includes/class-vezmopay-gateway.php
-msgid "Log in to your VezmoPay account and your API credentials will be created and filled in automatically. Connecting deactivates any previous API key on your account. Prefer manual setup? Paste a key and secret below instead."
-msgstr ""
-
-#: includes/class-vezmopay-settings.php
-msgid "Connect"
-msgstr ""
-
-#: includes/class-vezmopay-settings.php
-msgid "Recommended: click \"Connect with VezmoPay\" to log in and have your API credentials created and saved automatically. Or create an API key manually in the VezmoPay dashboard (Settings → API Keys) with the secure-payment.create, paylink.create, paylink.read and payment.read permissions and paste it below. Either way, creating a new key deactivates your previous key."
-msgstr ""
-
-#: includes/class-vezmopay-gateway.php
-msgid "Secure payment · 256-bit TLS"
-msgstr ""
-
-#: includes/class-vezmopay-gateway.php
-msgid "Preparing your secure payment…"
-msgstr ""
-
-#: includes/class-vezmopay-gateway.php
-msgid "Powered by"
-msgstr ""
-
-#: includes/class-vezmopay-gateway.php
-msgid "PCI DSS"
-msgstr ""
-
-#: includes/class-vezmopay-gateway.php
-msgid "3-D Secure"
-msgstr ""
-
-#. translators: 1: card rate, 2: ACH rate, 3: opening anchor tag to the pricing page, 4: closing anchor tag
-#: includes/class-vezmopay-settings.php
-msgid "Pricing: %1$s per successful card charge, %2$s per bank (ACH) payment, capped at $10. No monthly fee, no setup fee, no minimum. %3$sSee full VezmoPay pricing%4$s."
-msgstr ""
-
-#: includes/class-vezmopay-settings.php
-msgid "VezmoPay account settings"
-msgstr ""
-
-#: includes/class-vezmopay-settings.php
-msgid "These control your VezmoPay account itself — the same switches as your VezmoPay console. Changes apply everywhere you charge customers (this store, payment links, invoices), immediately."
-msgstr ""
-
-#: includes/class-vezmopay-gateway.php
-msgid "Connect your VezmoPay account (above) to manage these settings here."
-msgstr ""
-
-#: includes/class-vezmopay-gateway.php
-msgid "More account settings"
-msgstr ""
-
-#: includes/class-vezmopay-gateway.php
-msgid "Account verification, payout bank, reserve, checkout branding, Pre-Dispute Protection, Dispute Auto-Resolution and your fee schedule are managed in your VezmoPay console."
-msgstr ""
-
-#: includes/class-vezmopay-gateway.php
-msgid "Open VezmoPay console settings →"
-msgstr ""
-
-#: includes/class-vezmopay-plugin.php
-msgid "Connect your VezmoPay account first."
-msgstr ""
-
-#: includes/class-vezmopay-plugin.php
-msgid "Invalid payment method."
-msgstr ""
-
-#: includes/class-vezmopay-plugin.php
-msgid "Invalid setting."
-msgstr ""
-
-#: includes/class-vezmopay-plugin.php
-msgid "Loading your VezmoPay account settings…"
-msgstr ""
-
-#: includes/class-vezmopay-plugin.php
-msgid "We couldn't load your VezmoPay account settings. Make sure your API key has the account.read permission, or manage them in your VezmoPay console."
-msgstr ""
-
-#: includes/class-vezmopay-plugin.php
-msgid "Payment methods"
-msgstr ""
-
-#: includes/class-vezmopay-plugin.php
-msgid "Choose which methods are offered to your customers at checkout (this store, payment links, invoices and products). Cards are always on."
-msgstr ""
-
-#: includes/class-vezmopay-plugin.php
-msgid "Apple Pay and Google Pay appear automatically for eligible customers on supported devices when enabled. Disabling a method hides it everywhere immediately."
-msgstr ""
-
-#: includes/class-vezmopay-plugin.php
-msgid "Cards"
-msgstr ""
-
-#: includes/class-vezmopay-plugin.php
-msgid "Visa, Mastercard, Amex and more. Always on — the baseline payment method for every checkout."
-msgstr ""
-
-#: includes/class-vezmopay-plugin.php
-msgid "Bank transfer (ACH)"
-msgstr ""
-
-#: includes/class-vezmopay-plugin.php
-msgid "Let US customers pay directly from a bank account. Lower fees; USD only."
-msgstr ""
-
-#: includes/class-vezmopay-plugin.php
-msgid "Apple Pay"
-msgstr ""
-
-#: includes/class-vezmopay-plugin.php
-msgid "One-tap checkout for customers on Apple devices (rides the card rail)."
-msgstr ""
-
-#: includes/class-vezmopay-plugin.php
-msgid "Google Pay"
-msgstr ""
-
-#: includes/class-vezmopay-plugin.php
-msgid "One-tap checkout for customers on Google / Android (rides the card rail)."
-msgstr ""
-
-#: includes/class-vezmopay-plugin.php
-msgid "Always on"
-msgstr ""
-
-#: includes/class-vezmopay-plugin.php
-msgid "Managed by Vezmo"
-msgstr ""
-
-#: includes/class-vezmopay-plugin.php
-msgid "Not available yet"
-msgstr ""
-
-#: includes/class-vezmopay-plugin.php
-msgid "Complete account verification to enable this method."
-msgstr ""
-
-#: includes/class-vezmopay-plugin.php
-msgid "3D Secure (card authentication)"
-msgstr ""
-
-#: includes/class-vezmopay-plugin.php
-msgid "3D Secure is on"
-msgstr ""
-
-#: includes/class-vezmopay-plugin.php
-msgid "3D Secure is off"
-msgstr ""
-
-#: includes/class-vezmopay-plugin.php
-msgid "Every card payment is authenticated with 3D Secure, reducing fraud and shifting chargeback liability to the card issuer."
-msgstr ""
-
-#: includes/class-vezmopay-plugin.php
-msgid "3D Secure is only requested when the card issuer or regulations require it."
-msgstr ""
-
-#: includes/class-vezmopay-plugin.php
-msgid "3D Secure is required on your account. Contact support if you need to change this."
-msgstr ""
-
-#: includes/class-vezmopay-plugin.php
-msgid "Cards from regions with regulatory requirements (e.g. Europe/SCA) are always authenticated regardless of this setting — turning it off only stops requesting 3D Secure on other cards."
-msgstr ""
-
-#: includes/class-vezmopay-plugin.php
-msgid "The change could not be saved: "
-msgstr ""
-
-#: includes/class-vezmopay-settings.php
-msgid "Checkout appearance"
-msgstr ""
-
-#: includes/class-vezmopay-settings.php
-msgid "Light"
-msgstr ""
-
-#: includes/class-vezmopay-settings.php
-msgid "Dark"
-msgstr ""
-
-#: includes/class-vezmopay-settings.php
-msgid "Auto (match the shopper's device)"
-msgstr ""
-
-#: includes/class-vezmopay-settings.php
-msgid "Theme for the VezmoPay payment page frame (header, footer, background and messages). The secure card form itself is hosted by VezmoPay and always renders in light mode. Applies to the inline element and iframe modes."
-msgstr ""
-
-#: includes/class-vezmopay-updater.php
-msgid "See the GitHub release notes for details."
-msgstr ""
-
-#. translators: %s: version
-#: includes/class-vezmopay-updater.php
-msgid "Version %s"
-msgstr ""
-
-#: includes/class-vezmopay-updater.php
-msgid "View full release on GitHub"
-msgstr ""
-
-#: includes/class-vezmopay-updater.php
-msgid "Could not prepare the VezmoPay update package."
-msgstr ""
-
-#: includes/class-vezmopay-settings.php
-msgid "Automatic updates"
-msgstr ""
-
-#: includes/class-vezmopay-settings.php
-msgid "Automatically install new VezmoPay plugin releases"
-msgstr ""
-
-#: includes/class-vezmopay-settings.php
-msgid "Updates are published on GitHub and appear on your Plugins screen like any other plugin update. When enabled, WordPress installs them automatically in the background. When disabled, you can still update with one click from the Plugins screen (or use its own \"Enable auto-updates\" toggle)."
-msgstr ""
-
-#: includes/class-vezmopay-connect.php
-msgid "Your webhook was registered automatically too — no copy-paste needed."
-msgstr ""
-
-#: includes/class-vezmopay-gateway.php
-msgid "Request production access"
-msgstr ""
-
-#: includes/class-vezmopay-gateway.php
-msgid "Going live: click \"Request production access\" to complete VezmoPay account verification. Once approved, switch Environment to Live and connect again to get your live credentials."
-msgstr ""
-
-#: includes/class-vezmopay-gateway.php
 msgid "VezmoPay will not appear at checkout yet."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php
+#: includes/class-vezmopay-gateway.php:551
 msgid "VezmoPay is active and will appear at checkout."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php
+#. translators: %s: this store's origin, e.g. https://shop.example
+#: includes/class-vezmopay-gateway.php:587
+#, php-format
+msgid "%s is not one of your VezmoPay trusted origins, so the payment form cannot be embedded and shoppers are sent to the VezmoPay secure page instead. Click \"Connect with VezmoPay\" above to register this store, then place a test order."
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php:601
 msgid "Tick “Enable VezmoPay” above and save."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php
+#: includes/class-vezmopay-gateway.php:604
 msgid "Your store currency is not supported by VezmoPay yet."
 msgstr ""
 
 #. translators: %s: environment name (test/live)
-#: includes/class-vezmopay-gateway.php
+#: includes/class-vezmopay-gateway.php:609
+#, php-format
 msgid "No API credentials are saved for the %s environment. Click “Connect with VezmoPay”, or paste your key and secret, then save."
 msgstr ""
 
-#. translators: %s: technical error detail (shown to store managers only)
-#: includes/class-vezmopay-gateway.php
-msgid "[Store managers only] Reason: %s"
+#: includes/class-vezmopay-gateway.php:634
+msgid "Connect with VezmoPay"
 msgstr ""
 
-#: includes/class-vezmopay-connect.php
-msgid "Your store was added to your VezmoPay trusted origins, so the embedded payment form can render here."
+#. translators: %s: environment name
+#: includes/class-vezmopay-gateway.php:640
+#, php-format
+msgid "Credentials saved (%s environment)"
 msgstr ""
 
-#: includes/class-vezmopay-connect.php
-msgid "One manual step left: trust this store in VezmoPay."
+#: includes/class-vezmopay-gateway.php:645
+msgid "Request production access"
 msgstr ""
 
-#. translators: %s: this store's origin URL
-#: includes/class-vezmopay-connect.php
-msgid "The embedded payment form only renders on origins in your VezmoPay trusted-origins list, and it could not be added automatically. In your VezmoPay console open Settings → Developer Settings → Trusted Origins and add: %s"
+#: includes/class-vezmopay-gateway.php:648
+msgid "Log in to your VezmoPay account and your API credentials — and your webhook — are created and filled in automatically. Connecting deactivates any previous API key on your account. Prefer manual setup? Paste a key and secret below instead."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php
-msgid "Pay securely on the VezmoPay page"
+#: includes/class-vezmopay-gateway.php:650
+msgid "Going live: click \"Request production access\" to complete VezmoPay account verification. Once approved, switch Environment to Live and connect again to get your live credentials."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php
-msgid "Opens the secure VezmoPay checkout in a new tab"
+#: includes/class-vezmopay-gateway.php:678
+msgid "Connect your VezmoPay account (above) to manage these settings here."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php
+#: includes/class-vezmopay-gateway.php:682
+msgid "More account settings"
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php:683
+msgid "Account verification, payout bank, reserve, checkout branding, Pre-Dispute Protection, Dispute Auto-Resolution and your fee schedule are managed in your VezmoPay console."
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php:685
+msgid "Open VezmoPay console settings →"
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php:731
+#: includes/class-vezmopay-settings.php:143
+msgid "Test connection"
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php:734
+msgid "Validates the saved API key and secret for the selected environment against the VezmoPay API. Save your changes first."
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php:756
+#: includes/class-vezmopay-gateway.php:1528
+msgid "Order not found."
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php:762
+msgid "This order total cannot be processed by VezmoPay."
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php:785
+msgid "Awaiting VezmoPay payment on the checkout page."
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php:848
+msgid "VezmoPay did not return a checkout URL. Please try again."
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php:852
+msgid "Awaiting payment on the VezmoPay secure checkout page."
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php:868
+msgid "Awaiting VezmoPay payment on the store pay page."
+msgstr ""
+
+#. translators: %s: paylink code
+#: includes/class-vezmopay-gateway.php:913
+#, php-format
+msgid "Order total or currency changed since VezmoPay paylink %s was created; creating a new link for the current total."
+msgstr ""
+
+#. translators: 1: order number, 2: site name
+#: includes/class-vezmopay-gateway.php:930
+#, php-format
+msgid "Order %1$s at %2$s"
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php:944
+msgid "VezmoPay did not return a payment link. Please try again."
+msgstr ""
+
+#. translators: %s: paylink code
+#: includes/class-vezmopay-gateway.php:958
+#, php-format
+msgid "VezmoPay paylink created (%s). Customer redirected to the hosted checkout. The order will be completed by webhook when VezmoPay confirms payment."
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php:970
+msgid "Awaiting VezmoPay hosted checkout payment."
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php:1200
+msgid "VezmoPay checkout is unavailable right now. Please try again."
+msgstr ""
+
+#. translators: %s: order total, e.g. $300.00
+#. translators: %s: order total, e.g. $500.00
+#: includes/class-vezmopay-gateway.php:1263
+#: includes/class-vezmopay-plugin.php:274
+#, php-format
+msgid "Pay %s"
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php:1270
+#: includes/class-vezmopay-gateway.php:1366
+#: includes/class-vezmopay-plugin.php:282
+msgid "VezmoPay secure payment"
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php:1271
+#: includes/class-vezmopay-plugin.php:275
+msgid "Processing your payment…"
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php:1272
+msgid "Your bank payment is processing. We will email you when it completes."
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php:1273
+msgid "Payment failed. Please try again or use a different payment method."
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php:1274
+msgid "This payment session expired. Reloading…"
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php:1275
+msgid "Something went wrong. Please try again."
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php:1276
+msgid "We received your payment, but this order needs a quick manual review before it is confirmed. Please contact us — do not pay again."
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php:1351
+msgid "Preparing your secure payment…"
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php:1387
+msgid "Trouble with the form? Continue on the VezmoPay page →"
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php:1392
+msgid "JavaScript is disabled. After paying in the secure form above, your order will be confirmed by email once VezmoPay notifies us."
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php:1399
+#: includes/class-vezmopay-gateway.php:1443
+msgid "Payments secured by"
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php:1400
+#: includes/class-vezmopay-gateway.php:1444
+msgid "PCI DSS"
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php:1400
+#: includes/class-vezmopay-gateway.php:1444
+msgid "3-D Secure"
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php:1429
 msgid "Your payment was not completed."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php
+#: includes/class-vezmopay-gateway.php:1430
 msgid "Try payment again"
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php:1433
+msgid "Taking you to the secure VezmoPay checkout…"
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php:1434
+msgid "Continue to payment"
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php:1480
+msgid "Your VezmoPay payment is being confirmed. You will receive an email as soon as it completes."
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php:1561
+msgid "payment link"
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php:1565
+msgid "VezmoPay paylink reported as paid."
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php:1571
+msgid "No VezmoPay payment reference on this order."
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php:1594
+msgid "payment"
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php:1601
+msgid "VezmoPay payment captured."
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php:1606
+msgid "VezmoPay payment authorized / bank settlement pending (e.g. ACH). Awaiting final confirmation."
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php:1616
+msgid "VezmoPay reported the payment as failed."
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php:1622
+msgid "VezmoPay reports this payment as refunded (refund performed on the VezmoPay side)."
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php:1698
+msgid "an amount it did not report"
+msgstr ""
+
+#. translators: 1: what was read (payment / payment link), 2: amount and currency VezmoPay reported, 3: order total, 4: order currency
+#: includes/class-vezmopay-gateway.php:1708
+#, php-format
+msgid "VezmoPay %1$s mismatch: provider reports %2$s but the order total is %3$s %4$s. Order NOT completed automatically — review manually."
+msgstr ""
+
+#. translators: %s: transaction id
+#: includes/class-vezmopay-gateway.php:1738
+#, php-format
+msgid "Transaction ID: %s"
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php:1759
+msgid "VezmoPay does not currently provide a refund API. Please issue the refund from your VezmoPay dashboard; the order will be marked refunded when the plugin next verifies the payment."
+msgstr ""
+
+#. translators: 1: site name, 2: order number
+#: includes/class-vezmopay-gateway.php:1777
+#, php-format
+msgid "%1$s — Order %2$s"
+msgstr ""
+
+#. translators: %s: error detail from the VezmoPay API
+#: includes/class-vezmopay-gateway.php:1800
+#, php-format
+msgid "VezmoPay could not start the payment: %s"
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php:1814
+msgid "Your VezmoPay API key is missing a required permission: inline and iframe modes need secure-payment.create, hosted mode needs paylink.create. Assign it to the key in the VezmoPay admin."
+msgstr ""
+
+#. translators: %s: technical error detail (shown to store managers only)
+#: includes/class-vezmopay-gateway.php:1818
+#, php-format
+msgid "[Store managers only] Reason: %s"
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php:1836
+msgid "We could not start your VezmoPay payment. Please try again or choose a different payment method."
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php:276
+msgid "Payment failed. Please check your card details and try again."
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php:277
+msgid "Secure payment fields could not be loaded. Please reload the page or choose another payment method."
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php:278
+msgid "Please complete your card details before placing the order."
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php:279
+msgid "The payment was cancelled. You can try again."
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php:280
+msgid "The payment session expired. Please reload the page and try again."
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php:281
+msgid "Completing an extra verification step with your bank…"
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php:283
+msgid "This is taking longer than usual. Your card has not been charged twice — you can finish the payment on the VezmoPay page below."
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php:284
+msgid "Continue on the VezmoPay page →"
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php:355
+msgid "VezmoPay is not accepting inline payments."
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php:363
+msgid "Too many payment attempts. Please wait a moment and reload the page."
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php:408
+#: includes/class-vezmopay-plugin.php:439
+msgid "Invalid order."
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php:482
+msgid "Connect your VezmoPay account first."
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php:560
+msgid "Invalid payment method."
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php:568
+msgid "Invalid setting."
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php:600
+msgid "Loading your VezmoPay account settings…"
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php:601
+msgid "We couldn't load your VezmoPay account settings. Make sure your API key has the account.read permission, or manage them in your VezmoPay console."
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php:602
+msgid "Payment methods"
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php:603
+msgid "Choose which methods are offered to your customers at checkout (this store, payment links, invoices and products). Cards are always on."
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php:604
+msgid "Apple Pay and Google Pay appear automatically for eligible customers on supported devices when enabled. Disabling a method hides it everywhere immediately."
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php:605
+msgid "Cards"
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php:606
+msgid "Visa, Mastercard, Amex and more. Always on — the baseline payment method for every checkout."
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php:607
+msgid "Bank transfer (ACH)"
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php:608
+msgid "Let US customers pay directly from a bank account. Lower fees; USD only."
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php:609
+msgid "Apple Pay"
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php:610
+msgid "One-tap checkout for customers on Apple devices (rides the card rail)."
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php:611
+msgid "Google Pay"
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php:612
+msgid "One-tap checkout for customers on Google / Android (rides the card rail)."
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php:613
+msgid "Always on"
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php:614
+msgid "Managed by Vezmo"
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php:615
+msgid "Not available yet"
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php:616
+msgid "Complete account verification to enable this method."
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php:617
+msgid "3D Secure (card authentication)"
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php:618
+msgid "3D Secure is on"
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php:619
+msgid "3D Secure is off"
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php:620
+msgid "Every card payment is authenticated with 3D Secure, reducing fraud and shifting chargeback liability to the card issuer."
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php:621
+msgid "3D Secure is only requested when the card issuer or regulations require it."
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php:622
+msgid "3D Secure is required on your account. Contact support if you need to change this."
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php:623
+msgid "Cards from regions with regulatory requirements (e.g. Europe/SCA) are always authenticated regardless of this setting — turning it off only stops requesting 3D Secure on other cards."
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php:624
+msgid "The change could not be saved: "
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php:639
+msgid "Every 5 minutes (VezmoPay)"
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php:727
+msgid "Check VezmoPay payment status"
+msgstr ""
+
+#. translators: %s: error message
+#: includes/class-vezmopay-plugin.php:747
+#, php-format
+msgid "VezmoPay status check failed: %s"
+msgstr ""
+
+#. translators: %s: payment status reported by VezmoPay
+#: includes/class-vezmopay-plugin.php:755
+#, php-format
+msgid "VezmoPay status check: %s"
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php:770
+msgid "Settings"
+msgstr ""
+
+#: includes/class-vezmopay-settings.php:45
+msgid "Enable/Disable"
+msgstr ""
+
+#: includes/class-vezmopay-settings.php:47
+msgid "Enable VezmoPay"
+msgstr ""
+
+#: includes/class-vezmopay-settings.php:51
+msgid "Title"
+msgstr ""
+
+#: includes/class-vezmopay-settings.php:53
+msgid "Payment method title shown to customers at checkout."
+msgstr ""
+
+#: includes/class-vezmopay-settings.php:58
+msgid "Description"
+msgstr ""
+
+#: includes/class-vezmopay-settings.php:60
+msgid "Payment method description shown to customers at checkout."
+msgstr ""
+
+#: includes/class-vezmopay-settings.php:61
+msgid "Pay securely by card or US bank account via VezmoPay."
+msgstr ""
+
+#: includes/class-vezmopay-settings.php:65
+msgid "Integration mode"
+msgstr ""
+
+#: includes/class-vezmopay-settings.php:69
+msgid "Inline payment element (vezmo.js on your pay page)"
+msgstr ""
+
+#: includes/class-vezmopay-settings.php:70
+msgid "Secure iframe (embedded on your pay page)"
+msgstr ""
+
+#: includes/class-vezmopay-settings.php:71
+msgid "Hosted checkout (redirect to the VezmoPay paylink page)"
+msgstr ""
+
+#: includes/class-vezmopay-settings.php:73
+msgid "Inline and iframe both keep the customer on your own pay page — inline lets the VezmoPay SDK drive the form (auto-sizing and payment events), iframe embeds the same page and confirms by polling. Card fields are VezmoPay-hosted either way, keeping you at SAQ-A PCI scope. Each mode falls back on its own when it cannot run: inline drops to the iframe if the SDK is unavailable, and both send the shopper to the VezmoPay secure page — never an empty frame — until this store is one of your VezmoPay trusted origins, which Connect registers automatically. Hosted always redirects, to a VezmoPay paylink page."
+msgstr ""
+
+#: includes/class-vezmopay-settings.php:76
+msgid "Environment"
+msgstr ""
+
+#: includes/class-vezmopay-settings.php:80
+msgid "Test"
+msgstr ""
+
+#: includes/class-vezmopay-settings.php:81
+msgid "Live"
+msgstr ""
+
+#: includes/class-vezmopay-settings.php:83
+msgid "VezmoPay marks keys as Test or Live when you create them in the dashboard. Use a Test-environment key here while testing."
+msgstr ""
+
+#: includes/class-vezmopay-settings.php:86
+msgid "Checkout appearance"
+msgstr ""
+
+#: includes/class-vezmopay-settings.php:90
+msgid "Light"
+msgstr ""
+
+#: includes/class-vezmopay-settings.php:91
+msgid "Dark"
+msgstr ""
+
+#: includes/class-vezmopay-settings.php:92
+msgid "Auto (match the shopper's device)"
+msgstr ""
+
+#: includes/class-vezmopay-settings.php:94
+msgid "Theme for the VezmoPay payment page frame (header, footer, background and messages). The secure card form itself is hosted by VezmoPay and always renders in light mode. Applies to the inline element and iframe modes."
+msgstr ""
+
+#: includes/class-vezmopay-settings.php:97
+msgid "Connection"
+msgstr ""
+
+#: includes/class-vezmopay-settings.php:99
+msgid "Recommended: click \"Connect with VezmoPay\" to log in and have your API credentials created and saved automatically. Or create an API key manually in the VezmoPay dashboard (Settings → API Keys) with the secure-payment.create, paylink.create, paylink.read, payment.read, account.read and account.update permissions and paste it below. Either way, creating a new key deactivates your previous key."
+msgstr ""
+
+#. translators: 1: card rate, 2: ACH rate, 3: opening anchor tag to the pricing page, 4: closing anchor tag
+#: includes/class-vezmopay-settings.php:103
+#, php-format
+msgid "Pricing: %1$s per successful card charge, %2$s per bank (ACH) payment, capped at $10. No monthly fee, no setup fee, no minimum. %3$sSee full VezmoPay pricing%4$s."
+msgstr ""
+
+#: includes/class-vezmopay-settings.php:111
+msgid "Connect"
+msgstr ""
+
+#: includes/class-vezmopay-settings.php:115
+msgid "Test API key"
+msgstr ""
+
+#: includes/class-vezmopay-settings.php:119
+msgid "Starts with vzm_. Can also be set via the VEZMOPAY_TEST_API_KEY constant in wp-config.php."
+msgstr ""
+
+#: includes/class-vezmopay-settings.php:122
+msgid "Test API secret"
+msgstr ""
+
+#: includes/class-vezmopay-settings.php:126
+msgid "Can also be set via the VEZMOPAY_TEST_API_SECRET constant in wp-config.php."
+msgstr ""
+
+#: includes/class-vezmopay-settings.php:129
+msgid "Live API key"
+msgstr ""
+
+#: includes/class-vezmopay-settings.php:133
+msgid "Starts with vzm_. Can also be set via the VEZMOPAY_LIVE_API_KEY constant in wp-config.php."
+msgstr ""
+
+#: includes/class-vezmopay-settings.php:136
+msgid "Live API secret"
+msgstr ""
+
+#: includes/class-vezmopay-settings.php:140
+msgid "Can also be set via the VEZMOPAY_LIVE_API_SECRET constant in wp-config.php."
+msgstr ""
+
+#: includes/class-vezmopay-settings.php:148
+msgid "VezmoPay account settings"
+msgstr ""
+
+#: includes/class-vezmopay-settings.php:150
+msgid "These control your VezmoPay account itself — the same switches as your VezmoPay console. Changes apply everywhere you charge customers (this store, payment links, invoices), immediately."
+msgstr ""
+
+#: includes/class-vezmopay-settings.php:157
+msgid "Advanced"
+msgstr ""
+
+#: includes/class-vezmopay-settings.php:162
+msgid "Test API base URL"
+msgstr ""
+
+#: includes/class-vezmopay-settings.php:166
+msgid "Only change this if VezmoPay gives you a different host."
+msgstr ""
+
+#: includes/class-vezmopay-settings.php:170
+msgid "Live API base URL"
+msgstr ""
+
+#: includes/class-vezmopay-settings.php:177
+msgid "Test hosted checkout URL"
+msgstr ""
+
+#: includes/class-vezmopay-settings.php:180
+msgid "Host of the VezmoPay hosted payment page (hosted mode only)."
+msgstr ""
+
+#: includes/class-vezmopay-settings.php:184
+msgid "Live hosted checkout URL"
+msgstr ""
+
+#: includes/class-vezmopay-settings.php:190
+msgid "Webhooks"
+msgstr ""
+
+#. translators: %s: webhook URL
+#: includes/class-vezmopay-settings.php:194
+#, php-format
+msgid "When you use \"Connect with VezmoPay\", your webhook (URL %s, events payment.success / payment.failed) is registered automatically and its secret is filled in below. For manual setup, register that endpoint in your VezmoPay dashboard and paste the whsec_ secret (shown once). Either way, webhooks drive order completion — and the plugin independently re-verifies every event against the VezmoPay API before updating an order."
+msgstr ""
+
+#: includes/class-vezmopay-settings.php:199
+msgid "Webhook secret"
+msgstr ""
+
+#: includes/class-vezmopay-settings.php:203
+msgid "Filled in automatically when you use \"Connect with VezmoPay\". Only needed for manual setup: paste the whsec_… value shown once when you register a webhook in the VezmoPay dashboard."
+msgstr ""
+
+#: includes/class-vezmopay-settings.php:206
+msgid "Debug logging"
+msgstr ""
+
+#: includes/class-vezmopay-settings.php:208
+msgid "Log API requests and webhook activity (secrets are redacted)"
+msgstr ""
+
+#: includes/class-vezmopay-settings.php:210
+msgid "View logs under WooCommerce → Status → Logs (source: vezmopay)."
+msgstr ""
+
+#: includes/class-vezmopay-updater.php:235
+msgid "The VezmoPay update package is not hosted where this plugin expects it. Update aborted."
+msgstr ""
+
+#: includes/class-vezmopay-updater.php:258
+msgid "The VezmoPay update package did not match the checksum published with the release. Update aborted."
+msgstr ""
+
+#: includes/class-vezmopay-updater.php:431
+msgid "See the GitHub release notes for details."
+msgstr ""
+
+#. translators: %s: version
+#: includes/class-vezmopay-updater.php:433
+#, php-format
+msgid "Version %s"
+msgstr ""
+
+#: includes/class-vezmopay-updater.php:436
+msgid "View full release on GitHub"
+msgstr ""
+
+#: includes/class-vezmopay-updater.php:463
+msgid "Could not prepare the VezmoPay update package."
+msgstr ""
+
+#: vezmopay-woocommerce.php:86
+msgid "VezmoPay for WooCommerce requires WooCommerce to be installed and active."
+msgstr ""
+
+#: assets/js/blocks.js:79
+msgid "(Test mode)"
 msgstr ""

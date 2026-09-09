@@ -83,6 +83,14 @@ final class Plugin {
 	const ACCOUNT_PANEL_TTL = 5 * MINUTE_IN_SECONDS;
 
 	/**
+	 * Payment sessions a single visitor may create per window. Generous enough
+	 * for a shopper editing their cart, bounded enough that nobody can mint
+	 * provider resources in a loop.
+	 */
+	const SESSION_RATE_MAX    = 10;
+	const SESSION_RATE_WINDOW = 10 * MINUTE_IN_SECONDS;
+
+	/**
 	 * Register hooks.
 	 */
 	private function __construct() {
@@ -280,6 +288,32 @@ final class Plugin {
 	}
 
 	/**
+	 * Whether this visitor has asked for too many payment sessions.
+	 *
+	 * Counted per WooCommerce customer session, falling back to the requesting
+	 * IP for a visitor without one.
+	 *
+	 * @return bool
+	 */
+	private function session_rate_limited() {
+		$who = '';
+		if ( function_exists( 'WC' ) && isset( WC()->session ) && WC()->session ) {
+			$who = (string) WC()->session->get_customer_id();
+		}
+		if ( '' === $who ) {
+			$who = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : 'anonymous';
+		}
+
+		$key   = 'vezmopay_sess_rl_' . md5( $who );
+		$count = (int) get_transient( $key );
+		if ( $count >= self::SESSION_RATE_MAX ) {
+			return true;
+		}
+		set_transient( $key, $count + 1, self::SESSION_RATE_WINDOW );
+		return false;
+	}
+
+	/**
 	 * Check the CSRF nonce on a post-charge endpoint without dying on failure.
 	 *
 	 * These two endpoints are authorised by order id + order key, compared with
@@ -319,6 +353,16 @@ final class Plugin {
 		$gateway = $this->gateway();
 		if ( ! $gateway || 'hosted' === $gateway->integration_mode() ) {
 			wp_send_json_error( array( 'message' => __( 'VezmoPay is not accepting inline payments.', 'vezmopay-woocommerce' ) ), 400 );
+		}
+
+		// Rate limit: this mints a REAL provider resource, and an anonymous
+		// visitor could vary the cart total to create one per request.
+		if ( $this->session_rate_limited() ) {
+			$gateway->logger()->error( 'Refusing to create another VezmoPay payment session: rate limit reached for this visitor.' );
+			wp_send_json_error(
+				array( 'message' => __( 'Too many payment attempts. Please wait a moment and reload the page.', 'vezmopay-woocommerce' ) ),
+				429
+			);
 		}
 
 		$session = $gateway->checkout_session()->get();

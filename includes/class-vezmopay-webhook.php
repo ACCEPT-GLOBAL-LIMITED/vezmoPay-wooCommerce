@@ -36,6 +36,13 @@ class Webhook {
 	const THROTTLE_WINDOW = 5 * MINUTE_IN_SECONDS;
 
 	/**
+	 * How long an event claim is honoured before a retry may take it over.
+	 * Comfortably longer than a reconcile, shorter than the platform's 24h
+	 * retry window.
+	 */
+	const EVENT_CLAIM_TTL = 10 * MINUTE_IN_SECONDS;
+
+	/**
 	 * The public webhook URL for this store.
 	 *
 	 * @return string
@@ -135,17 +142,27 @@ class Webhook {
 			return new \WP_REST_Response( array( 'received' => true, 'handled' => false ), 200 );
 		}
 
-		// Idempotency: skip envelopes we have already processed for this order.
-		if ( '' !== $event_id ) {
-			$processed = (array) $order->get_meta( '_vezmopay_processed_events' );
-			if ( in_array( $event_id, $processed, true ) ) {
-				return new \WP_REST_Response( array( 'received' => true, 'handled' => true, 'duplicate' => true ), 200 );
-			}
+		// Idempotency, claimed ATOMICALLY before any work. The old sequence was
+		// check-meta, reconcile, then write-meta — three steps, so two concurrent
+		// deliveries of one event both passed the check. And the record was a
+		// last-25 slice on the order, so a late retry of an older event was
+		// reprocessed once 25 newer ones had arrived. add_option() on a key that
+		// includes the event id is atomic and self-expiring.
+		if ( '' !== $event_id && ! $this->claim_event( $event_id ) ) {
+			$logger->debug( 'Webhook ' . $event_id . ' is already claimed; treating as a duplicate.' );
+			return new \WP_REST_Response( array( 'received' => true, 'handled' => true, 'duplicate' => true ), 200 );
 		}
 
 		// Authoritative reconciliation via the API (never from the payload).
 		$result = $gateway->reconcile_order_with_api( $order );
-		if ( is_wp_error( $result ) ) {
+		if ( is_wp_error( $result ) || 'LOCKED' === $result ) {
+			// Release the claim: this delivery did no work, and the platform's
+			// retry (4 attempts over 24h) must not be swallowed as a duplicate.
+			$this->release_event( $event_id );
+			if ( 'LOCKED' === $result ) {
+				$logger->debug( 'Webhook for order #' . $order->get_id() . ' arrived while a reconcile was running; asking for a retry.' );
+				return new \WP_REST_Response( array( 'received' => false, 'reason' => 'busy' ), 503 );
+			}
 			$logger->error( 'Webhook reconciliation failed for order #' . $order->get_id() . ': ' . $result->get_error_message() );
 			// 500 → the platform retries later (up to 4 attempts over 24h).
 			return new \WP_REST_Response( array( 'received' => false, 'reason' => 'verify-failed' ), 500 );
@@ -171,14 +188,59 @@ class Webhook {
 			}
 		}
 
-		if ( '' !== $event_id ) {
-			$processed   = (array) $order->get_meta( '_vezmopay_processed_events' );
-			$processed[] = $event_id;
-			$order->update_meta_data( '_vezmopay_processed_events', array_slice( $processed, -25 ) );
-		}
 		$order->save();
 
 		return new \WP_REST_Response( array( 'received' => true, 'handled' => true, 'status' => $result ), 200 );
+	}
+
+	/**
+	 * Claim an event id for processing, atomically.
+	 *
+	 * add_option() succeeds for exactly one caller on the options table's unique
+	 * index, so two concurrent deliveries of the same event cannot both proceed.
+	 * The claim carries its own expiry, so a retry outside the window is
+	 * reprocessed deliberately rather than because a fixed-size list forgot it.
+	 *
+	 * @param string $event_id Event id from the envelope.
+	 * @return bool True when this caller owns the event.
+	 */
+	private function claim_event( $event_id ) {
+		$key   = self::event_claim_key( $event_id );
+		$now   = time();
+		$owned = add_option( $key, $now, '', 'no' );
+		if ( $owned ) {
+			return true;
+		}
+
+		// An old claim (a crashed delivery) must not block the platform's retry.
+		$claimed = (int) get_option( $key );
+		if ( $claimed > 0 && ( $now - $claimed ) > self::EVENT_CLAIM_TTL ) {
+			update_option( $key, $now, false );
+			return true;
+		}
+		return false;
+	}
+
+	/**
+	 * Give an event id back, so a retry is not mistaken for a duplicate.
+	 *
+	 * @param string $event_id Event id, may be empty.
+	 */
+	private function release_event( $event_id ) {
+		if ( '' !== $event_id ) {
+			delete_option( self::event_claim_key( $event_id ) );
+		}
+	}
+
+	/**
+	 * Option name for an event claim. Hashed, because an event id is
+	 * attacker-supplied text and option names have a length limit.
+	 *
+	 * @param string $event_id Event id.
+	 * @return string
+	 */
+	private static function event_claim_key( $event_id ) {
+		return 'vezmopay_evt_' . md5( $event_id );
 	}
 
 	/**
@@ -291,8 +353,13 @@ class Webhook {
 	private function find_order_by_meta( $meta_key, $meta_value ) {
 		$orders = wc_get_orders(
 			array(
-				'limit'      => 1,
-				'meta_query' => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- required lookup, indexed by HPOS meta table.
+				// Two, so an ambiguous reference can be DETECTED rather than
+				// silently resolved to whichever row came back first.
+				'limit'          => 2,
+				'payment_method' => Plugin::GATEWAY_ID,
+				'orderby'        => 'ID',
+				'order'          => 'ASC',
+				'meta_query'     => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- required lookup, indexed by HPOS meta table.
 					array(
 						'key'   => $meta_key,
 						'value' => $meta_value,
@@ -300,6 +367,18 @@ class Webhook {
 				),
 			)
 		);
-		return $orders ? $orders[0] : null;
+		if ( ! $orders ) {
+			return null;
+		}
+		if ( count( $orders ) > 1 ) {
+			$gateway = Plugin::instance()->gateway();
+			if ( $gateway ) {
+				$gateway->logger()->error(
+					'More than one order carries ' . $meta_key . ' = ' . $meta_value
+					. ' (#' . $orders[0]->get_id() . ', #' . $orders[1]->get_id() . '); using the oldest. This should not happen — investigate.'
+				);
+			}
+		}
+		return $orders[0];
 	}
 }
