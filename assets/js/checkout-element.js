@@ -1,196 +1,30 @@
 /**
- * VezmoPay inline element mode.
+ * VezmoPay inline element mode, on the store's own pay page.
  *
  * Mounts the vezmo.js SDK (VezmoPay-hosted iframe) into the pay page and finalizes the
  * order on the SDK's postMessage events. Because those events only reach origins the
  * merchant has registered as "trusted origins" in the VezmoPay dashboard, a slow status
  * poll runs in parallel as a fallback, so payment still completes if events are blocked.
  *
+ * Everything that is not mounting or event wiring — the message area, the Pay
+ * button, the poll, the bounded attempt, the failure handling — is in
+ * pay-attempt.js, shared with checkout-iframe.js. The two used to carry their
+ * own copies and drifted apart; see that file.
+ *
  * @package VezmoPay
  */
 
-/* global Vezmo, vezmopay_params */
+/* global Vezmo, vezmopay_params, VezmoPayAttempt */
 ( function () {
 	'use strict';
 
-	if ( typeof vezmopay_params === 'undefined' ) {
+	if ( typeof vezmopay_params === 'undefined' || typeof VezmoPayAttempt !== 'function' ) {
 		return;
 	}
 
 	var params = vezmopay_params;
 	var container = document.getElementById( 'vezmopay-container' );
-	var messageEl = document.getElementById( 'vezmopay-message' );
-	var checkoutEl = document.getElementById( 'vezmopay-checkout' );
-	var payButton = document.getElementById( 'vezmopay-pay' );
-	var finalized = false;
-	var pollTimer = null;
-	var POLL_LIMIT_MS = 15 * 60 * 1000;
-
-	// The embedded secure page hides its own submit button and charges only when
-	// the merchant page asks it to, so this button is the shopper's way to pay.
-	function setPaying( paying ) {
-		if ( ! payButton ) {
-			return;
-		}
-		payButton.disabled = paying;
-		payButton.classList.toggle( 'is-paying', !! paying );
-		var label = payButton.querySelector( '.vezmopay-pay-label' );
-		if ( label ) {
-			label.textContent = paying ? params.i18n.processing : params.i18n.pay;
-		}
-	}
-
-	function setMessage( text, kind ) {
-		if ( ! messageEl ) {
-			return;
-		}
-		messageEl.textContent = text || '';
-		messageEl.className = 'vezmopay-message' + ( text ? ' is-' + ( kind || 'info' ) : '' );
-	}
-
-	function markReady() {
-		if ( checkoutEl ) {
-			checkoutEl.classList.add( 'is-ready' );
-		}
-	}
-
-	// A theme can hand this page a column far narrower than the screen, which
-	// makes the VezmoPay form inside render its phone layout on a desktop
-	// monitor. Only then — narrow card, wide viewport — centre the card on the
-	// viewport instead of the column.
-	function checkBreakout() {
-		if ( ! checkoutEl ) {
-			return;
-		}
-		// Always measure from the un-broken state, so a resize can undo this.
-		checkoutEl.classList.remove( 'is-breakout' );
-		checkoutEl.style.width = '';
-		checkoutEl.style.marginLeft = '';
-
-		var cardWidth = checkoutEl.getBoundingClientRect().width;
-		if ( cardWidth >= 420 || window.innerWidth < 700 ) {
-			return;
-		}
-
-		// Centre on the VIEWPORT: offset the card by the gap between the
-		// viewport's centred position and wherever the narrow parent starts.
-		var target = Math.min( 760, window.innerWidth - 40 );
-		var parent = checkoutEl.parentElement || document.body;
-		var offset = Math.round(
-			( window.innerWidth - target ) / 2 - parent.getBoundingClientRect().left
-		);
-		checkoutEl.classList.add( 'is-breakout' );
-		checkoutEl.style.width = target + 'px';
-		checkoutEl.style.marginLeft = offset + 'px';
-	}
-
-	function post( url, extra ) {
-		var body = new URLSearchParams();
-		body.append( 'nonce', params.nonce );
-		body.append( 'order_id', params.orderId );
-		body.append( 'order_key', params.orderKey );
-		Object.keys( extra || {} ).forEach( function ( k ) {
-			body.append( k, extra[ k ] );
-		} );
-		return window
-			.fetch( url, {
-				method: 'POST',
-				credentials: 'same-origin',
-				headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-				body: body.toString(),
-			} )
-			.then( function ( res ) {
-				// `-1` from a rejected nonce is not JSON; flag it instead of
-				// letting the parse error masquerade as a network hiccup.
-				if ( 401 === res.status || 403 === res.status ) {
-					return { __authFailed: true };
-				}
-				return res.json();
-			} );
-	}
-
-	function finalize( statusMessage ) {
-		if ( finalized ) {
-			return;
-		}
-		finalized = true;
-		setMessage( statusMessage || params.i18n.processing, 'info' );
-		post( params.confirmUrl )
-			.then( function ( res ) {
-				if ( res && res.__authFailed ) {
-					finalized = false;
-					setMessage( params.i18n.expired, 'error' );
-					return;
-				}
-				if ( res && res.success && res.data && res.data.redirect ) {
-					// Only stop the fallback poll once the server has confirmed;
-					// it is the safety net if this confirm call fails.
-					if ( pollTimer ) {
-						window.clearInterval( pollTimer );
-					}
-					window.location = res.data.redirect;
-				} else {
-					finalized = false;
-				}
-			} )
-			.catch( function () {
-				finalized = false;
-			} );
-	}
-
-	function stopPolling() {
-		if ( pollTimer ) {
-			window.clearInterval( pollTimer );
-			pollTimer = null;
-		}
-	}
-
-	function startPolling() {
-		if ( pollTimer ) {
-			return;
-		}
-		var started = Date.now();
-		pollTimer = window.setInterval( function () {
-			if ( finalized ) {
-				return;
-			}
-			// Bounded, like the iframe poller: an unsettleable payment must not
-			// leave this running for the life of the page.
-			if ( Date.now() - started > POLL_LIMIT_MS ) {
-				stopPolling();
-				return;
-			}
-			post( params.statusUrl )
-				.then( function ( res ) {
-					if ( res && res.__authFailed ) {
-						// A retired nonce, not a network blip. Stop and say so.
-						finalized = true;
-						stopPolling();
-						setMessage( params.i18n.expired, 'error' );
-						return;
-					}
-					if ( ! res || ! res.success || ! res.data ) {
-						return;
-					}
-					if ( res.data.redirect ) {
-						finalized = true;
-						window.clearInterval( pollTimer );
-						window.location = res.data.redirect;
-					} else if ( 'FAILED' === res.data.status ) {
-						setPaying( false );
-						setMessage( params.i18n.failed, 'error' );
-					} else if ( 'MISMATCH' === res.data.status ) {
-						// Manual review required — polling will never resolve this.
-						finalized = true;
-						window.clearInterval( pollTimer );
-						setMessage( params.i18n.review, 'info' );
-					}
-				} )
-				.catch( function () {
-					// Transient network error — keep polling.
-				} );
-		}, Math.max( 3000, parseInt( params.pollInterval, 10 ) || 4000 ) );
-	}
+	var attempt = VezmoPayAttempt( params );
 
 	function mountFallbackIframe() {
 		if ( ! container || container.querySelector( 'iframe' ) ) {
@@ -207,18 +41,45 @@
 		// already degraded.
 		frame.setAttribute( 'allow', 'payment *; storage-access *' );
 		frame.setAttribute( 'title', ( params.i18n && params.i18n.frameTitle ) || 'VezmoPay secure payment' );
-		frame.addEventListener( 'load', markReady );
+		frame.addEventListener( 'load', attempt.markReady );
 		container.appendChild( frame );
 
-		// No SDK here, so drive the charge with the same message it would post.
-		if ( payButton && params.secureOrigin ) {
-			payButton.addEventListener( 'click', function () {
-				setPaying( true );
-				setMessage( '' );
+		// No SDK here, so drive the charge with the same message it would post,
+		// and listen for the frame's own events the way iframe mode does.
+		if ( params.secureOrigin ) {
+			attempt.onPay( function () {
 				frame.contentWindow.postMessage(
 					{ type: 'vezmo:secure-payment:submit' },
 					params.secureOrigin
 				);
+			} );
+			window.addEventListener( 'message', function ( e ) {
+				if ( e.source !== frame.contentWindow || e.origin !== params.secureOrigin ) {
+					return;
+				}
+				var type = e.data && e.data.type;
+				if ( 'vezmo:secure-payment:resize' === type ) {
+					var h = Number( e.data.height );
+					if ( h > 200 && h < 4000 ) {
+						frame.style.height = h + 'px';
+					}
+				} else if ( 'vezmo:secure-payment:ready' === type ) {
+					attempt.markReady();
+				} else if ( 'vezmo:secure-payment:processing' === type ) {
+					attempt.acknowledge();
+				} else if ( 'vezmo:secure-payment:requires_action' === type ) {
+					attempt.awaitAction( true );
+				} else if (
+					'vezmo:secure-payment:success' === type ||
+					'vezmo:secure-payment:already-paid' === type
+				) {
+					attempt.finalize();
+				} else if ( 'vezmo:secure-payment:pending' === type ) {
+					attempt.finalize( params.i18n.pending );
+				} else if ( 'vezmo:secure-payment:error' === type ) {
+					attempt.markReady();
+					attempt.failAttempt( 'declined', ( e.data && e.data.message ) || params.i18n.failed );
+				}
 			} );
 		}
 	}
@@ -239,7 +100,7 @@
 		if ( typeof Vezmo === 'undefined' ) {
 			// SDK failed to load — degrade to a raw iframe + polling.
 			mountFallbackIframe();
-			startPolling();
+			attempt.startPolling();
 			return;
 		}
 
@@ -249,39 +110,69 @@
 
 			var sdkFrame = container.querySelector( 'iframe' );
 			if ( sdkFrame ) {
-				sdkFrame.addEventListener( 'load', markReady );
+				sdkFrame.addEventListener( 'load', attempt.markReady );
 			}
 
-			if ( payButton ) {
-				payButton.addEventListener( 'click', function () {
-					setPaying( true );
-					setMessage( '' );
-					// Posts vezmo:secure-payment:submit into the frame, which runs
-					// the same charge path as the hosted page's own button.
-					vezmo.pay();
+			// Posts vezmo:secure-payment:submit into the frame, which runs the
+			// same charge path as the hosted page's own button.
+			attempt.onPay( function () {
+				vezmo.pay();
+			} );
+
+			// `requires_action` cannot arrive through the SDK: vezmo.js relays
+			// eight event names (SUFFIX_BY_NAME) and that is not one of them, so
+			// vezmo.on( 'requires_action' ) never fires. Listen for it directly —
+			// source-checked against the SDK's own frame, then origin-checked —
+			// or the bounded attempt would call a live bank verification a
+			// failure at sixty seconds.
+			if ( sdkFrame ) {
+				window.addEventListener( 'message', function ( e ) {
+					if ( ! sdkFrame.contentWindow || e.source !== sdkFrame.contentWindow ) {
+						return;
+					}
+					if ( ! e.origin || 'null' === e.origin ) {
+						return;
+					}
+					if ( e.origin !== params.secureOrigin && e.origin !== params.checkoutOrigin ) {
+						return;
+					}
+					if ( e.data && 'vezmo:secure-payment:requires_action' === e.data.type ) {
+						attempt.awaitAction( true );
+					}
 				} );
 			}
 
-			vezmo.on( 'ready', markReady );
+			vezmo.on( 'ready', attempt.markReady );
 			vezmo.on( 'success', function () {
-				finalize();
+				attempt.finalize();
 			} );
 			vezmo.on( 'pending', function () {
-				finalize( params.i18n.pending );
+				attempt.finalize( params.i18n.pending );
 			} );
 			vezmo.on( 'already-paid', function () {
-				finalize();
+				attempt.finalize();
 			} );
+			// Progress, not an outcome — but it is the form saying it took the
+			// card, which is what the attempt bound is measured against.
+			vezmo.on( 'processing', attempt.acknowledge );
 			vezmo.on( 'error', function ( evt ) {
-				markReady();
-				setPaying( false );
-				setMessage( ( evt && evt.message ) || params.i18n.failed, 'error' );
+				attempt.markReady();
+				attempt.failAttempt( 'declined', ( evt && evt.message ) || params.i18n.failed );
+			} );
+			vezmo.on( 'cancel', function () {
+				attempt.failAttempt( 'cancelled', params.i18n.cancelled || params.i18n.failed );
 			} );
 			vezmo.on( 'expired', function () {
-				setMessage( params.i18n.expired, 'info' );
+				// A token that has expired cannot be charged, so this one DOES
+				// need a replacement payment: reload, which mints a fresh one.
+				attempt.failAttempt( 'expired', params.i18n.expired );
 				window.setTimeout( function () {
-					window.location.reload();
-				}, 1500 );
+					// Unless the report above found the payment settled after all
+					// and is already forwarding the shopper.
+					if ( ! attempt.isSettled() ) {
+						window.location.reload();
+					}
+				}, 2500 );
 			} );
 		} catch ( e ) {
 			mountFallbackIframe();
@@ -290,15 +181,12 @@
 		// The SDK mounts its own frame, so a ready event cannot have been missed
 		// before this script ran — but never leave the spinner (and the Pay button
 		// with it) waiting on an event that may never arrive.
-		window.setTimeout( markReady, 2500 );
+		window.setTimeout( attempt.markReady, 2500 );
 
 		// Fallback for stores whose origin is not (yet) in VezmoPay's trusted origins:
 		// events never arrive, but the poll still completes the order.
-		startPolling();
+		attempt.startPolling();
 	}
-
-	checkBreakout();
-	window.addEventListener( 'resize', checkBreakout );
 
 	if ( 'loading' === document.readyState ) {
 		document.addEventListener( 'DOMContentLoaded', init );

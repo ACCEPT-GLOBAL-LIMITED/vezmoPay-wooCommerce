@@ -4,7 +4,7 @@
 
 **Accept payments through VezmoPay — three integration modes, zero card data on your server.**
 
-[![Version](https://img.shields.io/badge/version-0.3.4-blue.svg)](https://github.com/ACCEPT-GLOBAL-LIMITED/vezmoPay-wooCommerce/releases)
+[![Version](https://img.shields.io/badge/version-0.3.5-blue.svg)](https://github.com/ACCEPT-GLOBAL-LIMITED/vezmoPay-wooCommerce/releases)
 [![WordPress](https://img.shields.io/badge/WordPress-6.0%2B-21759b.svg?logo=wordpress&logoColor=white)](https://wordpress.org)
 [![WooCommerce](https://img.shields.io/badge/WooCommerce-8.0%2B-96588a.svg?logo=woocommerce&logoColor=white)](https://woocommerce.com)
 [![PHP](https://img.shields.io/badge/PHP-7.4%2B-777bb4.svg?logo=php&logoColor=white)](https://php.net)
@@ -281,7 +281,7 @@ Contributions welcome — match WordPress Coding Standards, keep strings transla
 
 <div align="center">
 
-**VezmoPay for WooCommerce** · v0.3.4 · GPL-2.0-or-later
+**VezmoPay for WooCommerce** · v0.3.5 · GPL-2.0-or-later
 Built by [Vezmo Technology, Inc.](https://vezmo.com)
 
 *💡 Found an issue? [Open one](https://github.com/ACCEPT-GLOBAL-LIMITED/vezmoPay-wooCommerce/issues) — include the redacted `vezmopay` log if you can.*

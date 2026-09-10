@@ -4,7 +4,7 @@ Tags: payments, payment gateway, credit card, ach, woocommerce
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.3.4
+Stable tag: 0.3.5
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -112,6 +112,14 @@ This plugin connects your store to the VezmoPay payment platform, operated by Ve
 VezmoPay is operated by Vezmo Technology, Inc.: [https://vezmo.com](https://vezmo.com) — see the site for terms of service and privacy policy.
 
 == Changelog ==
+
+= 0.3.5 =
+
+* The decline handling from 0.3.4 now applies on the order-pay page as well as the checkout payment box. Those two are different code, and only the checkout box was fixed — so a customer who reached the pay page (which happens whenever the payment session has expired, the cart total changed, or JavaScript is unavailable) still saw nothing at all. The shared behaviour now lives in one place, so the two cannot drift again.
+* A payment that reports no result is no longer waited on indefinitely. VezmoPay does not report a declined card — the payment simply stays "initiated" and the payment form says nothing — so a decline used to leave the customer watching a spinner (up to fifteen minutes on the pay page) and then be moved on with no explanation. After a minute without a result the customer is now told plainly, the Pay button comes back, and they can correct their card and try again. A 3-D Secure challenge is never timed out.
+* Failed attempts are recorded on the order. A declined card used to leave an order with no notes at all, indistinguishable from an abandoned cart; there is now a note saying what happened, which payment it was, and what VezmoPay last reported.
+* Webhook deliveries are no longer rejected because your store has no webhook secret saved. VezmoPay signs every delivery now, and rejecting a signed delivery a store cannot verify only cost you the faster order updates — an unsigned delivery was accepted anyway. Such deliveries are accepted and logged with a reminder to paste the secret; nothing in a webhook is ever trusted without re-reading the payment from VezmoPay.
+* Only one VezmoPay checkout script loads per page. On the order-pay page the checkout-page script was loading alongside the pay page's own, leaving two payment watchers on one page.
 
 = 0.3.4 =
 

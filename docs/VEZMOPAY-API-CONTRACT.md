@@ -110,15 +110,21 @@ Response `data`:
   session**, not the merchant API key — the plugin cannot auto-register). Store the `whsec_…`
   secret shown once at creation.
 - Envelope: `{ "id": "evt_<endpoint>_<event>_<resourceId>", "event": "payment.success", "data": {…} }`.
-  Headers: `Content-Type: application/json`, `X-Webhook-Event`. No timestamp field.
+  Headers: `Content-Type: application/json`, `X-Webhook-Event`, `X-Webhook-Timestamp` (unix
+  seconds), and `X-Webhook-Signature` when the endpoint has a secret.
 - Events actually emitted: `payment.success`, `payment.failed` (plus invoice/proposal events).
   `data` includes `id` (payment id) / `paymentId`, `amount`, `currency`, `status`,
   `type` (`secure-payment` | `paylink` | `manual` | ach flows), `payment.failed` adds `reason`.
 - Retries: 4 attempts at +0h/+6h/+12h/+24h, 5s timeout, no ordering guarantee. Dedupe on envelope `id`.
-- ⚠️ **Signing is currently DISABLED in the platform** (`X-Webhook-Signature` HMAC-SHA256-hex code
-  is commented out in the delivery worker). The plugin verifies the signature when the header is
-  present, but **always** re-fetches the payment via `GET /merchant/payment/:id` before touching
-  an order. Never trust webhook payloads alone. **Flagged.**
+- ✅ **Signing is LIVE** (corrected 2026-09-10). `webhook.processor.ts` signs the raw JSON body with
+  the endpoint's `whsec_…` secret — `HMAC-SHA256` hex in `X-Webhook-Signature` — and sends
+  `X-Webhook-Timestamp` (unix seconds) alongside it; an endpoint with no secret is delivered
+  unsigned and logged. Observed on live dev deliveries. A store that has NOT saved its secret
+  cannot verify anything, so the plugin accepts such a delivery and logs an error telling the
+  merchant to paste the secret — it never trusts the payload either way, and **always** re-fetches
+  the payment via `GET /merchant/payment/:id` before touching an order.
+- The plugin does not yet use `X-Webhook-Timestamp`; replay protection is the envelope-`id` claim
+  (`vezmopay_evt_<md5>`).
 - Refund / dispute / payout / subscription webhooks: **NOT AVAILABLE**.
 
 ## Amounts & currencies
@@ -141,7 +147,7 @@ Response `data`:
 | Off-session charging (WC Subscriptions renewals) | No API; `subscription` module is Vezmo's own SaaS billing. |
 | OAuth / connect onboarding | Only human social login; no app-authorization grant. |
 | Hosted-checkout return/cancel URLs | DTO exists, unused. |
-| Webhook signature (active) | Designed (`whsec_`+HMAC-SHA256 hex) but commented out. |
+| Declined-payment signal | A declined charge produces no terminal signal. The payment record stays `INITIATED` indefinitely (`FAILED` never observed in 532 log lines / 251 polls across two orders, 2026-09-10), and the hosted page emits no `vezmo:secure-payment:error`. Client-side decline detection is therefore impossible, and the plugin has to bound an attempt and guess (`ATTEMPT_LIMIT_MS`). Wanted, either: (a) the payment transitions to `FAILED` with a decline reason readable via `GET /merchant/payment/:id`, or (b) the hosted page emits `vezmo:secure-payment:error` with a shopper-safe message on a decline. **Flagged — top platform ask.** |
 | Wallet buttons in the embed iframe | Payment Element without wallets; hosted vezmo-user pages have them, embed does not. |
 | Zero-decimal currency handling | Broken (×100 unconditionally). |
 | Publishable/public key | Single key+secret pair only. |

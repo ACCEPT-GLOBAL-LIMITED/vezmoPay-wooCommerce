@@ -120,8 +120,20 @@ class Webhook {
 				return new \WP_REST_Response( array( 'received' => false, 'reason' => 'bad-signature' ), 401 );
 			}
 		} elseif ( '' !== $signature ) {
-			$logger->error( 'Webhook signature received but no webhook secret is configured; rejecting.' );
-			return new \WP_REST_Response( array( 'received' => false, 'reason' => 'no-secret' ), 401 );
+			// The platform signs every delivery now (HMAC-SHA256 hex over the raw
+			// body, verified above whenever a secret is saved). Rejecting a signed
+			// delivery because THIS store has no secret to check it with rejected
+			// every genuine webhook while an attacker who simply omitted the
+			// header landed in the branch below and was accepted — it cost the
+			// merchant their reconciliation and bought no security at all.
+			//
+			// So: accept it on the same terms as an unsigned one, and say loudly
+			// what it costs. Nothing here trusts the payload either way — every
+			// delivery is re-read from the API before an order is touched.
+			$logger->error(
+				'Webhook delivered WITH a signature but this store has no webhook secret saved, so it could not be '
+				. 'verified. Paste the whsec_… secret from the VezmoPay dashboard into the gateway settings.'
+			);
 		} else {
 			// No secret saved, so there is nothing to verify against. Reconnect (or
 			// paste the secret) to make signatures mandatory.

@@ -30,6 +30,14 @@
 		return;
 	}
 
+	// The pay page has its own driver (checkout-element.js / checkout-iframe.js,
+	// localized as vezmopay_params). This script arrives there too via the Blocks
+	// payment-method script handles, and two pollers with two message areas on
+	// one page is a bug waiting to happen — even while it sits idle.
+	if ( typeof window.vezmopay_params !== 'undefined' ) {
+		return;
+	}
+
 	var params = vezmopay_inline_params;
 	var CHARGE_PREFIX = '#vezmopay-charge:';
 	var POLL_INTERVAL_MS = 3500;
@@ -48,10 +56,18 @@
 	// Long enough for a slow 3-D Secure challenge, short enough that nobody
 	// stares at a spinner: after this the pay page takes over.
 	var POLL_LIMIT_MS = 75 * 1000;
+	// TODO(platform): remove once a declined payment reports FAILED (or the frame
+	// emits `error` reliably). Until then a decline is indistinguishable from a
+	// slow capture — VezmoPay leaves the payment INITIATED and says nothing — so
+	// an attempt that produces no outcome is called a failed attempt rather than
+	// waited on. A real capture resolves in about nine seconds, so a minute is
+	// generous; a 3-D Secure challenge is exempt (see awaitingAction).
+	var ATTEMPT_LIMIT_MS = 60 * 1000;
 
 	var session = null;      // { clientToken, url, sdkUrl, amount, … }
 	var vezmo = null;        // vezmo.js instance, inline mode only
 	var frame = null;        // the frame we drive in iframe mode
+	var sdkFrame = null;     // the frame vezmo.js created, in element mode
 	var mountedFor = null;   // clientToken currently mounted
 	var loading = false;
 	var ready = false;
@@ -254,6 +270,7 @@
 		host.innerHTML = '';
 		vezmo = null;
 		frame = null;
+		sdkFrame = null;
 		ready = false;
 		pinnedOrigin = null;
 		mountedFor = session.clientToken;
@@ -283,6 +300,9 @@
 					if ( mounted && ! mounted.getAttribute( 'title' ) ) {
 						mounted.setAttribute( 'title', params.i18n.frameTitle );
 					}
+					// Kept for the requires_action listener below, which is the
+					// only way that event reaches us in this mode.
+					sdkFrame = mounted;
 					[ 'ready', 'processing', 'success', 'error', 'pending', 'already-paid', 'expired', 'cancel' ].forEach(
 						function ( name ) {
 							vezmo.on( name, function ( evt ) {
@@ -293,7 +313,7 @@
 					vezmo.on( 'ready', markReady );
 					vezmo.on( 'error', function ( evt ) {
 						setMessage( ( evt && evt.message ) || params.i18n.failed, 'error' );
-						failCharge( ( evt && evt.message ) || params.i18n.failed );
+						failCharge( ( evt && evt.message ) || params.i18n.failed, 'declined' );
 					} );
 					vezmo.on( 'success', completeCharge );
 					vezmo.on( 'pending', completeCharge );
@@ -301,10 +321,10 @@
 					// was one way the spinner used to run forever.
 					vezmo.on( 'already-paid', completeCharge );
 					vezmo.on( 'cancel', function () {
-						failCharge( params.i18n.cancelled );
+						failCharge( params.i18n.cancelled, 'cancelled' );
 					} );
 					vezmo.on( 'expired', function () {
-						failCharge( params.i18n.expired );
+						failCharge( params.i18n.expired, 'expired' );
 					} );
 					// Progress, not an outcome: keep waiting, say so.
 					vezmo.on( 'processing', noteProcessing );
@@ -447,27 +467,69 @@
 			completeCharge( data );
 		} else if ( 'vezmo:secure-payment:error' === data.type ) {
 			setMessage( data.message || params.i18n.failed, 'error' );
-			failCharge( data.message || params.i18n.failed );
+			failCharge( data.message || params.i18n.failed, 'declined' );
 		} else if ( 'vezmo:secure-payment:cancel' === data.type ) {
-			failCharge( params.i18n.cancelled );
+			failCharge( params.i18n.cancelled, 'cancelled' );
 		} else if ( 'vezmo:secure-payment:expired' === data.type ) {
-			failCharge( params.i18n.expired );
+			failCharge( params.i18n.expired, 'expired' );
 		} else if ( 'vezmo:secure-payment:processing' === data.type ) {
 			noteProcessing();
 		} else if ( 'vezmo:secure-payment:requires_action' === data.type ) {
-			// Extra verification (3-D Secure) is happening inside the frame.
-			// It is also proof the form took the charge, so stop re-sending the
-			// submit: another one would land on a form already mid-verification.
+			// Extra verification is happening inside the frame. It is also proof
+			// the form took the charge, so stop re-sending the submit: another one
+			// would land on a form already mid-verification.
 			noteProcessing();
-			setMessage( params.i18n.verifying, 'info' );
-			if ( charging ) {
-				charging.awaitingAction = true;
-				if ( charging.stallTimer ) {
-					window.clearTimeout( charging.stallTimer );
-					charging.stallTimer = null;
-				}
-			}
+			noteAwaitingAction();
 		}
+	} );
+
+	/**
+	 * Extra verification (3-D Secure, or the captcha that cannot run inside a
+	 * third-party frame) has taken over. It owns the shopper until it reports
+	 * back, so both bounds are suspended rather than restarted.
+	 */
+	function noteAwaitingAction() {
+		setMessage( params.i18n.verifying, 'info' );
+		if ( ! charging ) {
+			return;
+		}
+		charging.awaitingAction = true;
+		if ( charging.stallTimer ) {
+			window.clearTimeout( charging.stallTimer );
+			charging.stallTimer = null;
+		}
+		if ( charging.attemptTimer ) {
+			// Never time out a live challenge.
+			window.clearTimeout( charging.attemptTimer );
+			charging.attemptTimer = null;
+		}
+	}
+
+	/**
+	 * `requires_action`, in element mode.
+	 *
+	 * vezmo.js relays eight event names — ready, processing, success, error,
+	 * pending, already-paid, expired, cancel (SUFFIX_BY_NAME in the SDK) — and
+	 * drops everything else, so `vezmo.on( 'requires_action' )` can never fire.
+	 * Without this listener the bounded attempt would call a live bank
+	 * verification a failure at sixty seconds and tell the shopper to try again
+	 * while their challenge was still open.
+	 *
+	 * Same guards as the frame-mode listener: source first (unforgeable for a
+	 * window we did not create), then origin against the trusted set.
+	 */
+	window.addEventListener( 'message', function ( e ) {
+		if ( ! sdkFrame || ! sdkFrame.contentWindow || e.source !== sdkFrame.contentWindow ) {
+			return;
+		}
+		if ( ! e.origin || 'null' === e.origin || trustedOrigins().indexOf( e.origin ) === -1 ) {
+			return;
+		}
+		if ( ! e.data || 'vezmo:secure-payment:requires_action' !== e.data.type ) {
+			return;
+		}
+		log( 'sdk frame: requires_action (relayed past the SDK)' );
+		noteAwaitingAction();
 	} );
 
 	function ensureSession() {
@@ -573,6 +635,7 @@
 		document.addEventListener( 'visibilitychange', charging.visibility );
 
 		charging.stallTimer = window.setTimeout( showStall, STALL_MS );
+		charging.attemptTimer = window.setTimeout( attemptTimedOut, ATTEMPT_LIMIT_MS );
 		charging.pollTimer = window.setInterval( function () {
 			if ( ! charging ) {
 				return;
@@ -624,7 +687,7 @@
 					if ( res.data.redirect ) {
 						finish( res.data.redirect );
 					} else if ( 'FAILED' === res.data.status ) {
-						failCharge( params.i18n.failed );
+						failCharge( params.i18n.failed, 'status' );
 					}
 					// Anything else: still settling — keep polling.
 				} )
@@ -654,6 +717,10 @@
 			window.clearTimeout( charging.submitTimer );
 			charging.submitTimer = null;
 		}
+		if ( charging.attemptTimer ) {
+			window.clearTimeout( charging.attemptTimer );
+			charging.attemptTimer = null;
+		}
 		if ( charging.visibility ) {
 			document.removeEventListener( 'visibilitychange', charging.visibility );
 			charging.visibility = null;
@@ -672,6 +739,14 @@
 		// offered a link to the VezmoPay page — so the shopper lost the reason and
 		// was handed a fresh payment form instead.
 		if ( ! charging ) {
+			return;
+		}
+		// Only when the form never took the card. If it DID acknowledge the
+		// charge, a top-level VezmoPay page is the wrong offer: the frame is
+		// holding a live payment intent, so starting another attempt there is how
+		// a shopper ends up paying twice — and the outcome is bounded now anyway
+		// (ATTEMPT_LIMIT_MS), which is what this link used to stand in for.
+		if ( charging.sawProcessing ) {
 			return;
 		}
 		var scope = root();
@@ -711,6 +786,19 @@
 			return url;
 		}
 		return url + ( url.indexOf( '?' ) === -1 ? '?' : '&' ) + 'vezmopay_retry=1';
+	}
+
+	/**
+	 * The attempt produced no outcome in time. Nothing is coming: VezmoPay does
+	 * not report a declined payment, so this is the only way a decline that the
+	 * frame could not tell us about ever reaches the shopper.
+	 */
+	function attemptTimedOut() {
+		if ( ! charging || charging.awaitingAction ) {
+			return;
+		}
+		log( 'no outcome', ATTEMPT_LIMIT_MS, 'ms after the charge started — treating the attempt as failed' );
+		failCharge( params.i18n.noResult, 'timeout' );
 	}
 
 	function payPageUrl() {
@@ -778,6 +866,7 @@
 			pollTimer: null,
 			stallTimer: null,
 			confirmTimer: null,
+			attemptTimer: null,
 			sawSuccess: false,
 			sawProcessing: false,
 			submitTries: 0,
@@ -806,7 +895,7 @@
 			var target = frameOrigin();
 			if ( ! target ) {
 				// Without a known origin we will not broadcast into the frame.
-				failCharge( params.i18n.unavailable );
+				failCharge( params.i18n.unavailable, 'not-ready' );
 				return;
 			}
 			frame.contentWindow.postMessage( { type: 'vezmo:secure-payment:submit' }, target );
@@ -934,12 +1023,14 @@
 	 *      a redirect to yet another payment form. A new session mounted here is
 	 *      what makes "try again" work where the shopper is standing.
 	 */
-	function failCharge( message ) {
+	function failCharge( message, reason ) {
 		if ( ! charging ) {
 			return;
 		}
 		var text = message || params.i18n.failed;
 		var d = charging.deferred;
+		var orderId = charging.orderId;
+		var orderKey = charging.orderKey;
 		stopPolling();
 		charging = null;
 		refreshPayButton();
@@ -953,7 +1044,47 @@
 			// the same text in its own notice area.
 			d.reject( text );
 		}
+		reportFailedAttempt( reason || 'unknown', orderId, orderKey );
 		rearm( text );
+	}
+
+	/**
+	 * Tell the store this attempt failed.
+	 *
+	 * Two reasons to bother. The order gets a note — without one a declined card
+	 * and an abandoned cart are indistinguishable to the merchant. And the store
+	 * asks the API before it believes us, so if the payment actually settled
+	 * while we were giving up (which a timed-out attempt cannot rule out), the
+	 * shopper is forwarded instead of being shown a failure.
+	 */
+	function reportFailedAttempt( reason, orderId, orderKey ) {
+		if ( ! params.failedUrl || ! orderId || ! orderKey ) {
+			return;
+		}
+		var body = new URLSearchParams();
+		body.append( 'nonce', params.nonce );
+		body.append( 'order_id', orderId );
+		body.append( 'order_key', orderKey );
+		body.append( 'reason', reason );
+		window
+			.fetch( params.failedUrl, {
+				method: 'POST',
+				credentials: 'same-origin',
+				headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+				body: body.toString(),
+			} )
+			.then( function ( res ) {
+				return res.json();
+			} )
+			.then( function ( res ) {
+				if ( res && res.success && res.data && res.data.redirect ) {
+					log( 'the store found this payment settled after all — forwarding' );
+					window.location.href = res.data.redirect;
+				}
+			} )
+			.catch( function () {
+				// The order note is a nicety; never let it break the checkout.
+			} );
 	}
 
 	/**

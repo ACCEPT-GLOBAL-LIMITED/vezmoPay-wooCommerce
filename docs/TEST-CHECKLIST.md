@@ -1,4 +1,4 @@
-# QA Test Checklist — VezmoPay for WooCommerce 0.1.0
+# QA Test Checklist — VezmoPay for WooCommerce
 
 Run against a store with WooCommerce 8.0+ on WordPress 6.0+. Unless a step says otherwise, use the
 **Test** environment with a VezmoPay Test API key that has the `secure-payment.create`,
@@ -13,6 +13,25 @@ The embedded payment form is a Stripe Payment Element in test mode, so Stripe te
 | `4000 0000 0000 0002` | Declined |
 
 Any future expiry, any CVC, any postal code.
+
+## 0. Two payment surfaces — read before testing any failure path
+
+The payment box on the checkout page and the order-pay page are **different code**:
+
+| Surface | Script | How a shopper gets there |
+|---|---|---|
+| Checkout payment box | `checkout-inline.js` (+ `blocks.js` on the Blocks checkout) | Normal case: a cart-time payment session exists and `bind_to_order()` accepts it. |
+| Order-pay page | `checkout-element.js` or `checkout-iframe.js`, both on `pay-attempt.js` | Whenever the session cannot be bound — token expired while the checkout sat open, the cart total changed, JavaScript unavailable — or hosted mode / an embed VezmoPay will not allow. |
+
+The pay page is a first-class surface, not a fallback nobody sees. In 0.3.4 the decline work
+landed only in `checkout-inline.js`, and the retest was run on the pay page — so the shopper saw
+no improvement at all, because the code that was fixed was not the code that ran.
+
+- [ ] **Every change to a failure path is exercised on BOTH surfaces**: the checkout payment box
+      and the order-pay page. To reach the pay page deliberately, let the payment token expire
+      (over `TOKEN_TTL_MINUTES`) or change the cart total after the form has mounted.
+- [ ] All three cards (success, 3-D Secure, declined) × inline and iframe × checkout page and
+      order-pay page — four combinations per card. They have not always behaved the same.
 
 ## 1. Settings & connection
 
@@ -31,7 +50,7 @@ Any future expiry, any CVC, any postal code.
 - [ ] Set Integration mode = **Inline payment element**. Place an order on the classic (shortcode) checkout → redirected to the order-pay page; VezmoPay form mounts; TEST MODE badge visible.
 - [ ] Pay with `4242…` → "Processing your payment…" then redirect to the thank-you page; order is Processing/Completed; order note "VezmoPay payment captured" with Transaction ID; `_vezmopay_payment_id` set.
 - [ ] Pay with `4000 0027 6000 3184` → 3DS challenge appears **inside** the VezmoPay frame; complete it → order completes as above.
-- [ ] Pay with `4000 0000 0000 0002` → decline message shown inside/under the element; order stays Pending; retrying with `4242…` on the same page succeeds.
+- [ ] Pay with `4000 0000 0000 0002` → a message appears under the element within ~60s (either the frame's own decline text, or "VezmoPay did not report a result…" when the frame stays silent — see the Declined-payment signal row in `docs/VEZMOPAY-API-CONTRACT.md`); the Pay button is handed back; order stays Pending and gains an order note naming the attempt; retrying with `4242…` on the same page succeeds.
 - [ ] Refresh the pay page before paying → no new VezmoPay payment is created (same `_vezmopay_payment_id`, token reused).
 
 ## 3. Element mode — Blocks checkout

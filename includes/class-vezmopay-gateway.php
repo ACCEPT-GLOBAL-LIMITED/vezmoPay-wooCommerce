@@ -1489,6 +1489,9 @@ class Gateway extends \WC_Payment_Gateway {
 			'secureOrigin' => $this->url_origin( $iframe_url ),
 			'confirmUrl'   => \WC_AJAX::get_endpoint( 'vezmopay_confirm' ),
 			'statusUrl'    => \WC_AJAX::get_endpoint( 'vezmopay_status' ),
+			// Where the browser reports an attempt it has given up on, so the
+			// order carries a note and the store gets one last API read.
+			'failedUrl'    => \WC_AJAX::get_endpoint( 'vezmopay_failed' ),
 			'nonce'        => wp_create_nonce( 'vezmopay-checkout' ),
 			'pollInterval' => 4000,
 			'i18n'         => array(
@@ -1512,6 +1515,13 @@ class Gateway extends \WC_Payment_Gateway {
 				'expired'    => __( 'This payment session expired. Reloading…', 'vezmopay-woocommerce' ),
 				'error'      => __( 'Something went wrong. Please try again.', 'vezmopay-woocommerce' ),
 				'review'     => __( 'We received your payment, but this order needs a quick manual review before it is confirmed. Please contact us — do not pay again.', 'vezmopay-woocommerce' ),
+				'cancelled'  => __( 'The payment was cancelled. You can try again.', 'vezmopay-woocommerce' ),
+				'verifying'  => __( 'Completing an extra verification step with your bank…', 'vezmopay-woocommerce' ),
+				// The bounded attempt (see ATTEMPT_LIMIT_MS in pay-attempt.js).
+				// VezmoPay reports nothing at all for a declined card, so this
+				// covers a decline as well as a payment that never resolved — the
+				// wording has to be true of both.
+				'noResult'   => __( 'VezmoPay did not report a result for that payment. Please check your card details and press Pay again — if the payment did go through, your order will be updated automatically.', 'vezmopay-woocommerce' ),
 			),
 		);
 
@@ -1527,12 +1537,22 @@ class Gateway extends \WC_Payment_Gateway {
 				'Inline mode requested but the session carried no sdkUrl; falling back to the embedded iframe.'
 			);
 		}
+		// One copy of the shared attempt behaviour, whichever driver runs. Both
+		// used to carry their own, and the copies drifted — see pay-attempt.js.
+		wp_register_script(
+			'vezmopay-pay-attempt',
+			VEZMOPAY_WC_PLUGIN_URL . 'assets/js/pay-attempt.js',
+			array(),
+			Plugin::asset_version( 'assets/js/pay-attempt.js' ),
+			true
+		);
+
 		if ( $use_sdk ) {
 			wp_enqueue_script( 'vezmopay-sdk', $sdk_url, array(), null, true ); // phpcs:ignore WordPress.WP.EnqueuedResourceParameters.MissingVersion -- remote SDK, provider-versioned.
-			wp_enqueue_script( 'vezmopay-element', VEZMOPAY_WC_PLUGIN_URL . 'assets/js/checkout-element.js', array( 'vezmopay-sdk' ), Plugin::asset_version( 'assets/js/checkout-element.js' ), true );
+			wp_enqueue_script( 'vezmopay-element', VEZMOPAY_WC_PLUGIN_URL . 'assets/js/checkout-element.js', array( 'vezmopay-sdk', 'vezmopay-pay-attempt' ), Plugin::asset_version( 'assets/js/checkout-element.js' ), true );
 			wp_localize_script( 'vezmopay-element', 'vezmopay_params', $params );
 		} else {
-			wp_enqueue_script( 'vezmopay-iframe', VEZMOPAY_WC_PLUGIN_URL . 'assets/js/checkout-iframe.js', array(), Plugin::asset_version( 'assets/js/checkout-iframe.js' ), true );
+			wp_enqueue_script( 'vezmopay-iframe', VEZMOPAY_WC_PLUGIN_URL . 'assets/js/checkout-iframe.js', array( 'vezmopay-pay-attempt' ), Plugin::asset_version( 'assets/js/checkout-iframe.js' ), true );
 			wp_localize_script( 'vezmopay-iframe', 'vezmopay_params', $params );
 		}
 
@@ -2044,6 +2064,70 @@ class Gateway extends \WC_Payment_Gateway {
 		}
 		$order->add_order_note( $note . ( $payment_id ? ' (' . sprintf( /* translators: %s: transaction id */ __( 'Transaction ID: %s', 'vezmopay-woocommerce' ), $payment_id ) . ')' : '' ) );
 		$order->payment_complete( $payment_id );
+	}
+
+	/**
+	 * Record a payment attempt that ended without success.
+	 *
+	 * A declined card left NO trace at all: the order sat in pending with no
+	 * notes, indistinguishable from an abandoned cart — which is precisely the
+	 * distinction a merchant needs when following up a lost sale.
+	 *
+	 * Deliberately factual and provider-text-free. The browser's reason is a
+	 * guess (VezmoPay reports no terminal state for a decline), so the note says
+	 * what was observed and what the store will do next, and never asserts that
+	 * money did or did not move — except where this plugin knows it did not.
+	 *
+	 * @param \WC_Order $order  Order.
+	 * @param string    $reason One of the allow-listed reasons from the browser.
+	 * @param string    $status Last status the API reported, e.g. INITIATED.
+	 */
+	public function note_failed_attempt( $order, $reason, $status ) {
+		$payment_id = (string) $order->get_meta( '_vezmopay_payment_id' );
+		$status     = '' === $status ? 'UNKNOWN' : $status;
+
+		// One note per (payment, reason): the browser may report the same attempt
+		// more than once (a retry, a reload), and an order note per poll is noise.
+		$fingerprint = $payment_id . '|' . $reason;
+		if ( (string) $order->get_meta( '_vezmopay_attempt_noted' ) === $fingerprint ) {
+			return;
+		}
+
+		switch ( $reason ) {
+			case 'declined':
+				$text = __( 'The VezmoPay payment form reported a failed attempt (payment %1$s, VezmoPay still reports %2$s). The customer was not charged and was asked to try again.', 'vezmopay-woocommerce' );
+				break;
+			case 'cancelled':
+				$text = __( 'The customer cancelled the VezmoPay payment (payment %1$s, VezmoPay still reports %2$s).', 'vezmopay-woocommerce' );
+				break;
+			case 'expired':
+				$text = __( 'The VezmoPay payment session expired before the payment completed (payment %1$s, VezmoPay still reports %2$s).', 'vezmopay-woocommerce' );
+				break;
+			case 'not-ready':
+				$text = __( 'The VezmoPay payment form never finished loading, so the card was never submitted (payment %1$s, VezmoPay still reports %2$s).', 'vezmopay-woocommerce' );
+				break;
+			case 'status':
+				$text = __( 'VezmoPay reported this payment attempt as failed (payment %1$s, status %2$s). The customer was asked to try again.', 'vezmopay-woocommerce' );
+				break;
+			case 'timeout':
+			default:
+				$text = __( 'VezmoPay reported no result for this payment attempt within the time the checkout waits (payment %1$s, still %2$s). The customer was asked to try again. If VezmoPay later reports this payment as captured, the order will be updated automatically.', 'vezmopay-woocommerce' );
+				break;
+		}
+
+		$order->add_order_note(
+			sprintf(
+				$text,
+				'' === $payment_id ? __( 'none recorded', 'vezmopay-woocommerce' ) : $payment_id,
+				$status
+			)
+		);
+		$order->update_meta_data( '_vezmopay_attempt_noted', $fingerprint );
+		$order->save();
+
+		$this->logger->debug(
+			'Recorded a failed VezmoPay attempt on order #' . $order->get_id() . ' (' . $reason . ', API says ' . $status . ').'
+		);
 	}
 
 	/* ---------------------------------------------------------------------

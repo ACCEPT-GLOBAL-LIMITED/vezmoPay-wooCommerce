@@ -90,7 +90,15 @@ class Blocks_Support extends AbstractPaymentMethodType {
 		// The Blocks tile drives the same session/charge machinery as the classic
 		// checkout, so its script must be present before ours runs.
 		$handles = array( 'vezmopay-blocks' );
-		if ( 'hosted' !== $this->gateway()->integration_mode() ) {
+		// …but NOT on the pay page or the order-received page. WooCommerce loads
+		// a payment method's script handles on those endpoints too, which put the
+		// checkout-page driver on a page that has its own (checkout-element.js /
+		// checkout-iframe.js): two pollers and two message areas, one of them
+		// idle. Plugin::enqueue_checkout_scripts() already excludes those
+		// endpoints; this is the other way in.
+		$pay_page = function_exists( 'is_wc_endpoint_url' )
+			&& ( is_wc_endpoint_url( 'order-pay' ) || is_wc_endpoint_url( 'order-received' ) );
+		if ( ! $pay_page && 'hosted' !== $this->gateway()->integration_mode() ) {
 			Plugin::register_checkout_inline_script();
 			if ( wp_script_is( 'vezmopay-checkout-inline', 'registered' ) ) {
 				$handles[] = 'vezmopay-checkout-inline';

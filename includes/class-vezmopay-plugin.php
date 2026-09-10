@@ -115,6 +115,7 @@ final class Plugin {
 		add_action( 'wc_ajax_vezmopay_session', array( $this, 'ajax_session' ) );
 		add_action( 'wc_ajax_vezmopay_confirm', array( $this, 'ajax_confirm' ) );
 		add_action( 'wc_ajax_vezmopay_status', array( $this, 'ajax_status' ) );
+		add_action( 'wc_ajax_vezmopay_failed', array( $this, 'ajax_attempt_failed' ) );
 
 		// Admin: "Test connection" button + Connect-with-VezmoPay callback.
 		add_action( 'wp_ajax_vezmopay_test_connection', array( Connect::class, 'ajax_test_connection' ) );
@@ -271,6 +272,9 @@ final class Plugin {
 				// The charge is watched server-side too, so a message the frame
 				// cannot deliver never leaves the shopper waiting.
 				'statusUrl'   => \WC_AJAX::get_endpoint( 'vezmopay_status' ),
+				// Where the browser reports an attempt it has given up on, so the
+				// order carries a note and the store gets one last API read.
+				'failedUrl'   => \WC_AJAX::get_endpoint( 'vezmopay_failed' ),
 				// Mirrors the gateway's Debug setting: with it on, the checkout
 				// traces the payment to the browser console, so a stuck payment
 				// can be diagnosed from what the shopper's browser saw.
@@ -294,6 +298,11 @@ final class Plugin {
 					// payment cannot be charged again, so the card has to be
 					// re-entered and the shopper should know why.
 					'retryHint'   => __( 'Please re-enter your card details below and try again.', 'vezmopay-woocommerce' ),
+					// The bounded attempt (see ATTEMPT_LIMIT_MS). VezmoPay reports
+					// nothing at all for a declined card, so this covers a decline
+					// as well as a payment that simply never resolved — the wording
+					// must be true of both.
+					'noResult'    => __( 'VezmoPay did not report a result for that payment. Please check your card details and try again — if the payment did go through, your order will be updated automatically.', 'vezmopay-woocommerce' ),
 				),
 			)
 		);
@@ -502,6 +511,62 @@ final class Plugin {
 				'redirect' => $done && 'FAILED' !== $result ? $gateway->get_return_url( $order ) : '',
 			)
 		);
+	}
+
+	/**
+	 * AJAX: the browser is giving up on a payment attempt.
+	 *
+	 * Two jobs, in this order:
+	 *
+	 *   1. Ask the API, not the browser. The reason the browser reports is a
+	 *      guess — VezmoPay reports no terminal state for a declined card (see
+	 *      docs/VEZMOPAY-API-CONTRACT.md), so a timeout cannot tell a decline
+	 *      from a slow capture. If the payment did settle, answer with the
+	 *      redirect and let the shopper through instead of showing a failure.
+	 *   2. Record the attempt on the order. Without this a declined card and an
+	 *      abandoned cart look identical to the merchant: a pending order with
+	 *      no notes at all.
+	 */
+	public function ajax_attempt_failed() {
+		$this->verify_checkout_request( 'attempt-failed' );
+
+		$order_id  = isset( $_POST['order_id'] ) ? absint( $_POST['order_id'] ) : 0;
+		$order_key = isset( $_POST['order_key'] ) ? sanitize_text_field( wp_unslash( $_POST['order_key'] ) ) : '';
+		$order     = $this->get_authorized_order( $order_id, $order_key );
+		$gateway   = $this->gateway();
+
+		if ( ! $order || ! $gateway || $order->get_payment_method() !== self::GATEWAY_ID ) {
+			wp_send_json_error( array( 'message' => __( 'Invalid order.', 'vezmopay-woocommerce' ) ), 400 );
+		}
+
+		// Never a free-text message from the browser: an allow-list of reasons,
+		// each mapped to wording this plugin owns.
+		$reason = isset( $_POST['reason'] ) ? sanitize_key( wp_unslash( $_POST['reason'] ) ) : 'unknown';
+		if ( ! in_array( $reason, array( 'timeout', 'declined', 'cancelled', 'expired', 'status', 'not-ready' ), true ) ) {
+			$reason = 'unknown';
+		}
+
+		$status = $order->is_paid() ? 'CAPTURED' : $gateway->reconcile_order_with_api( $order );
+		if ( is_wp_error( $status ) ) {
+			// Could not check. Say nothing on the order rather than record a
+			// failure that may not have happened.
+			wp_send_json_success( array( 'status' => 'UNKNOWN', 'redirect' => '' ) );
+		}
+
+		// It actually settled while the browser was giving up.
+		if ( in_array( $status, array( 'CAPTURED', 'PENDING', 'REFUNDED' ), true ) ) {
+			$gateway->release_cart();
+			wp_send_json_success(
+				array(
+					'status'   => $status,
+					'redirect' => $gateway->get_return_url( $order ),
+				)
+			);
+		}
+
+		$gateway->note_failed_attempt( $order, $reason, (string) $status );
+
+		wp_send_json_success( array( 'status' => $status, 'redirect' => '' ) );
 	}
 
 	/**
