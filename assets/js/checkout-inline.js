@@ -56,6 +56,13 @@
 	// Long enough for a slow 3-D Secure challenge, short enough that nobody
 	// stares at a spinner: after this the pay page takes over.
 	var POLL_LIMIT_MS = 75 * 1000;
+	// A failure the mounted form cannot recover from: its payment is dead (the
+	// API reported FAILED, or the token expired), so the form has to be replaced.
+	// Every other failure — a declined card above all — leaves the payment
+	// INITIATED and chargeable, so the form STAYS, with the shopper's card
+	// details in it, and the error is shown next to it.
+	var REBUILD_REASONS = [ 'status', 'expired', 'not-ready' ];
+
 	// TODO(platform): remove once a declined payment reports FAILED (or the frame
 	// emits `error` reliably). Until then a decline is indistinguishable from a
 	// slow capture — VezmoPay leaves the payment INITIATED and says nothing — so
@@ -592,14 +599,18 @@
 		var el = root();
 		if ( el ) {
 			el.classList.remove( 'is-ready' );
-			var escape = el.querySelector( '.vezmopay-inline-escape' );
-			if ( escape && escape.parentNode ) {
-				// A stall link from the attempt that just ended offers a payment
-				// the shopper can no longer make.
-				escape.parentNode.removeChild( escape );
-			}
 		}
+		dropStallLink();
 		refreshPayButton();
+	}
+
+	/** A stall link from the attempt that just ended is no longer an offer. */
+	function dropStallLink() {
+		var el = root();
+		var escape = el ? el.querySelector( '.vezmopay-inline-escape' ) : null;
+		if ( escape && escape.parentNode ) {
+			escape.parentNode.removeChild( escape );
+		}
 	}
 
 	/* --------------------------------------------------------------------
@@ -1044,8 +1055,72 @@
 			// the same text in its own notice area.
 			d.reject( text );
 		}
-		reportFailedAttempt( reason || 'unknown', orderId, orderKey );
-		rearm( text );
+		// The store answers with what the API says. If it says this payment is
+		// FAILED, the mounted form cannot be charged again after all — rebuild
+		// then, on the store's word rather than a guess here.
+		var heldFor = mountedFor;
+		reportFailedAttempt( reason || 'unknown', orderId, orderKey, function ( status ) {
+			if ( 'FAILED' === status && mountedFor === heldFor ) {
+				log( 'the store says this payment is FAILED — replacing the form' );
+				rebuildForm( text );
+			}
+		} );
+
+		if ( REBUILD_REASONS.indexOf( reason ) !== -1 ) {
+			rebuildForm( text );
+			return;
+		}
+		holdForRetry( text );
+	}
+
+	/**
+	 * Keep the form exactly as it is and let the shopper try again.
+	 *
+	 * Nothing is unmounted and no new session is fetched: the card details the
+	 * shopper typed are inside the VezmoPay frame, and throwing the frame away to
+	 * mount an identical empty one made them type the card again for no reason.
+	 * The payment behind it is still INITIATED, and process_payment() will hand
+	 * back a marker for that same payment (see can_recharge_bound_payment), so
+	 * pressing Pay charges the form that is already there.
+	 */
+	function holdForRetry( reason ) {
+		dropStallLink();
+		// The frame's own message names the problem but not the remedy ("Your
+		// card was declined."), so it gets the invitation to try again appended.
+		// This plugin's own strings already carry it — appending would say the
+		// same thing twice.
+		var text = reason || params.i18n.failed;
+		if ( ! ownMessage( text ) ) {
+			text += ' ' + params.i18n.tryAgain;
+		}
+		setMessage( text, 'error' );
+		// charging is already null, so this re-enables Pay.
+		refreshPayButton();
+	}
+
+	function ownMessage( text ) {
+		return [
+			params.i18n.failed,
+			params.i18n.noResult,
+			params.i18n.cancelled,
+			params.i18n.expired,
+			params.i18n.unavailable,
+		].indexOf( text ) !== -1;
+	}
+
+	/**
+	 * The mounted form's payment cannot be charged again — replace it, and say so,
+	 * because this is the case where the card really does have to be re-entered.
+	 */
+	function rebuildForm( reason ) {
+		if ( 'hosted' === params.mode ) {
+			return;
+		}
+		pendingNotice = reason ? reason + ' ' + params.i18n.retryHint : '';
+		setMessage( pendingNotice || '', 'error' );
+		dropSession();
+		log( 'this payment cannot be charged again — fetching a fresh session' );
+		ensureSession();
 	}
 
 	/**
@@ -1057,7 +1132,7 @@
 	 * while we were giving up (which a timed-out attempt cannot rule out), the
 	 * shopper is forwarded instead of being shown a failure.
 	 */
-	function reportFailedAttempt( reason, orderId, orderKey ) {
+	function reportFailedAttempt( reason, orderId, orderKey, onStatus ) {
 		if ( ! params.failedUrl || ! orderId || ! orderKey ) {
 			return;
 		}
@@ -1077,9 +1152,16 @@
 				return res.json();
 			} )
 			.then( function ( res ) {
-				if ( res && res.success && res.data && res.data.redirect ) {
+				if ( ! res || ! res.success || ! res.data ) {
+					return;
+				}
+				if ( res.data.redirect ) {
 					log( 'the store found this payment settled after all — forwarding' );
 					window.location.href = res.data.redirect;
+					return;
+				}
+				if ( onStatus ) {
+					onStatus( res.data.status );
 				}
 			} )
 			.catch( function () {
@@ -1087,22 +1169,6 @@
 			} );
 	}
 
-	/**
-	 * Build a payment the shopper can actually retry with, and keep the reason on
-	 * screen while it loads.
-	 */
-	function rearm( reason ) {
-		if ( 'hosted' === params.mode ) {
-			return;
-		}
-		pendingNotice = reason
-			? reason + ' ' + params.i18n.retryHint
-			: '';
-		setMessage( pendingNotice || '', 'error' );
-		dropSession();
-		log( 'the failed payment cannot be reused — fetching a fresh session' );
-		ensureSession();
-	}
 
 	function handleHash() {
 		var marker = parseMarker( window.location.hash );

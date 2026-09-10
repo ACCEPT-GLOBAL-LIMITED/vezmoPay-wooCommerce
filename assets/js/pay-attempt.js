@@ -253,6 +253,16 @@ window.VezmoPayAttempt = function ( params ) {
 	 * @param {string} reason  Allow-listed reason code sent to the store.
 	 * @param {string} message What the shopper reads.
 	 */
+	function ownMessage( text ) {
+		return [
+			params.i18n.failed,
+			params.i18n.noResult,
+			params.i18n.cancelled,
+			params.i18n.expired,
+			params.i18n.error,
+		].indexOf( text ) !== -1;
+	}
+
 	function failAttempt( reason, message ) {
 		if ( settled ) {
 			return;
@@ -261,7 +271,14 @@ window.VezmoPayAttempt = function ( params ) {
 		clearAttemptTimer();
 		awaitingAction = false;
 		setPaying( false );
-		setMessage( message || params.i18n.failed, 'error' );
+		// A message from the frame names the problem but not the remedy ("Your
+		// card was declined."), so it gets the invitation to try again appended;
+		// this plugin's own strings already carry one.
+		var text = message || params.i18n.failed;
+		if ( params.i18n.tryAgain && ownMessage( text ) === false ) {
+			text += ' ' + params.i18n.tryAgain;
+		}
+		setMessage( text, 'error' );
 		report( reason );
 	}
 

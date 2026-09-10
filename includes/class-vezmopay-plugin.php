@@ -294,9 +294,13 @@ final class Plugin {
 					'notReady'    => __( 'The payment form did not finish loading, so your card was not charged. Reload the page and try again, or use the VezmoPay page link below.', 'vezmopay-woocommerce' ),
 					'slow'        => __( 'This is taking longer than usual. Your card has not been charged twice — you can finish the payment on the VezmoPay page below.', 'vezmopay-woocommerce' ),
 					'continueOnVezmo' => __( 'Continue on the VezmoPay page →', 'vezmopay-woocommerce' ),
-					// Shown after a decline, with a NEW payment form: the previous
-					// payment cannot be charged again, so the card has to be
-					// re-entered and the shopper should know why.
+					// Appended to a failure the mounted form CAN be retried from: the
+					// card details are still in it, so this is an invitation to
+					// press Pay again, not to start over.
+					'tryAgain'    => __( 'You can correct your card details and try again.', 'vezmopay-woocommerce' ),
+					// Appended only when the form had to be replaced (the payment
+					// behind it is dead), which is the one case where the card
+					// really does have to be entered again.
 					'retryHint'   => __( 'Please re-enter your card details below and try again.', 'vezmopay-woocommerce' ),
 					// The bounded attempt (see ATTEMPT_LIMIT_MS). VezmoPay reports
 					// nothing at all for a declined card, so this covers a decline

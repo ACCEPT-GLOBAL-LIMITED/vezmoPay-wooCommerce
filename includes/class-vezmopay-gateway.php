@@ -962,8 +962,17 @@ class Gateway extends \WC_Payment_Gateway {
 		// longer matches the order, and with no usable session at all (JS off,
 		// blocked, or the shopper never selected the method) this falls through to
 		// the pay-page flow below — which still works without JavaScript.
+		//
+		// A RETRY takes the second branch. bind_to_order() forgets the session
+		// once it is bound, so a shopper whose card was declined had no session
+		// left and fell through to the pay page — a redirect, and a payment form
+		// they had to fill in again. The payment already on the order is still
+		// chargeable (a declined card leaves it INITIATED), and the shopper's
+		// browser still has that exact form mounted with their details in it, so
+		// the right answer is to hand back the same marker and let them charge it
+		// again where they are.
 		$session = $this->checkout_session();
-		if ( $session->bind_to_order( $order ) ) {
+		if ( $session->bind_to_order( $order ) || $this->can_recharge_bound_payment( $order ) ) {
 			// Keep the cart. Every other route hands the shopper to another page,
 			// so emptying it there is right; here the shopper stays on the
 			// checkout and the charge has not happened yet. Emptying it at this
@@ -1085,6 +1094,75 @@ class Gateway extends \WC_Payment_Gateway {
 		if ( $empty_cart && isset( WC()->cart ) && WC()->cart ) {
 			WC()->cart->empty_cart();
 		}
+	}
+
+	/**
+	 * Whether the payment already bound to this order may be charged again.
+	 *
+	 * This is what makes "try again" work in the payment box after a decline
+	 * without resetting the form: nothing is created and nothing is re-bound —
+	 * the order keeps the payment id it already had — so the browser can drive
+	 * the same mounted form a second time.
+	 *
+	 * Every check bind_to_order() would have made is made here too, and against
+	 * the API rather than the session: the payment must still be INITIATED (a
+	 * captured one must never be charged again), its money must still match the
+	 * order to the cent, its token must not be about to expire, and it must not
+	 * be one a previous pass recorded as failed. Fails CLOSED — a false answer
+	 * costs the pay-page flow, which still works.
+	 *
+	 * @param \WC_Order $order Order.
+	 * @return bool
+	 */
+	private function can_recharge_bound_payment( $order ) {
+		$payment_id = (string) $order->get_meta( '_vezmopay_payment_id' );
+		$token      = (string) $order->get_meta( '_vezmopay_client_token' );
+		$expires    = (int) $order->get_meta( '_vezmopay_token_expires' );
+
+		// No client token means no form is mounted in the browser for it, so
+		// there is nothing to re-charge.
+		if ( '' === $payment_id || '' === $token ) {
+			return false;
+		}
+		if ( $payment_id === (string) $order->get_meta( '_vezmopay_failed_payment_id' ) ) {
+			return false;
+		}
+		if ( $expires <= time() + MINUTE_IN_SECONDS ) {
+			return false;
+		}
+
+		$environment = (string) $order->get_meta( '_vezmopay_environment' );
+		if ( $environment !== $this->environment() ) {
+			return false;
+		}
+
+		$payment = $this->api_client( $environment )->get_payment( $payment_id );
+		if ( is_wp_error( $payment ) ) {
+			$this->logger->error(
+				'Cannot re-charge payment ' . $payment_id . ' for order #' . $order->get_id()
+				. ': could not read its state (' . $payment->get_error_message() . ').'
+			);
+			return false;
+		}
+
+		$status = isset( $payment['status'] ) ? strtoupper( (string) $payment['status'] ) : '';
+		if ( Checkout_Session::BINDABLE_STATUS !== $status ) {
+			$this->logger->debug(
+				'Not re-charging payment ' . $payment_id . ' for order #' . $order->get_id()
+				. ': status is ' . ( '' === $status ? 'unknown' : $status ) . '.'
+			);
+			return false;
+		}
+		if ( ! $this->amounts_agree( $order, $payment ) ) {
+			$this->logger->error(
+				'Not re-charging payment ' . $payment_id . ' for order #' . $order->get_id()
+				. ': its amount or currency no longer matches the order.'
+			);
+			return false;
+		}
+
+		$this->logger->debug( 'Re-charging the payment already on order #' . $order->get_id() . ' (' . $payment_id . ').' );
+		return true;
 	}
 
 	/**
@@ -1516,6 +1594,11 @@ class Gateway extends \WC_Payment_Gateway {
 				'error'      => __( 'Something went wrong. Please try again.', 'vezmopay-woocommerce' ),
 				'review'     => __( 'We received your payment, but this order needs a quick manual review before it is confirmed. Please contact us — do not pay again.', 'vezmopay-woocommerce' ),
 				'cancelled'  => __( 'The payment was cancelled. You can try again.', 'vezmopay-woocommerce' ),
+				// Appended to a message from the payment form, which names the
+				// problem but not the remedy. The form is still mounted with the
+				// shopper's details in it, so this is an invitation to press Pay
+				// again — not to start over.
+				'tryAgain'   => __( 'You can correct your card details and try again.', 'vezmopay-woocommerce' ),
 				'verifying'  => __( 'Completing an extra verification step with your bank…', 'vezmopay-woocommerce' ),
 				// The bounded attempt (see ATTEMPT_LIMIT_MS in pay-attempt.js).
 				// VezmoPay reports nothing at all for a declined card, so this

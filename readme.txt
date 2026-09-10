@@ -4,7 +4,7 @@ Tags: payments, payment gateway, credit card, ach, woocommerce
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.3.5
+Stable tag: 0.3.6
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -112,6 +112,10 @@ This plugin connects your store to the VezmoPay payment platform, operated by Ve
 VezmoPay is operated by Vezmo Technology, Inc.: [https://vezmo.com](https://vezmo.com) — see the site for terms of service and privacy policy.
 
 == Changelog ==
+
+= 0.3.6 =
+
+* A declined card no longer clears the payment form. 0.3.5 replaced it with a fresh one, so the customer had to type their card number, expiry and CVC again to change one digit. The form now stays exactly as it is, with everything they entered still in it, the decline is shown next to it, and pressing Pay charges the same payment again. The form is only replaced when the payment behind it genuinely cannot be charged again (VezmoPay reported it as failed, or the payment session expired) — and then the message says so.
 
 = 0.3.5 =
 
