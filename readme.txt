@@ -4,7 +4,7 @@ Tags: payments, payment gateway, credit card, ach, woocommerce
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.3.3
+Stable tag: 0.3.4
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -112,6 +112,14 @@ This plugin connects your store to the VezmoPay payment platform, operated by Ve
 VezmoPay is operated by Vezmo Technology, Inc.: [https://vezmo.com](https://vezmo.com) — see the site for terms of service and privacy policy.
 
 == Changelog ==
+
+= 0.3.4 =
+
+* Fixed a declined card being hidden instead of shown. Twenty seconds after a decline the reason was replaced by "this is taking longer than usual" and a link to the VezmoPay page — so the customer never saw why their card was refused, and the link took them to another payment form with no explanation.
+* Fixed being unable to retry after a decline. The cart was emptied when the order was created, before the card was charged, so placing the order again answered "your session has expired" or "your cart is empty". The declined payment could not be charged again either, so the checkout redirected to a second payment form. A decline now shows the reason next to the card fields, loads a fresh payment form in place, and the retry completes on the checkout page without leaving it.
+* If the customer does end up on the pay page after a failed attempt, that page now says "Your payment was not completed" and offers a new payment, instead of silently showing the payment form again.
+* Fixed a payment error appearing on the order-received page of an order that was paid. WooCommerce shows "your order cannot be processed as the originating bank/merchant has declined your transaction" for any failed order, and the plugin only re-checked orders still awaiting payment — so an order marked failed by an earlier decline kept that message after the retry succeeded. The payment is now verified before the page is built. An order that really did fail still shows the message.
+* A 3-D Secure challenge is no longer sent repeated charge requests while the customer is completing it.
 
 = 0.3.3 =
 
