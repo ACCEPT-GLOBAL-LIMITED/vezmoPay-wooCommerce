@@ -56,6 +56,9 @@
 	var loading = false;
 	var ready = false;
 	var charging = null;     // { orderId, orderKey } while a charge is running
+	// Set when a charge fails: the message to put back on screen once the
+	// replacement form has mounted, so the reason survives the re-mount.
+	var pendingNotice = '';
 
 	// Where to mount. The classic checkout renders the markup server-side in the
 	// payment box; the Blocks checkout hands us its own element instead.
@@ -453,6 +456,9 @@
 			noteProcessing();
 		} else if ( 'vezmo:secure-payment:requires_action' === data.type ) {
 			// Extra verification (3-D Secure) is happening inside the frame.
+			// It is also proof the form took the charge, so stop re-sending the
+			// submit: another one would land on a form already mid-verification.
+			noteProcessing();
 			setMessage( params.i18n.verifying, 'info' );
 			if ( charging ) {
 				charging.awaitingAction = true;
@@ -480,6 +486,13 @@
 				session = res.data;
 				log( 'session ready', { amount: session.amount, currency: session.currency, hasSdk: !! session.sdkUrl, url: session.url } );
 				mount();
+				refreshPayButton();
+				// A session fetched to replace a failed one: the shopper is looking
+				// at a blank form, so restate why.
+				if ( pendingNotice ) {
+					setMessage( pendingNotice, 'error' );
+					pendingNotice = '';
+				}
 			} )
 			.catch( function () {
 				loading = false;
@@ -493,6 +506,18 @@
 	 * so drop it and build a new session rather than take the wrong money.
 	 */
 	function resetSession() {
+		dropSession();
+		setMessage( '' );
+		if ( selected() ) {
+			ensureSession();
+		}
+	}
+
+	/**
+	 * Throw away the mounted form and the session behind it, without touching the
+	 * message area — the caller decides what the shopper should be reading.
+	 */
+	function dropSession() {
 		session = null;
 		mountedFor = null;
 		vezmo = null;
@@ -505,11 +530,14 @@
 		var el = root();
 		if ( el ) {
 			el.classList.remove( 'is-ready' );
+			var escape = el.querySelector( '.vezmopay-inline-escape' );
+			if ( escape && escape.parentNode ) {
+				// A stall link from the attempt that just ended offers a payment
+				// the shopper can no longer make.
+				escape.parentNode.removeChild( escape );
+			}
 		}
-		setMessage( '' );
-		if ( selected() ) {
-			ensureSession();
-		}
+		refreshPayButton();
 	}
 
 	/* --------------------------------------------------------------------
@@ -638,6 +666,14 @@
 	 * top-level, with no frame and no cross-window messaging in the path.
 	 */
 	function showStall() {
+		// Only while a charge is actually running. This used to be reachable after
+		// a decline (failCharge left the stall timer armed), and it then replaced
+		// "your card was declined" with "this is taking longer than usual" and
+		// offered a link to the VezmoPay page — so the shopper lost the reason and
+		// was handed a fresh payment form instead.
+		if ( ! charging ) {
+			return;
+		}
 		var scope = root();
 		if ( ! scope || scope.querySelector( '.vezmopay-inline-escape' ) || ! session ) {
 			return;
@@ -664,11 +700,26 @@
 		scope.appendChild( p );
 	}
 
+	/**
+	 * Every route to the pay page from here is a route taken because the payment
+	 * did NOT complete in the payment box. receipt_page() reads this flag and
+	 * says so — without it the shopper simply arrived at another payment form
+	 * with no explanation of what happened to the first one.
+	 */
+	function withRetryFlag( url ) {
+		if ( ! url || url.indexOf( 'vezmopay_retry=' ) !== -1 ) {
+			return url;
+		}
+		return url + ( url.indexOf( '?' ) === -1 ? '?' : '&' ) + 'vezmopay_retry=1';
+	}
+
 	function payPageUrl() {
 		if ( charging && charging.payUrl ) {
-			return charging.payUrl;
+			return withRetryFlag( charging.payUrl );
 		}
-		return window.location.origin + '/checkout/order-pay/' + charging.orderId + '/?key=' + encodeURIComponent( charging.orderKey );
+		return withRetryFlag(
+			window.location.origin + '/checkout/order-pay/' + charging.orderId + '/?key=' + encodeURIComponent( charging.orderKey )
+		);
 	}
 
 	function returnUrl() {
@@ -864,25 +915,62 @@
 			} );
 	}
 
-	/** The charge failed: unblock the form so the shopper can retry in place. */
+	/**
+	 * The charge failed — a declined card, a cancelled or expired payment, or the
+	 * store's own poll reading FAILED from the API.
+	 *
+	 * Three things have to happen, and two of them used to be missing:
+	 *
+	 *   1. Stop the timers. They were left running, so twenty seconds later the
+	 *      stall handler replaced the decline with "this is taking longer than
+	 *      usual" and a link to the VezmoPay page — the shopper lost the reason
+	 *      and was shown a fresh payment form instead.
+	 *   2. Say what happened, in the payment box, on BOTH checkouts. The Blocks
+	 *      notice sits above the payment method and is dismissible; the message
+	 *      the shopper needs belongs next to the form they must correct.
+	 *   3. Replace the form. The payment behind it is FAILED at VezmoPay and
+	 *      process_payment() has already unbound it from the order, so placing the
+	 *      order again could not charge it — it fell through to the pay page, i.e.
+	 *      a redirect to yet another payment form. A new session mounted here is
+	 *      what makes "try again" work where the shopper is standing.
+	 */
 	function failCharge( message ) {
 		if ( ! charging ) {
 			return;
 		}
+		var text = message || params.i18n.failed;
 		var d = charging.deferred;
+		stopPolling();
 		charging = null;
 		refreshPayButton();
-		if ( d ) {
-			// The caller (Blocks) surfaces the failure in its own notice area —
-			// showing it here too would say the same thing twice.
-			d.reject( message || params.i18n.failed );
-			return;
-		}
-		setMessage( message || params.i18n.failed, 'error' );
+		setMessage( text, 'error' );
 		if ( $ && $( 'form.checkout' ).length ) {
 			$( 'form.checkout' ).removeClass( 'processing' ).unblock();
 			$( document.body ).trigger( 'checkout_error' );
 		}
+		if ( d ) {
+			// Blocks needs the rejection to leave its processing state; it shows
+			// the same text in its own notice area.
+			d.reject( text );
+		}
+		rearm( text );
+	}
+
+	/**
+	 * Build a payment the shopper can actually retry with, and keep the reason on
+	 * screen while it loads.
+	 */
+	function rearm( reason ) {
+		if ( 'hosted' === params.mode ) {
+			return;
+		}
+		pendingNotice = reason
+			? reason + ' ' + params.i18n.retryHint
+			: '';
+		setMessage( pendingNotice || '', 'error' );
+		dropSession();
+		log( 'the failed payment cannot be reused — fetching a fresh session' );
+		ensureSession();
 	}
 
 	function handleHash() {

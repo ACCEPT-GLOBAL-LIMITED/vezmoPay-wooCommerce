@@ -122,6 +122,10 @@ final class Plugin {
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_admin_styles' ) );
 		add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_checkout_scripts' ) );
 
+		// The order-received page decides what to show from the order's status, so
+		// the API has to be read before it renders — not from inside the template.
+		add_action( 'template_redirect', array( $this, 'reconcile_order_received' ) );
+
 		// Admin: live VezmoPay account settings (payment methods, 3-D Secure).
 		add_action( 'wp_ajax_vezmopay_account_get', array( $this, 'ajax_account_get' ) );
 		add_action( 'wp_ajax_vezmopay_account_update', array( $this, 'ajax_account_update' ) );
@@ -286,9 +290,29 @@ final class Plugin {
 					'notReady'    => __( 'The payment form did not finish loading, so your card was not charged. Reload the page and try again, or use the VezmoPay page link below.', 'vezmopay-woocommerce' ),
 					'slow'        => __( 'This is taking longer than usual. Your card has not been charged twice — you can finish the payment on the VezmoPay page below.', 'vezmopay-woocommerce' ),
 					'continueOnVezmo' => __( 'Continue on the VezmoPay page →', 'vezmopay-woocommerce' ),
+					// Shown after a decline, with a NEW payment form: the previous
+					// payment cannot be charged again, so the card has to be
+					// re-entered and the shopper should know why.
+					'retryHint'   => __( 'Please re-enter your card details below and try again.', 'vezmopay-woocommerce' ),
 				),
 			)
 		);
+	}
+
+	/**
+	 * Verify an unsettled VezmoPay order as the order-received page loads.
+	 *
+	 * Resolving the gateway is safe here: template_redirect is long past the
+	 * point where instantiating gateways could freeze the list for the request.
+	 */
+	public function reconcile_order_received() {
+		if ( ! function_exists( 'is_order_received_page' ) || ! is_order_received_page() ) {
+			return;
+		}
+		$gateway = $this->gateway();
+		if ( $gateway ) {
+			$gateway->reconcile_order_received();
+		}
 	}
 
 	/**
@@ -420,6 +444,11 @@ final class Plugin {
 		// Only forward the customer once the API confirms a settled/settling state;
 		// otherwise the page keeps polling.
 		$settled = in_array( $result, array( 'CAPTURED', 'PENDING', 'REFUNDED' ), true );
+		if ( $settled ) {
+			// The inline flow keeps the cart through the charge so a decline stays
+			// retryable; now that the money has moved, it is spent.
+			$gateway->release_cart();
+		}
 		wp_send_json_success(
 			array(
 				'status'   => $result,
@@ -445,6 +474,7 @@ final class Plugin {
 
 		// Already finalized (e.g. by webhook)? Send the customer on.
 		if ( $order->is_paid() || $order->has_status( 'on-hold' ) ) {
+			$gateway->release_cart();
 			wp_send_json_success(
 				array(
 					'status'   => $order->is_paid() ? 'CAPTURED' : 'PENDING',
@@ -463,6 +493,9 @@ final class Plugin {
 		);
 
 		$done = in_array( $result, array( 'CAPTURED', 'PENDING', 'FAILED' ), true );
+		if ( $done && 'FAILED' !== $result ) {
+			$gateway->release_cart();
+		}
 		wp_send_json_success(
 			array(
 				'status'   => $result,

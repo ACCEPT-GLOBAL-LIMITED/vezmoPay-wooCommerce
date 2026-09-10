@@ -38,6 +38,13 @@ class Gateway extends \WC_Payment_Gateway {
 	private $logger;
 
 	/**
+	 * Orders already read from the API this request, keyed by id.
+	 *
+	 * @var array<int,bool>
+	 */
+	private $reconciled = array();
+
+	/**
 	 * Constructor.
 	 */
 	public function __construct() {
@@ -957,7 +964,15 @@ class Gateway extends \WC_Payment_Gateway {
 		// the pay-page flow below — which still works without JavaScript.
 		$session = $this->checkout_session();
 		if ( $session->bind_to_order( $order ) ) {
-			$this->await_payment( $order, __( 'Awaiting VezmoPay payment on the checkout page.', 'vezmopay-woocommerce' ) );
+			// Keep the cart. Every other route hands the shopper to another page,
+			// so emptying it there is right; here the shopper stays on the
+			// checkout and the charge has not happened yet. Emptying it at this
+			// point meant a declined card left them on the checkout with an empty
+			// cart, and pressing Place order again answered "Cannot place an
+			// order, your cart is empty" — a decline was unrecoverable. The cart
+			// is emptied when the payment actually settles (see the confirm and
+			// status endpoints) and again by the order-received page.
+			$this->await_payment( $order, __( 'Awaiting VezmoPay payment on the checkout page.', 'vezmopay-woocommerce' ), false );
 			$order->update_meta_data( '_vezmopay_effective_mode', $this->integration_mode() . '-inline' );
 			$order->save_meta_data();
 
@@ -1052,10 +1067,13 @@ class Gateway extends \WC_Payment_Gateway {
 	 * Mark the order as awaiting payment and tidy up cart/stock. Shared by both
 	 * hand-off routes so on-site and redirect payments leave identical state.
 	 *
-	 * @param \WC_Order $order Order.
-	 * @param string    $note  Status note.
+	 * @param \WC_Order $order      Order.
+	 * @param string    $note       Status note.
+	 * @param bool      $empty_cart Whether to empty the cart now. False for the
+	 *                              on-page (inline) charge, which has not taken
+	 *                              the money yet and must stay retryable.
 	 */
-	private function await_payment( $order, $note ) {
+	private function await_payment( $order, $note, $empty_cart = true ) {
 		if ( ! $order->has_status( array( 'pending', 'on-hold' ) ) ) {
 			$order->update_status( 'pending', $note );
 		}
@@ -1064,7 +1082,21 @@ class Gateway extends \WC_Payment_Gateway {
 		if ( function_exists( 'wc_maybe_reduce_stock_levels' ) ) {
 			wc_maybe_reduce_stock_levels( $order->get_id() );
 		}
-		if ( isset( WC()->cart ) && WC()->cart ) {
+		if ( $empty_cart && isset( WC()->cart ) && WC()->cart ) {
+			WC()->cart->empty_cart();
+		}
+	}
+
+	/**
+	 * The payment settled, so the cart the order was built from is spent.
+	 *
+	 * The order-received page empties the cart on its own; this covers the inline
+	 * flow, which keeps the cart through the charge so a decline can be retried —
+	 * without it a shopper who paid and then reopened the checkout instead of the
+	 * success page would find the same items still there.
+	 */
+	public function release_cart() {
+		if ( function_exists( 'WC' ) && isset( WC()->cart ) && WC()->cart && ! WC()->cart->is_empty() ) {
 			WC()->cart->empty_cart();
 		}
 	}
@@ -1263,19 +1295,38 @@ class Gateway extends \WC_Payment_Gateway {
 	 * attempt counter that is bumped after a failed/expired attempt (the API rejects
 	 * reuse of a key with a different body and refuses checkout on terminal payments).
 	 *
-	 * @param \WC_Order $order Order.
+	 * @param \WC_Order $order     Order.
+	 * @param bool      $force_new Mint a new payment even if the stored token is
+	 *                             still live (the last attempt failed).
 	 * @return true|\WP_Error
 	 */
-	public function ensure_secure_payment( $order ) {
+	public function ensure_secure_payment( $order, $force_new = false ) {
 		$expires = (int) $order->get_meta( '_vezmopay_token_expires' );
 		$token   = (string) $order->get_meta( '_vezmopay_client_token' );
 
+		// A payment the API has reported as FAILED cannot be paid. Reusing its
+		// still-unexpired token re-mounted the dead payment, so "try again" on the
+		// pay page — and the inline retry that falls through to it — could only
+		// fail again. Recorded by apply_payment_state(), so this costs no API read.
+		$failed = (string) $order->get_meta( '_vezmopay_failed_payment_id' );
+		if ( '' !== $failed && $failed === (string) $order->get_meta( '_vezmopay_payment_id' ) ) {
+			$force_new = true;
+		}
+
 		// Reuse a live token so page refreshes don't mint new payments.
-		if ( '' !== $token && $expires > time() + MINUTE_IN_SECONDS ) {
+		if ( ! $force_new && '' !== $token && $expires > time() + MINUTE_IN_SECONDS ) {
 			return true;
 		}
 
 		$attempt = max( 1, (int) $order->get_meta( '_vezmopay_attempt' ) );
+
+		// Replacing a payment means a new idempotency key as well, or the API
+		// replays the one we are trying to get away from.
+		if ( $force_new && '' !== $token ) {
+			++$attempt;
+			$order->update_meta_data( '_vezmopay_attempt', $attempt );
+			$order->save_meta_data();
+		}
 
 		$payload = array(
 			'title'      => $this->payment_title( $order ),
@@ -1372,8 +1423,10 @@ class Gateway extends \WC_Payment_Gateway {
 		// back to VezmoPay. phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		$came_back_failed = isset( $_GET['vezmopay_retry'] ) || ( isset( $_GET['status'] ) && 'failed' === sanitize_key( wp_unslash( $_GET['status'] ) ) );
 
-		// Refresh the session if the token expired while the customer idled.
-		$ready = $this->ensure_secure_payment( $order );
+		// Refresh the session if the token expired while the customer idled — and
+		// replace it outright when the shopper is here because the last attempt
+		// failed, rather than showing them the payment that just declined.
+		$ready = $this->ensure_secure_payment( $order, $came_back_failed );
 		if ( is_wp_error( $ready ) ) {
 			echo '<div class="woocommerce-error">' . esc_html( $this->customer_facing_error( $ready ) ) . '</div>';
 			return;
@@ -1650,11 +1703,9 @@ class Gateway extends \WC_Payment_Gateway {
 			return;
 		}
 
-		// Shopper just returned from VezmoPay's successUrl — verify against the
-		// API now so the order shows as paid immediately, instead of waiting for
-		// the webhook or the reconciliation cron.
-		if ( $order->has_status( 'pending' ) && ( '' !== (string) $order->get_meta( '_vezmopay_payment_id' ) || '' !== (string) $order->get_meta( '_vezmopay_paylink_code' ) ) ) {
-			$this->reconcile_order_with_api( $order );
+		// Normally already done by reconcile_order_received() before the template
+		// rendered; this covers an order-received page reached some other way.
+		if ( $this->reconcile_if_unsettled( $order ) ) {
 			$order = wc_get_order( $order_id );
 		}
 
@@ -1664,6 +1715,70 @@ class Gateway extends \WC_Payment_Gateway {
 		if ( $order->has_status( array( 'pending', 'on-hold' ) ) ) {
 			echo '<p>' . esc_html__( 'Your VezmoPay payment is being confirmed. You will receive an email as soon as it completes.', 'vezmopay-woocommerce' ) . '</p>';
 		}
+	}
+
+	/**
+	 * Verify an unsettled order against the API, at most once per request.
+	 *
+	 * FAILED orders are included deliberately. WooCommerce's thank-you template
+	 * renders "your order cannot be processed as the originating bank/merchant has
+	 * declined your transaction" for any order in `failed` — so a shopper whose
+	 * first card declined and whose second attempt was captured saw that error on
+	 * the success page of a paid order, because only `pending` was ever
+	 * re-checked here. Reading the API is the same source of truth used
+	 * everywhere else, and mark_order_paid() still only completes an order whose
+	 * money the API confirms to the cent (see amounts_agree()).
+	 *
+	 * @param \WC_Order $order Order.
+	 * @return bool Whether a reconcile ran (so the caller re-reads the order).
+	 */
+	public function reconcile_if_unsettled( $order ) {
+		if ( ! $order || $order->is_paid() || $order->get_payment_method() !== $this->id ) {
+			return false;
+		}
+		if ( ! $order->has_status( array( 'pending', 'failed' ) ) ) {
+			return false;
+		}
+		if ( '' === (string) $order->get_meta( '_vezmopay_payment_id' ) && '' === (string) $order->get_meta( '_vezmopay_paylink_code' ) ) {
+			return false;
+		}
+		$id = $order->get_id();
+		if ( isset( $this->reconciled[ $id ] ) ) {
+			return false;
+		}
+		$this->reconciled[ $id ] = true;
+		$this->reconcile_order_with_api( $order );
+		return true;
+	}
+
+	/**
+	 * Settle the order BEFORE the order-received page is rendered.
+	 *
+	 * woocommerce_thankyou_{id} fires from inside the thank-you template, after it
+	 * has already branched on the order's status — and on an object it read before
+	 * our hook ran, so reconciling there cannot change what the shopper sees. This
+	 * runs at template_redirect, so the page is built from the settled state.
+	 */
+	public function reconcile_order_received() {
+		if ( ! function_exists( 'is_order_received_page' ) || ! is_order_received_page() ) {
+			return;
+		}
+
+		global $wp;
+		$order_id = isset( $wp->query_vars['order-received'] ) ? absint( $wp->query_vars['order-received'] ) : 0;
+		if ( ! $order_id ) {
+			return;
+		}
+
+		// The same ownership check WooCommerce makes before it renders any of the
+		// order's details on this page. phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only, key-authenticated.
+		$key   = isset( $_GET['key'] ) ? wc_clean( wp_unslash( $_GET['key'] ) ) : '';
+		$order = wc_get_order( $order_id );
+		if ( ! $order || '' === $key || ! hash_equals( $order->get_order_key(), $key ) ) {
+			return;
+		}
+
+		$this->reconcile_if_unsettled( $order );
 	}
 
 	/* ---------------------------------------------------------------------
@@ -1797,6 +1912,13 @@ class Gateway extends \WC_Payment_Gateway {
 				return 'PENDING';
 
 			case 'FAILED':
+				// Remember WHICH payment failed, so nothing re-offers it: the pay
+				// page reuses an unexpired token, and the checkout falls back to
+				// the pay page. See ensure_secure_payment().
+				if ( '' !== $payment_id ) {
+					$order->update_meta_data( '_vezmopay_failed_payment_id', $payment_id );
+					$order->save_meta_data();
+				}
 				if ( ! $order->has_status( 'failed' ) && ! $order->is_paid() ) {
 					$order->update_status( 'failed', __( 'VezmoPay reported the payment as failed.', 'vezmopay-woocommerce' ) );
 				}
