@@ -45,6 +45,13 @@ class Gateway extends \WC_Payment_Gateway {
 	private $reconciled = array();
 
 	/**
+	 * Re-entrancy guard for get_form_fields().
+	 *
+	 * @var bool
+	 */
+	private $building_form_fields = false;
+
+	/**
 	 * Constructor.
 	 */
 	public function __construct() {
@@ -641,9 +648,28 @@ class Gateway extends \WC_Payment_Gateway {
 	 */
 	public function get_form_fields() {
 		$fields = parent::get_form_fields();
-		if ( isset( $fields['force_hosted'] ) && ! $this->show_force_hosted() ) {
-			unset( $fields['force_hosted'] );
+
+		// Deciding whether to hide a field reads a SETTING, and on a store that has
+		// never saved this gateway WC_Settings_API::init_settings() calls
+		// get_form_fields() to build its defaults — before $this->settings exists.
+		// Reading a setting from here then re-enters init_settings(), which calls
+		// get_form_fields() again: unbounded recursion that exhausts PHP's memory
+		// limit on the FIRST page load after activation (and on any saved store
+		// whose stored array predates the integration_mode key). Serve the
+		// unfiltered set to that inner call — it only needs keys and defaults.
+		if ( $this->building_form_fields ) {
+			return $fields;
 		}
+
+		$this->building_form_fields = true;
+		try {
+			if ( isset( $fields['force_hosted'] ) && ! $this->show_force_hosted() ) {
+				unset( $fields['force_hosted'] );
+			}
+		} finally {
+			$this->building_form_fields = false;
+		}
+
 		return $fields;
 	}
 
