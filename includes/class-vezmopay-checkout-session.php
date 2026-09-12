@@ -182,6 +182,20 @@ class Checkout_Session {
 			'ttlMinutes' => Gateway::TOKEN_TTL_MINUTES,
 		);
 
+		// The merchant's label for this store, so their VezmoPay transactions name
+		// the site the money came from. Omitted when unset: the API then falls back
+		// to the session title above, which already carries the site name.
+		//
+		// Deliberately NOT part of creation_key(): the key is a random per-creation
+		// UUID reused only to re-send a request that failed in transit, and the API
+		// compares amount/currency/environment/title/description/dueDate on a reuse.
+		// A label edited between a transport failure and its retry is a cosmetic
+		// difference and must not turn the retry into an error.
+		$descriptor = $this->gateway->descriptor();
+		if ( '' !== $descriptor ) {
+			$payload['descriptor'] = $descriptor;
+		}
+
 		$key  = $this->creation_key( $amount, $currency, $environment );
 		$data = $this->gateway->api_client( $environment )->create_secure_payment( $payload, $key );
 		if ( is_wp_error( $data ) ) {

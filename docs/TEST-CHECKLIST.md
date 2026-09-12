@@ -44,6 +44,11 @@ no improvement at all, because the code that was fixed was not the code that ran
 - [ ] Environment = Test → settings page shows the yellow **TEST mode** banner; switch to Live (with live keys) → blue LIVE banner.
 - [ ] Define `VEZMOPAY_TEST_API_KEY` / `VEZMOPAY_TEST_API_SECRET` in `wp-config.php` with blank settings fields → Test connection still succeeds (constants win).
 - [ ] "Settings" action link on the Plugins screen goes to the gateway settings section.
+- [ ] **Transaction label** field renders blank on a fresh install, with the site name as its placeholder.
+- [ ] Leave it blank → pay → the VezmoPay transaction's **Origin** reads the site name from the session title (e.g. "xyz.com — checkout").
+- [ ] Set it to "xyz.com storefront" → pay → the transaction's **Origin** reads "xyz.com storefront"; the customer-facing checkout is unchanged and never shows it.
+- [ ] Paste a 100-character label → it is stored, and the session is created without an API error (the plugin caps the sent value at 64 characters).
+- [ ] Change the label, then pay from a cart that already had a session open → the NEW label appears once a fresh session is created (an in-flight session keeps the label it was created with).
 
 ## 2. Element mode — classic checkout
 

@@ -59,6 +59,7 @@ Request body:
 | `currency` | no | ≤8 chars, default `USD` |
 | `description` | no | ≤2000 |
 | `client` | no | `{ name*, email*, country*, postalCode*, phone?, company?, line1?, line2?, city?, state? }` — country and postalCode became REQUIRED (processor verification) when the object is sent (contract change observed 2026-07-22) |
+| `descriptor` | no | ≤64 chars. Merchant-visible label for the integration that created the session — shown on the VezmoPay transaction as **Origin**. Never sent to the processor, never shown to the customer. Omitted ⇒ the transaction falls back to `title`. NOT compared on idempotency-key reuse, so editing it between a transport failure and its retry is not a mismatch |
 | `ttlMinutes` | no | 5–1440, default 30 |
 | `iframe` | no | `{ width?, height? }` |
 

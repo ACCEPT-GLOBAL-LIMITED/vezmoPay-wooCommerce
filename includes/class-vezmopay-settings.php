@@ -61,6 +61,18 @@ class Settings {
 				'default'     => __( 'Pay securely by card or US bank account via VezmoPay.', 'vezmopay-woocommerce' ),
 				'desc_tip'    => true,
 			),
+			'descriptor'          => array(
+				'title'             => __( 'Transaction label', 'vezmopay-woocommerce' ),
+				'type'              => 'safe_text',
+				'description'       => __(
+					'Shown on your VezmoPay transactions so you can tell which of your sites a payment came from — useful when one VezmoPay account takes payments from several stores. Never shown to customers and never sent to the card networks. Leave blank to fall back to your site name.',
+					'vezmopay-woocommerce'
+				),
+				'default'           => '',
+				'placeholder'       => wp_specialchars_decode( get_bloginfo( 'name' ), ENT_QUOTES ),
+				'custom_attributes' => array( 'maxlength' => 64 ),
+				'desc_tip'          => true,
+			),
 			'integration_mode'    => array(
 				'title'       => __( 'Integration mode', 'vezmopay-woocommerce' ),
 				'type'        => 'select',
