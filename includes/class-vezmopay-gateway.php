@@ -195,6 +195,25 @@ class Gateway extends \WC_Payment_Gateway {
 	}
 
 	/**
+	 * The merchant's own label for this store, sent with every payment session so
+	 * their VezmoPay transactions say WHICH site the money came from. Empty when
+	 * unset — the API then falls back to the session title, which already carries
+	 * the site name, so a blank setting is never worse than no setting.
+	 *
+	 * Capped to the 64 characters the API accepts, so an over-long label is
+	 * shortened here rather than failing the session-create request.
+	 *
+	 * @return string Label, or '' when the merchant set none.
+	 */
+	public function descriptor() {
+		$value = trim( (string) $this->get_option( 'descriptor', '' ) );
+		if ( '' === $value ) {
+			return '';
+		}
+		return function_exists( 'mb_substr' ) ? mb_substr( $value, 0, 64 ) : substr( $value, 0, 64 );
+	}
+
+	/**
 	 * Whether the gateway runs in test mode.
 	 *
 	 * @return bool
