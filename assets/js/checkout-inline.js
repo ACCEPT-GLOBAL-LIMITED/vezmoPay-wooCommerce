@@ -619,6 +619,9 @@
 				window.clearTimeout( timer );
 			}
 			timer = window.setTimeout( pushCheckoutReady, 250 );
+			// Same events, a slower beat of its own: readiness is a local read,
+			// this one is a request to the store.
+			scheduleBillingSync();
 		};
 
 		document.addEventListener( 'input', schedule, true );
@@ -631,6 +634,167 @@
 			window.wp.data.subscribe( schedule );
 		}
 		schedule();
+	}
+
+	/* ---------------------------------------------------------------------
+	 * Billing details: attaching the customer to the session
+	 * ------------------------------------------------------------------- */
+
+	/**
+	 * The session is created for the CART — before the shopper has typed a
+	 * billing email — so it starts with no customer on it. Card payments do not
+	 * care. A bank payment does: the ACH debit mandate REQUIRES the payer's
+	 * email, and without one the embed refuses the payment outright.
+	 *
+	 * So the billing fields go up to the store as they are filled, and it
+	 * attaches them to the session the form is already mounted on. Nothing is
+	 * remounted and nothing the shopper typed is thrown away — the embed re-reads
+	 * the customer when it mints its payment intent.
+	 */
+
+	// Fingerprint of the details we last sent, so a checkout re-render or an
+	// edit to an unrelated field does not re-post what the store already has.
+	var sentBilling = '';
+	var billingTimer = null;
+	// Long enough that typing an email address is one request rather than thirty.
+	var BILLING_DEBOUNCE_MS = 900;
+	// What the API demands on a client object. A partial one is refused, so an
+	// incomplete checkout is skipped rather than sent.
+	var BILLING_REQUIRED = [ 'name', 'email', 'country', 'postalCode' ];
+
+	function fieldValue( id ) {
+		var el = document.getElementById( id );
+		return el ? String( el.value || '' ).trim() : '';
+	}
+
+	/** The CLASSIC checkout's billing fields, or null when there is no form. */
+	function classicBilling() {
+		if ( ! document.querySelector( 'form.checkout' ) ) {
+			return null;
+		}
+		return {
+			name: ( fieldValue( 'billing_first_name' ) + ' ' + fieldValue( 'billing_last_name' ) ).trim(),
+			email: fieldValue( 'billing_email' ),
+			phone: fieldValue( 'billing_phone' ),
+			company: fieldValue( 'billing_company' ),
+			country: fieldValue( 'billing_country' ),
+			line1: fieldValue( 'billing_address_1' ),
+			line2: fieldValue( 'billing_address_2' ),
+			city: fieldValue( 'billing_city' ),
+			state: fieldValue( 'billing_state' ),
+			postalCode: fieldValue( 'billing_postcode' ),
+		};
+	}
+
+	/**
+	 * The BLOCKS checkout's billing address, or null when its store is absent.
+	 *
+	 * Blocks owns its fields in React, so there is no markup to read — the cart
+	 * store is the only honest source, exactly as with readiness above.
+	 */
+	function blocksBilling() {
+		var data = window.wp && window.wp.data;
+		if ( ! data || typeof data.select !== 'function' ) {
+			return null;
+		}
+		try {
+			var store = data.select( 'wc/store/cart' );
+			if ( ! store || typeof store.getCustomerData !== 'function' ) {
+				return null;
+			}
+			var address = ( store.getCustomerData() || {} ).billingAddress || {};
+			var str = function ( value ) {
+				return String( value || '' ).trim();
+			};
+			return {
+				name: ( str( address.first_name ) + ' ' + str( address.last_name ) ).trim(),
+				email: str( address.email ),
+				phone: str( address.phone ),
+				company: str( address.company ),
+				country: str( address.country ),
+				line1: str( address.address_1 ),
+				line2: str( address.address_2 ),
+				city: str( address.city ),
+				state: str( address.state ),
+				postalCode: str( address.postcode ),
+			};
+		} catch ( e ) {
+			return null;
+		}
+	}
+
+	/** Send the billing details up, once they are complete and have changed. */
+	function syncBilling() {
+		// No session is nothing to attach to; a charge in flight is already past
+		// the point where this could help.
+		// `selected()` reads the CLASSIC radio, which the Blocks checkout does not
+		// render — there, our form being mounted into a host element IS the
+		// selection, and Blocks clears that host when another gateway is picked.
+		var chosen = hostEl ? true : selected();
+		if ( ! params.clientUrl || ! session || charging || ! chosen ) {
+			return;
+		}
+
+		var billing = classicBilling();
+		if ( null === billing ) {
+			billing = blocksBilling();
+		}
+		if ( ! billing ) {
+			return;
+		}
+		for ( var i = 0; i < BILLING_REQUIRED.length; i++ ) {
+			if ( ! billing[ BILLING_REQUIRED[ i ] ] ) {
+				// Still being filled in. The next edit tries again.
+				return;
+			}
+		}
+
+		var fingerprint = session.clientToken + '|' + JSON.stringify( billing );
+		if ( fingerprint === sentBilling ) {
+			return;
+		}
+		// Claim it BEFORE the request, or the next keystroke sends a duplicate
+		// while this one is still in flight. Released again on failure.
+		sentBilling = fingerprint;
+
+		var body = new URLSearchParams();
+		body.append( 'nonce', params.nonce );
+		Object.keys( billing ).forEach( function ( key ) {
+			body.append( key, billing[ key ] );
+		} );
+
+		window
+			.fetch( params.clientUrl, {
+				method: 'POST',
+				credentials: 'same-origin',
+				headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+				body: body.toString(),
+			} )
+			.then( function ( res ) {
+				return res.json();
+			} )
+			.then( function ( res ) {
+				if ( res && res.success ) {
+					log( 'billing details attached to the payment session' );
+					return;
+				}
+				sentBilling = '';
+				log( 'billing details were not attached', res && res.data && res.data.message );
+			} )
+			.catch( function () {
+				sentBilling = '';
+			} );
+		// Deliberately silent to the shopper either way: this runs while they are
+		// still typing, and the bank form says plainly what is missing if it ever
+		// matters. A failure here never blocks a card payment.
+	}
+
+	/** Coalesce a burst of field edits into one attach. */
+	function scheduleBillingSync() {
+		if ( billingTimer ) {
+			window.clearTimeout( billingTimer );
+		}
+		billingTimer = window.setTimeout( syncBilling, BILLING_DEBOUNCE_MS );
 	}
 
 	function mountFrame( host ) {
@@ -857,6 +1021,11 @@
 				log( 'session ready', { amount: session.amount, currency: session.currency, hasSdk: !! session.sdkUrl, url: session.url } );
 				mount();
 				refreshPayButton();
+				// The readiness watcher runs from page load and gives up while
+				// there is no session to attach to, so a checkout that was already
+				// filled in would never send its billing details. Ask again now
+				// that there is somewhere to put them.
+				scheduleBillingSync();
 				// A session fetched to replace a failed one: the shopper is looking
 				// at a blank form, so restate why.
 				if ( pendingNotice ) {
@@ -1529,6 +1698,9 @@
 		mountInto: function ( el ) {
 			hostEl = el;
 			mountedFor = null;
+			// Picking VezmoPay in Blocks is what makes the billing details worth
+			// sending, and no field changed to wake the watcher.
+			scheduleBillingSync();
 			if ( session ) {
 				return mount();
 			}
@@ -1611,7 +1783,11 @@
 
 		$( document.body ).on( 'change', 'input[name="payment_method"]', function () {
 			if ( selected() ) {
+				// Both matter: ensureSession() returns early when a session is
+				// already held, and syncBilling() refuses while another gateway is
+				// selected — so choosing VezmoPay second needs its own nudge.
 				ensureSession();
+				scheduleBillingSync();
 			}
 		} );
 

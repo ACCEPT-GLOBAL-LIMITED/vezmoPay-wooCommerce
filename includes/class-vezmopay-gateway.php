@@ -1030,6 +1030,15 @@ class Gateway extends \WC_Payment_Gateway {
 			$order->update_meta_data( '_vezmopay_effective_mode', $this->integration_mode() . '-inline' );
 			$order->save_meta_data();
 
+			// Last chance to put the customer on the payment before it is charged,
+			// and the only one that cannot be raced: the checkout sends billing
+			// details as they are typed, but that is debounced, so a shopper who
+			// finishes their email and presses Place order immediately can beat it
+			// — and a bank payment with no email on the session is refused outright
+			// (the ACH debit mandate requires it). Here the order exists, its
+			// billing is final, and this runs before the browser is told to charge.
+			$this->attach_order_client( $order );
+
 			// Everything the checkout script needs, including the REAL success and
 			// pay-page URLs. Building those in the browser meant assuming pretty
 			// permalinks and English endpoint slugs; WooCommerce knows them.
@@ -1138,6 +1147,86 @@ class Gateway extends \WC_Payment_Gateway {
 		}
 		if ( $empty_cart && isset( WC()->cart ) && WC()->cart ) {
 			WC()->cart->empty_cart();
+		}
+	}
+
+	/**
+	 * Put the order's billing details on the payment session bound to it.
+	 *
+	 * The inline session is created for the CART, before any billing field is
+	 * filled, so it starts with no customer — and an ACH debit cannot be taken
+	 * without the payer's email, because the Nacha mandate requires it. The
+	 * checkout sends the details up as they are typed; this is the backstop that
+	 * runs once the order exists and its billing is settled.
+	 *
+	 * Best-effort throughout. A failure here must never fail an order: card is
+	 * unaffected either way, and the bank form re-reads the session and says
+	 * plainly what is missing if it comes to that.
+	 *
+	 * @param \WC_Order $order Order carrying a bound VezmoPay session.
+	 */
+	private function attach_order_client( $order ) {
+		$token = (string) $order->get_meta( '_vezmopay_client_token' );
+		if ( '' === $token ) {
+			return;
+		}
+
+		// The API requires all four and refuses a partial client, so an order
+		// missing any of them is left alone — a missing billing postcode is
+		// optional in some WooCommerce country configs and must never cost the
+		// shopper their card payment.
+		$name    = trim( $order->get_formatted_billing_full_name() );
+		$email   = $order->get_billing_email();
+		$country = $order->get_billing_country();
+		$postal  = $order->get_billing_postcode();
+		if ( '' === $name || '' === $email || '' === $country || '' === $postal ) {
+			return;
+		}
+
+		$environment = (string) $order->get_meta( '_vezmopay_environment' );
+		if ( '' === $environment ) {
+			$environment = $this->environment();
+		}
+
+		$client = array_filter(
+			array(
+				'name'       => $name,
+				'email'      => $email,
+				'phone'      => $order->get_billing_phone(),
+				'company'    => $order->get_billing_company(),
+				'country'    => $country,
+				'postalCode' => $postal,
+				'line1'      => $order->get_billing_address_1(),
+				'line2'      => $order->get_billing_address_2(),
+				'city'       => $order->get_billing_city(),
+				'state'      => $order->get_billing_state(),
+			)
+		);
+
+		// Place order runs again on every retry — a declined card keeps the
+		// shopper on the checkout pressing the same button — and re-sending
+		// details the session already holds spends a rate limit for nothing.
+		// Deliberately NOT compared against what the browser sent: that is built
+		// from different fields (and a locale-dependent name format), so a
+		// mismatch there would skip an attach that is actually needed. One
+		// request per order, and none at all on a retry.
+		$fingerprint = md5( $token . '|' . wp_json_encode( $client ) );
+		if ( $fingerprint === (string) $order->get_meta( '_vezmopay_client_attached' ) ) {
+			return;
+		}
+
+		$result = $this->api_client( $environment )->attach_secure_payment_client( $token, $client );
+
+		if ( ! is_wp_error( $result ) ) {
+			$order->update_meta_data( '_vezmopay_client_attached', $fingerprint );
+			$order->save_meta_data();
+		}
+
+		if ( is_wp_error( $result ) ) {
+			$this->logger()->error(
+				'Could not attach the customer to the VezmoPay payment for order #' . $order->get_id()
+				. ': ' . $result->get_error_message() . ' A bank payment on this order will be refused for want of an email.'
+			);
 		}
 	}
 

@@ -38,6 +38,18 @@ class Checkout_Session {
 	const PENDING_KEY = 'vezmopay_checkout_pending_key';
 
 	/**
+	 * Session key remembering which customer we last attached, so re-sending the
+	 * same details on every keystroke does not hammer a rate-limited endpoint.
+	 */
+	const ATTACHED_KEY = 'vezmopay_checkout_client';
+
+	/**
+	 * Fields the API requires on the client object. Sending a partial one is a
+	 * 422, so an incomplete checkout is skipped rather than posted.
+	 */
+	const CLIENT_REQUIRED = array( 'name', 'email', 'country', 'postalCode' );
+
+	/**
 	 * The only status a freshly created, unpaid secure payment may report before
 	 * it is bound to an order.
 	 *
@@ -122,6 +134,8 @@ class Checkout_Session {
 			// The key dies with the session it created. Leaving it behind is what
 			// let a captured payment be replayed onto the next order.
 			WC()->session->set( self::PENDING_KEY, null );
+			// The next session is a different payment and has no customer on it.
+			WC()->session->set( self::ATTACHED_KEY, null );
 		}
 	}
 
@@ -226,10 +240,78 @@ class Checkout_Session {
 
 		if ( isset( WC()->session ) && WC()->session ) {
 			WC()->session->set( self::SESSION_KEY, $session );
+			// A brand new payment carries no customer, whatever we attached to
+			// the one it replaces. (attach_client() keys its record to the token
+			// as well, so this is hygiene rather than the thing that makes the
+			// replacement get its own attach.)
+			WC()->session->set( self::ATTACHED_KEY, null );
 		}
 		// The key is now spent on a real payment; it must never open a second one.
 		$this->clear_pending_key();
 		return $session;
+	}
+
+	/**
+	 * Attach the shopper's billing details to the cart's payment session.
+	 *
+	 * The session is created for the CART, so it is minted before the shopper has
+	 * typed a billing email — and ACH cannot be paid without one, because the
+	 * Nacha debit mandate requires the payer's email. (Card does not, which is
+	 * why only bank payments ever hit this.) So the checkout sends the billing
+	 * fields up as they are filled and we hand them to the API's token-gated
+	 * attach route, which updates the session the embed is already mounted on.
+	 *
+	 * No-ops — successfully — when the details are unchanged or incomplete:
+	 * callers fire this on field edits, and neither case is an error worth
+	 * showing a shopper who is still typing.
+	 *
+	 * @param array $client Billing fields, already sanitized by the caller.
+	 * @return true|\WP_Error
+	 */
+	public function attach_client( array $client ) {
+		$session = $this->stored();
+		if ( ! $session ) {
+			return new \WP_Error( 'vezmopay_session', __( 'There is no VezmoPay payment session to update.', 'vezmopay-woocommerce' ) );
+		}
+
+		$client = array_filter(
+			$client,
+			static function ( $value ) {
+				return '' !== trim( (string) $value );
+			}
+		);
+		foreach ( self::CLIENT_REQUIRED as $field ) {
+			if ( empty( $client[ $field ] ) ) {
+				// Still filling the form. Not a failure — the next edit retries.
+				return true;
+			}
+		}
+
+		// One POST per distinct customer. The checkout calls this on every change
+		// to a billing field and the API throttles this route hard, so re-sending
+		// details it already holds would spend the shopper's budget on nothing.
+		$fingerprint = md5( $session['clientToken'] . '|' . wp_json_encode( $client ) );
+		$session_obj = ( isset( WC()->session ) && WC()->session ) ? WC()->session : null;
+		if ( $session_obj && $fingerprint === (string) $session_obj->get( self::ATTACHED_KEY ) ) {
+			return true;
+		}
+
+		$result = $this->gateway
+			->api_client( $session['environment'] )
+			->attach_secure_payment_client( $session['clientToken'], $client );
+
+		if ( is_wp_error( $result ) ) {
+			$this->gateway->logger()->error(
+				'Could not attach the customer to payment ' . $session['paymentId'] . ': ' . $result->get_error_message()
+			);
+			return $result;
+		}
+
+		if ( $session_obj ) {
+			$session_obj->set( self::ATTACHED_KEY, $fingerprint );
+		}
+		$this->gateway->logger()->debug( 'Attached the checkout customer to payment ' . $session['paymentId'] . '.' );
+		return true;
 	}
 
 	/**
