@@ -91,6 +91,15 @@ final class Plugin {
 	const SESSION_RATE_WINDOW = 10 * MINUTE_IN_SECONDS;
 
 	/**
+	 * Customer attachments a single visitor may send per window. Higher than the
+	 * session limit because the checkout re-sends on billing edits, but still
+	 * bounded: the API throttles this route too, and spending that budget here
+	 * would leave a real shopper unable to pay by bank.
+	 */
+	const CLIENT_RATE_MAX    = 20;
+	const CLIENT_RATE_WINDOW = 10 * MINUTE_IN_SECONDS;
+
+	/**
 	 * Register hooks.
 	 */
 	private function __construct() {
@@ -113,6 +122,7 @@ final class Plugin {
 
 		// AJAX endpoints used by the checkout JS (logged-in and guest customers).
 		add_action( 'wc_ajax_vezmopay_session', array( $this, 'ajax_session' ) );
+		add_action( 'wc_ajax_vezmopay_client', array( $this, 'ajax_attach_client' ) );
 		add_action( 'wc_ajax_vezmopay_confirm', array( $this, 'ajax_confirm' ) );
 		add_action( 'wc_ajax_vezmopay_status', array( $this, 'ajax_status' ) );
 		add_action( 'wc_ajax_vezmopay_failed', array( $this, 'ajax_attempt_failed' ) );
@@ -268,6 +278,10 @@ final class Plugin {
 				// one, so this is the origin we actually exchange messages with.
 				'checkoutOrigin' => $gateway->checkout_origin(),
 				'sessionUrl'  => \WC_AJAX::get_endpoint( 'vezmopay_session' ),
+				// The cart session starts with no customer on it; the checkout
+				// sends the billing fields here as they are filled, so a bank
+				// payment has the email its debit mandate requires.
+				'clientUrl'   => \WC_AJAX::get_endpoint( 'vezmopay_client' ),
 				'confirmUrl'  => \WC_AJAX::get_endpoint( 'vezmopay_confirm' ),
 				// The charge is watched server-side too, so a message the frame
 				// cannot deliver never leaves the shopper waiting.
@@ -307,6 +321,21 @@ final class Plugin {
 					// as well as a payment that simply never resolved — the wording
 					// must be true of both.
 					'noResult'    => __( 'VezmoPay did not report a result for that payment. Please check your card details and try again — if the payment did go through, your order will be updated automatically.', 'vezmopay-woocommerce' ),
+					// A payment the shopper made in the payment box WITHOUT pressing
+					// Place order, so there is no order to attach it to. The wallet
+					// buttons used to do this — they charge on their own gesture —
+					// and now hold the charge until we have placed the order, so
+					// this should never be seen. It exists because the alternative,
+					// which is what happened before, is saying nothing at all while
+					// the money is gone.
+					'unsolicited' => __( 'That payment went through, but your order has not been placed yet. Please do not pay again — contact the store to complete your order.', 'vezmopay-woocommerce' ),
+					// The wallet handshake. The shopper has approved Apple/Google
+					// Pay and the charge is being HELD while WooCommerce places
+					// the order; nothing has been charged in any of these cases.
+					'walletPlacing' => __( 'Payment approved — placing your order…', 'vezmopay-woocommerce' ),
+					'walletRefused' => __( 'Your order could not be placed, so nothing was charged. Please check the highlighted fields and try again.', 'vezmopay-woocommerce' ),
+					'walletSlow'    => __( 'Your order took too long to place, so nothing was charged. Please try again.', 'vezmopay-woocommerce' ),
+					'walletBusy'    => __( 'A payment is already in progress. Please wait for it to finish.', 'vezmopay-woocommerce' ),
 				),
 			)
 		);
@@ -337,6 +366,18 @@ final class Plugin {
 	 * @return bool
 	 */
 	private function session_rate_limited() {
+		return $this->rate_limited( 'sess', self::SESSION_RATE_MAX, self::SESSION_RATE_WINDOW );
+	}
+
+	/**
+	 * Count a request against a per-visitor budget.
+	 *
+	 * @param string $bucket Short bucket name, namespacing the counter.
+	 * @param int    $max    Requests allowed per window.
+	 * @param int    $window Window length in seconds.
+	 * @return bool Whether the budget is already spent.
+	 */
+	private function rate_limited( $bucket, $max, $window ) {
 		$who = '';
 		if ( function_exists( 'WC' ) && isset( WC()->session ) && WC()->session ) {
 			$who = (string) WC()->session->get_customer_id();
@@ -345,12 +386,12 @@ final class Plugin {
 			$who = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : 'anonymous';
 		}
 
-		$key   = 'vezmopay_sess_rl_' . md5( $who );
+		$key   = 'vezmopay_' . $bucket . '_rl_' . md5( $who );
 		$count = (int) get_transient( $key );
-		if ( $count >= self::SESSION_RATE_MAX ) {
+		if ( $count >= $max ) {
 			return true;
 		}
-		set_transient( $key, $count + 1, self::SESSION_RATE_WINDOW );
+		set_transient( $key, $count + 1, $window );
 		return false;
 	}
 
@@ -435,6 +476,75 @@ final class Plugin {
 				'expires'     => $session['expires'],
 			)
 		);
+	}
+
+	/**
+	 * Attach the shopper's billing details to the cart's payment session.
+	 *
+	 * The session is minted for the cart, before any billing field is filled, so
+	 * it starts with no customer on it — and a bank payment cannot be made
+	 * without one, because the ACH debit mandate requires the payer's email. The
+	 * checkout sends the billing fields here as they are completed.
+	 *
+	 * Keeps the HARD nonce check, like ajax_session: this writes a customer
+	 * record on the merchant's account, and a stale nonce costs a page reload
+	 * rather than a payment (card is unaffected, and the bank path re-reads the
+	 * session before it refuses).
+	 */
+	public function ajax_attach_client() {
+		check_ajax_referer( 'vezmopay-checkout', 'nonce' );
+
+		$gateway = $this->gateway();
+		if ( ! $gateway || 'hosted' === $gateway->integration_mode() ) {
+			wp_send_json_error( array( 'message' => __( 'VezmoPay is not accepting inline payments.', 'vezmopay-woocommerce' ) ), 400 );
+		}
+
+		if ( $this->rate_limited( 'client', self::CLIENT_RATE_MAX, self::CLIENT_RATE_WINDOW ) ) {
+			$gateway->logger()->error( 'Refusing to attach another customer to the VezmoPay session: rate limit reached for this visitor.' );
+			wp_send_json_error( array( 'message' => __( 'Too many checkout updates. Please wait a moment and reload the page.', 'vezmopay-woocommerce' ) ), 429 );
+		}
+
+		// phpcs:disable WordPress.Security.NonceVerification.Missing -- checked above.
+		$client = array();
+		$fields = array(
+			'name'       => 'sanitize_text_field',
+			'email'      => 'sanitize_email',
+			'phone'      => 'sanitize_text_field',
+			'company'    => 'sanitize_text_field',
+			'country'    => 'sanitize_text_field',
+			'line1'      => 'sanitize_text_field',
+			'line2'      => 'sanitize_text_field',
+			'city'       => 'sanitize_text_field',
+			'state'      => 'sanitize_text_field',
+			'postalCode' => 'sanitize_text_field',
+		);
+		foreach ( $fields as $field => $sanitizer ) {
+			if ( isset( $_POST[ $field ] ) ) {
+				$client[ $field ] = call_user_func( $sanitizer, wp_unslash( $_POST[ $field ] ) );
+			}
+		}
+		// phpcs:enable WordPress.Security.NonceVerification.Missing
+
+		// sanitize_email() empties anything malformed, and the API would 422 on
+		// it. Say so plainly rather than letting the shopper reach the bank form
+		// and be told there, vaguely, that an email is needed.
+		if ( '' === trim( (string) ( $client['email'] ?? '' ) ) ) {
+			wp_send_json_error( array( 'message' => __( 'Please enter a valid billing email address.', 'vezmopay-woocommerce' ) ), 400 );
+		}
+
+		$result = $gateway->checkout_session()->attach_client( $client );
+		if ( is_wp_error( $result ) ) {
+			// Deliberately generic: the API refuses some customers on the
+			// merchant's risk rules and never says why, and relaying its wording
+			// would turn this endpoint into an oracle for that list. The reason
+			// is in the store's log.
+			wp_send_json_error(
+				array( 'message' => __( 'Your billing details could not be saved to the payment. Please check them and try again.', 'vezmopay-woocommerce' ) ),
+				502
+			);
+		}
+
+		wp_send_json_success( array( 'attached' => true ) );
 	}
 
 	public function ajax_confirm() {

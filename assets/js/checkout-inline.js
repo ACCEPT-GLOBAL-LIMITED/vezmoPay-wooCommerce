@@ -83,6 +83,17 @@
 	// replacement form has mounted, so the reason survives the re-mount.
 	var pendingNotice = '';
 
+	// A wallet approval the embed is holding for us while WooCommerce places the
+	// order. { id, settle, timer } — settle() answers the embed exactly once.
+	var walletAuth = null;
+	// How long we may keep the shopper's wallet sheet open. The embed gives up at
+	// twenty seconds and the browser's own sheet not long after, so answer well
+	// inside that: a Woo checkout POST that has not come back by now is not going
+	// to in time, and a cancelled sheet costs nothing but a second tap.
+	var WALLET_AUTH_LIMIT_MS = 14 * 1000;
+	// Last readiness we told the embed, so the watcher only speaks on a change.
+	var lastCheckoutReady = null;
+
 	// Where to mount. The classic checkout renders the markup server-side in the
 	// payment box; the Blocks checkout hands us its own element instead.
 	var hostEl = null;
@@ -123,6 +134,12 @@
 		}
 		bindPayButton();
 		refreshPayButton();
+		// First chance to tell a newly mounted form whether the checkout is
+		// payable. The watcher only speaks when something CHANGES, so without
+		// this a checkout that was already complete when the form mounted — a
+		// returning shopper with everything prefilled, most obviously — would
+		// leave its wallet buttons greyed out until they touched a field.
+		pushCheckoutReady();
 	}
 
 	/**
@@ -281,6 +298,13 @@
 		ready = false;
 		pinnedOrigin = null;
 		mountedFor = session.clientToken;
+		// A fresh form has heard nothing from us. Forgetting what we last said
+		// means the watcher re-states it: otherwise readiness settled before this
+		// mount existed would never be sent, and the wallet buttons would sit
+		// enabled on an incomplete checkout (or greyed out on a complete one).
+		lastCheckoutReady = null;
+		// Nothing can be holding an approval for a form that no longer exists.
+		settleWalletAuth( false );
 
 		// Inline mode: let VezmoPay's SDK own the frame (auto-resize, events,
 		// captcha/3-D Secure popup fallback). Falls through to a plain frame if
@@ -298,7 +322,17 @@
 						sdkOpts.checkoutOrigin = params.checkoutOrigin;
 					}
 					vezmo = new Vezmo( sdkOpts );
-					vezmo.mount( host, { clientToken: session.clientToken, theme: params.theme } );
+					// wallets: 'authorize' — the wallet sheet asks US before it
+					// charges, so Place order can create the order first. See
+					// walletAuthorizeUrl() below.
+					vezmo.mount( host, {
+						clientToken: session.clientToken,
+						theme: params.theme,
+						wallets: 'authorize',
+					} );
+					vezmo.onWalletAuthorized( function ( details ) {
+						return onWalletAuthorized( details );
+					} );
 					// The SDK creates this frame and nothing labels it, so in the
 					// DEFAULT mode a screen reader announced an unlabelled frame
 					// containing the whole card form (WCAG 4.1.2). Only the
@@ -347,10 +381,426 @@
 		return Promise.resolve();
 	}
 
+	/**
+	 * Ask for the wallet AUTHORIZE handshake on a payment-box mount.
+	 *
+	 * Every other method in the embed waits for OUR submit: the shopper presses
+	 * WooCommerce's Place order, the order is created, process_payment() binds
+	 * the session to it, and only then are we told to charge. A wallet button
+	 * does not work that way — its sheet confirms on a gesture inside the embed,
+	 * so left alone it charges before any Place order, with no order to bind it
+	 * to and no charge of ours in flight.
+	 *
+	 * In authorize mode the approval reaches us as `wallet-authorized` and
+	 * NOTHING is charged until we answer. We press Place order on the shopper's
+	 * behalf, let WooCommerce validate and create the order exactly as it always
+	 * does, and only then say charge.
+	 *
+	 * BOTH parameters go on, and that is deliberate. `wallets=0` is the answer
+	 * for a checkout build that predates the handshake: it understands that one
+	 * and hides the buttons, rather than seeing a mode it cannot honour and
+	 * charging on approval anyway. `walletMode=authorize` is read only by a build
+	 * that can actually answer. Whichever the store's VezmoPay account is running,
+	 * the shopper's money is safe.
+	 *
+	 * @param {string} url Secure-payment URL from the session.
+	 * @return {string} The same URL, asking for the handshake.
+	 */
+	function walletAuthorizeUrl( url ) {
+		if ( ! url || url.indexOf( 'wallets=' ) !== -1 ) {
+			return url;
+		}
+		var sep = url.indexOf( '?' ) === -1 ? '?' : '&';
+		return url + sep + 'wallets=0&walletMode=authorize';
+	}
+
+	/* ---------------------------------------------------------------------
+	 * The wallet authorize handshake.
+	 * ------------------------------------------------------------------- */
+
+	/**
+	 * Send a message INTO the mounted form, whichever way it is mounted.
+	 *
+	 * Element mode has the SDK's own methods for this; iframe mode (and element
+	 * mode that fell back to a plain frame) posts on the wire. Same split
+	 * sendSubmit() already makes.
+	 *
+	 * @param {string} type    Message type, without the vezmo prefix.
+	 * @param {Object} payload Extra fields.
+	 */
+	function postToForm( type, payload ) {
+		var message = { type: 'vezmo:secure-payment:' + type };
+		for ( var k in payload ) {
+			if ( Object.prototype.hasOwnProperty.call( payload, k ) ) {
+				message[ k ] = payload[ k ];
+			}
+		}
+		if ( frame && frame.contentWindow ) {
+			var target = frameOrigin();
+			if ( ! target ) {
+				return false;
+			}
+			frame.contentWindow.postMessage( message, target );
+			return true;
+		}
+		return false;
+	}
+
+	/** Answer a held wallet approval. Exactly once — later calls are no-ops. */
+	function settleWalletAuth( ok, message ) {
+		if ( ! walletAuth ) {
+			return;
+		}
+		var held = walletAuth;
+		walletAuth = null;
+		if ( held.timer ) {
+			window.clearTimeout( held.timer );
+		}
+		log( 'answering the wallet authorization:', ok ? 'proceed' : 'cancel', message || '' );
+		held.settle( ok, message );
+	}
+
+	/**
+	 * The shopper approved Apple/Google Pay and the embed is holding the charge.
+	 *
+	 * Press Place order for them. WooCommerce validates the checkout and creates
+	 * the order exactly as it would have, process_payment() binds the payment
+	 * session to it, and the marker comes back to handleHash() → beginCharge() →
+	 * sendSubmit(), which answers `proceed` instead of sending a submit.
+	 *
+	 * If validation fails, WooCommerce says so on `checkout_error` and we answer
+	 * `cancel`: the sheet closes, no money moves, and the shopper is looking at
+	 * their own form with the missing fields marked.
+	 *
+	 * @param {Object}   details Authorization details from the embed.
+	 * @param {Function} settle  Called with (ok, message) to answer the embed.
+	 */
+	function beginWalletAuthorization( details, settle ) {
+		var id = details && details.authorizationId;
+		log( 'wallet approved, holding the charge:', details && details.wallet, id );
+
+		// A second approval while one is in flight: answer the first with a
+		// cancel so the embed is never left holding two.
+		settleWalletAuth( false );
+
+		if ( charging ) {
+			// A charge of ours is already running — the shopper pressed Pay and
+			// then tapped the wallet. Refuse rather than place a second order.
+			settle( false, params.i18n.walletBusy );
+			return;
+		}
+
+		walletAuth = {
+			id: id,
+			settle: settle,
+			timer: window.setTimeout( function () {
+				log( 'the store did not place the order in time — cancelling the wallet' );
+				settleWalletAuth( false, params.i18n.walletSlow );
+			}, WALLET_AUTH_LIMIT_MS ),
+		};
+
+		setMessage( params.i18n.walletPlacing, 'info' );
+		submitCheckout();
+	}
+
+	/**
+	 * Bridge for element mode: the SDK wants a promise back.
+	 *
+	 * Answers in the SDK's object form rather than a bare boolean, so a refusal
+	 * carries OUR reason — "check the highlighted fields" beats the generic
+	 * decline the embed would otherwise show for a checkout WooCommerce simply
+	 * would not accept.
+	 *
+	 * @param {Object} details Authorization details.
+	 * @return {Promise<Object>} { proceed, message } for the SDK.
+	 */
+	function onWalletAuthorized( details ) {
+		return new Promise( function ( resolve ) {
+			beginWalletAuthorization( details, function ( ok, message ) {
+				resolve( { proceed: !! ok, message: message || undefined } );
+			} );
+		} );
+	}
+
+	/* ---------------------------------------------------------------------
+	 * Readiness: is our checkout complete enough to pay from?
+	 * ------------------------------------------------------------------- */
+
+	/**
+	 * Whether the CLASSIC checkout's required fields are filled.
+	 *
+	 * Returns null when there is no classic form to read, so the caller can tell
+	 * "not ready" apart from "cannot tell" — they are very different answers and
+	 * only one of them should grey out a payment button.
+	 *
+	 * @return {boolean|null} Validity, or null when unknown.
+	 */
+	function classicCheckoutReady() {
+		var form = document.querySelector( 'form.checkout' );
+		if ( ! form ) {
+			return null;
+		}
+		var fields = form.querySelectorAll(
+			'.validate-required input, .validate-required select, .validate-required textarea'
+		);
+		for ( var i = 0; i < fields.length; i++ ) {
+			var el = fields[ i ];
+			if ( el.offsetParent === null && el.type !== 'hidden' ) {
+				// Hidden by a shipping/billing toggle — not being asked for.
+				continue;
+			}
+			if ( 'checkbox' === el.type ) {
+				if ( ! el.checked ) {
+					return false;
+				}
+			} else if ( ! String( el.value || '' ).trim() ) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * Whether the BLOCKS checkout reports itself valid.
+	 *
+	 * Blocks owns its fields in React, so there is no markup to read — its
+	 * validation store is the only honest source. Null when that store is not
+	 * present.
+	 *
+	 * @return {boolean|null} Validity, or null when unknown.
+	 */
+	function blocksCheckoutReady() {
+		var data = window.wp && window.wp.data;
+		if ( ! data || typeof data.select !== 'function' ) {
+			return null;
+		}
+		try {
+			var store = data.select( 'wc/store/validation' );
+			if ( ! store || typeof store.hasValidationErrors !== 'function' ) {
+				return null;
+			}
+			return ! store.hasValidationErrors();
+		} catch ( e ) {
+			return null;
+		}
+	}
+
+	/**
+	 * Tell the embed whether the shopper may pay by wallet yet.
+	 *
+	 * Only on a change, and never when we cannot tell: an embed that hears
+	 * nothing leaves its buttons enabled, and a tap against an invalid checkout
+	 * is still refused at the handshake. This gate exists to spare the shopper
+	 * approving a payment we are about to refuse — it is not what protects the
+	 * money.
+	 */
+	function pushCheckoutReady() {
+		var state = classicCheckoutReady();
+		if ( null === state ) {
+			state = blocksCheckoutReady();
+		}
+		if ( null === state || state === lastCheckoutReady ) {
+			return;
+		}
+		lastCheckoutReady = state;
+		log( 'checkout readiness:', state );
+		if ( vezmo && typeof vezmo.setCheckoutReady === 'function' ) {
+			vezmo.setCheckoutReady( state );
+			return;
+		}
+		postToForm( 'checkout-ready', { ready: state } );
+	}
+
+	/** Watch the checkout for changes that make it payable, or stop being so. */
+	function watchCheckoutReadiness() {
+		var timer = null;
+		var schedule = function () {
+			if ( timer ) {
+				window.clearTimeout( timer );
+			}
+			timer = window.setTimeout( pushCheckoutReady, 250 );
+			// Same events, a slower beat of its own: readiness is a local read,
+			// this one is a request to the store.
+			scheduleBillingSync();
+		};
+
+		document.addEventListener( 'input', schedule, true );
+		document.addEventListener( 'change', schedule, true );
+		if ( $ && $.fn ) {
+			// Woo rebuilds the review order — and sometimes the fields — here.
+			$( document.body ).on( 'updated_checkout country_to_state_changed', schedule );
+		}
+		if ( window.wp && window.wp.data && typeof window.wp.data.subscribe === 'function' ) {
+			window.wp.data.subscribe( schedule );
+		}
+		schedule();
+	}
+
+	/* ---------------------------------------------------------------------
+	 * Billing details: attaching the customer to the session
+	 * ------------------------------------------------------------------- */
+
+	/**
+	 * The session is created for the CART — before the shopper has typed a
+	 * billing email — so it starts with no customer on it. Card payments do not
+	 * care. A bank payment does: the ACH debit mandate REQUIRES the payer's
+	 * email, and without one the embed refuses the payment outright.
+	 *
+	 * So the billing fields go up to the store as they are filled, and it
+	 * attaches them to the session the form is already mounted on. Nothing is
+	 * remounted and nothing the shopper typed is thrown away — the embed re-reads
+	 * the customer when it mints its payment intent.
+	 */
+
+	// Fingerprint of the details we last sent, so a checkout re-render or an
+	// edit to an unrelated field does not re-post what the store already has.
+	var sentBilling = '';
+	var billingTimer = null;
+	// Long enough that typing an email address is one request rather than thirty.
+	var BILLING_DEBOUNCE_MS = 900;
+	// What the API demands on a client object. A partial one is refused, so an
+	// incomplete checkout is skipped rather than sent.
+	var BILLING_REQUIRED = [ 'name', 'email', 'country', 'postalCode' ];
+
+	function fieldValue( id ) {
+		var el = document.getElementById( id );
+		return el ? String( el.value || '' ).trim() : '';
+	}
+
+	/** The CLASSIC checkout's billing fields, or null when there is no form. */
+	function classicBilling() {
+		if ( ! document.querySelector( 'form.checkout' ) ) {
+			return null;
+		}
+		return {
+			name: ( fieldValue( 'billing_first_name' ) + ' ' + fieldValue( 'billing_last_name' ) ).trim(),
+			email: fieldValue( 'billing_email' ),
+			phone: fieldValue( 'billing_phone' ),
+			company: fieldValue( 'billing_company' ),
+			country: fieldValue( 'billing_country' ),
+			line1: fieldValue( 'billing_address_1' ),
+			line2: fieldValue( 'billing_address_2' ),
+			city: fieldValue( 'billing_city' ),
+			state: fieldValue( 'billing_state' ),
+			postalCode: fieldValue( 'billing_postcode' ),
+		};
+	}
+
+	/**
+	 * The BLOCKS checkout's billing address, or null when its store is absent.
+	 *
+	 * Blocks owns its fields in React, so there is no markup to read — the cart
+	 * store is the only honest source, exactly as with readiness above.
+	 */
+	function blocksBilling() {
+		var data = window.wp && window.wp.data;
+		if ( ! data || typeof data.select !== 'function' ) {
+			return null;
+		}
+		try {
+			var store = data.select( 'wc/store/cart' );
+			if ( ! store || typeof store.getCustomerData !== 'function' ) {
+				return null;
+			}
+			var address = ( store.getCustomerData() || {} ).billingAddress || {};
+			var str = function ( value ) {
+				return String( value || '' ).trim();
+			};
+			return {
+				name: ( str( address.first_name ) + ' ' + str( address.last_name ) ).trim(),
+				email: str( address.email ),
+				phone: str( address.phone ),
+				company: str( address.company ),
+				country: str( address.country ),
+				line1: str( address.address_1 ),
+				line2: str( address.address_2 ),
+				city: str( address.city ),
+				state: str( address.state ),
+				postalCode: str( address.postcode ),
+			};
+		} catch ( e ) {
+			return null;
+		}
+	}
+
+	/** Send the billing details up, once they are complete and have changed. */
+	function syncBilling() {
+		// No session is nothing to attach to; a charge in flight is already past
+		// the point where this could help.
+		// `selected()` reads the CLASSIC radio, which the Blocks checkout does not
+		// render — there, our form being mounted into a host element IS the
+		// selection, and Blocks clears that host when another gateway is picked.
+		var chosen = hostEl ? true : selected();
+		if ( ! params.clientUrl || ! session || charging || ! chosen ) {
+			return;
+		}
+
+		var billing = classicBilling();
+		if ( null === billing ) {
+			billing = blocksBilling();
+		}
+		if ( ! billing ) {
+			return;
+		}
+		for ( var i = 0; i < BILLING_REQUIRED.length; i++ ) {
+			if ( ! billing[ BILLING_REQUIRED[ i ] ] ) {
+				// Still being filled in. The next edit tries again.
+				return;
+			}
+		}
+
+		var fingerprint = session.clientToken + '|' + JSON.stringify( billing );
+		if ( fingerprint === sentBilling ) {
+			return;
+		}
+		// Claim it BEFORE the request, or the next keystroke sends a duplicate
+		// while this one is still in flight. Released again on failure.
+		sentBilling = fingerprint;
+
+		var body = new URLSearchParams();
+		body.append( 'nonce', params.nonce );
+		Object.keys( billing ).forEach( function ( key ) {
+			body.append( key, billing[ key ] );
+		} );
+
+		window
+			.fetch( params.clientUrl, {
+				method: 'POST',
+				credentials: 'same-origin',
+				headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+				body: body.toString(),
+			} )
+			.then( function ( res ) {
+				return res.json();
+			} )
+			.then( function ( res ) {
+				if ( res && res.success ) {
+					log( 'billing details attached to the payment session' );
+					return;
+				}
+				sentBilling = '';
+				log( 'billing details were not attached', res && res.data && res.data.message );
+			} )
+			.catch( function () {
+				sentBilling = '';
+			} );
+		// Deliberately silent to the shopper either way: this runs while they are
+		// still typing, and the bank form says plainly what is missing if it ever
+		// matters. A failure here never blocks a card payment.
+	}
+
+	/** Coalesce a burst of field edits into one attach. */
+	function scheduleBillingSync() {
+		if ( billingTimer ) {
+			window.clearTimeout( billingTimer );
+		}
+		billingTimer = window.setTimeout( syncBilling, BILLING_DEBOUNCE_MS );
+	}
+
 	function mountFrame( host ) {
 		frame = document.createElement( 'iframe' );
 		frame.id = 'vezmopay-inline-frame';
-		frame.src = session.url;
+		frame.src = walletAuthorizeUrl( session.url );
 		frame.width = '100%';
 		// A starting height only: the checkout reports its real content height on
 		// its own — it does emit vezmo:secure-payment:resize when embedded
@@ -466,6 +916,21 @@
 			}
 		} else if ( 'vezmo:secure-payment:ready' === data.type ) {
 			markReady();
+			// The embed tells us here whether it can hold a wallet approval. It
+			// cannot be made to — an older deploy simply will not — but because we
+			// ask with `wallets=0` alongside the mode, such a build hides the
+			// buttons rather than charging on approval. Worth a line in the log
+			// so a store wondering where Apple/Google Pay went has an answer.
+			if ( ! data.walletAuthorize ) {
+				log( 'this VezmoPay checkout cannot hold a wallet approval — wallet buttons stay hidden' );
+			}
+		} else if ( 'vezmo:secure-payment:wallet-authorized' === data.type ) {
+			beginWalletAuthorization( data, function ( ok, message ) {
+				postToForm( ok ? 'wallet-proceed' : 'wallet-cancel', {
+					authorizationId: data.authorizationId,
+					message: message || undefined,
+				} );
+			} );
 		} else if (
 			'vezmo:secure-payment:success' === data.type ||
 			'vezmo:secure-payment:pending' === data.type ||
@@ -556,6 +1021,11 @@
 				log( 'session ready', { amount: session.amount, currency: session.currency, hasSdk: !! session.sdkUrl, url: session.url } );
 				mount();
 				refreshPayButton();
+				// The readiness watcher runs from page load and gives up while
+				// there is no session to attach to, so a checkout that was already
+				// filled in would never send its billing details. Ask again now
+				// that there is somewhere to put them.
+				scheduleBillingSync();
 				// A session fetched to replace a failed one: the shopper is looking
 				// at a blank form, so restate why.
 				if ( pendingNotice ) {
@@ -898,6 +1368,23 @@
 
 	/** Ask the mounted form to charge. Repeatable — see scheduleSubmitRetry(). */
 	function sendSubmit() {
+		// A wallet approval is being held and the order now exists: say charge.
+		// The form is already past its own submit — it is sitting on an approved
+		// wallet sheet — so a submit here would be answering the wrong question.
+		if ( walletAuth ) {
+			if ( charging ) {
+				charging.viaWallet = true;
+			}
+			settleWalletAuth( true );
+			return;
+		}
+		// Same charge, a later retry. scheduleSubmitRetry() re-sends until the
+		// form acknowledges, which is right for a card but wrong here: the wallet
+		// is already charging, and a submit would tell the CARD form to charge
+		// as well. Two charges, one order.
+		if ( charging && charging.viaWallet ) {
+			return;
+		}
 		if ( vezmo ) {
 			vezmo.pay();
 			return;
@@ -965,6 +1452,24 @@
 	/** Ask the STORE whether the order is paid; never trust this page's word. */
 	function completeCharge() {
 		if ( ! charging ) {
+			// A payment settled that we never asked for, so there is no order to
+			// confirm it against — the shopper paid in the payment box without
+			// pressing Place order. The wallet buttons did exactly this (their
+			// sheet charges on its own gesture) and are no longer offered here;
+			// if anything else ever manages it, the money is real and saying
+			// nothing is the one response that is certainly wrong. Do NOT try to
+			// recover by charging again.
+			log( 'a payment settled with no charge of ours in flight — nothing to confirm it against' );
+			// The literal fallback is deliberate. setMessage() renders a missing
+			// string as an EMPTY message, which is the silence this whole branch
+			// exists to end, and a page cached from an older version of the plugin
+			// has localized params without this key. Untranslated beats invisible
+			// when the shopper has already been charged.
+			setMessage(
+				params.i18n.unsolicited ||
+					'That payment went through, but your order has not been placed yet. Please do not pay again — contact the store to complete your order.',
+				'error'
+			);
 			return;
 		}
 		charging.awaitingAction = false;
@@ -1193,6 +1698,9 @@
 		mountInto: function ( el ) {
 			hostEl = el;
 			mountedFor = null;
+			// Picking VezmoPay in Blocks is what makes the billing details worth
+			// sending, and no field changed to wake the watcher.
+			scheduleBillingSync();
 			if ( session ) {
 				return mount();
 			}
@@ -1233,6 +1741,12 @@
 	};
 
 	$( function () {
+		// BOTH checkouts. The wallet readiness gate reads the classic form's
+		// required fields when there is one and the Blocks validation store when
+		// there is not, so it has to be started above the classic-only guard
+		// below — otherwise a Blocks store would never gate its wallet buttons.
+		watchCheckoutReadiness();
+
 		// Everything below is the CLASSIC checkout's wiring; the Blocks checkout
 		// has no such form and drives the API above from its own React tree.
 		if ( ! $( 'form.checkout' ).length ) {
@@ -1269,7 +1783,11 @@
 
 		$( document.body ).on( 'change', 'input[name="payment_method"]', function () {
 			if ( selected() ) {
+				// Both matter: ensureSession() returns early when a session is
+				// already held, and syncBilling() refuses while another gateway is
+				// selected — so choosing VezmoPay second needs its own nudge.
 				ensureSession();
+				scheduleBillingSync();
 			}
 		} );
 
@@ -1294,5 +1812,22 @@
 
 		window.addEventListener( 'hashchange', handleHash );
 		handleHash();
+
+		// WooCommerce refused the checkout — a missing field, a failed gateway
+		// validation, anything. If a wallet sheet is open waiting on us, this is
+		// the answer: cancel it, so the shopper's money stays where it is and
+		// they are left looking at their own form with the problem marked.
+		//
+		// Classic only: `checkout_error` is a jQuery event on the classic form and
+		// the Blocks checkout never fires it. A refusal there falls through to
+		// WALLET_AUTH_LIMIT_MS instead — slower to tell the shopper, but it
+		// cancels just the same, and no money moves either way.
+		$( document.body ).on( 'checkout_error', function () {
+			if ( walletAuth ) {
+				log( 'WooCommerce refused the checkout — cancelling the held wallet approval' );
+				settleWalletAuth( false, params.i18n.walletRefused );
+				setMessage( params.i18n.walletRefused, 'error' );
+			}
+		} );
 	} );
 } )( jQuery );

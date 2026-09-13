@@ -199,6 +199,21 @@ class Api_Client {
 	}
 
 	/**
+	 * A request path safe to write to the store's log.
+	 *
+	 * The token-gated /secure-payments/{clientToken}/… routes carry a bearer
+	 * credential IN THE PATH: anyone holding it can drive that payment. Logger
+	 * only redacts body keys and vzm_/whsec_/Bearer strings, so an unmasked path
+	 * would put a live payment credential into wp-content in plain text.
+	 *
+	 * @param string $path Request path.
+	 * @return string Path with any secure-payments token replaced.
+	 */
+	private static function mask_path( $path ) {
+		return preg_replace( '#(/secure-payments/)[^/?]+#', '$1[redacted]', (string) $path );
+	}
+
+	/**
 	 * Perform a single HTTP request and unwrap the VezmoPay response envelope.
 	 *
 	 * @param string     $method  HTTP method.
@@ -226,11 +241,13 @@ class Api_Client {
 			$args['body']                    = wp_json_encode( $body );
 		}
 
-		$this->logger->debug( 'API request: ' . $args['method'] . ' ' . $path, array( 'body' => is_array( $body ) ? Logger::redact( $body ) : null ) );
+		$safe_path = self::mask_path( $path );
+
+		$this->logger->debug( 'API request: ' . $args['method'] . ' ' . $safe_path, array( 'body' => is_array( $body ) ? Logger::redact( $body ) : null ) );
 
 		$response = wp_remote_request( $url, $args );
 		if ( is_wp_error( $response ) ) {
-			$this->logger->error( 'API transport error: ' . $response->get_error_message(), array( 'path' => $path ) );
+			$this->logger->error( 'API transport error: ' . $response->get_error_message(), array( 'path' => $safe_path ) );
 			return new \WP_Error( 'vezmopay_transport', __( 'Could not reach the VezmoPay API. Please try again.', 'vezmopay-woocommerce' ) );
 		}
 
@@ -260,7 +277,7 @@ class Api_Client {
 			}
 		}
 
-		$this->logger->error( 'API error ' . $code . ' on ' . $path . ': ' . $message );
+		$this->logger->error( 'API error ' . $code . ' on ' . $safe_path . ': ' . $message );
 
 		return new \WP_Error( 'vezmopay_http_' . $code, $message, array( 'status' => $code ) );
 	}
@@ -282,6 +299,34 @@ class Api_Client {
 			$headers['Idempotency-Key'] = substr( preg_replace( '/[^\x20-\x7E]/', '', $idempotency_key ), 0, 255 );
 		}
 		return $this->request( 'POST', '/merchant/secure-payments', $payload, $headers );
+	}
+
+	/**
+	 * Attach the customer to an EXISTING secure payment session.
+	 *
+	 * The cart-level session is created before the shopper has typed anything —
+	 * there is no order yet, so there is no billing email to send at create time
+	 * — and ACH cannot be paid without one (the Nacha debit mandate requires the
+	 * payer's email). This is the API's own catch-up route for exactly that: it
+	 * is token-gated rather than key-authenticated, so it deliberately does NOT
+	 * go through request() and carries no Bearer.
+	 *
+	 * @param string $client_token Secure-payments clientToken for the session.
+	 * @param array  $client       { name, email, country, postalCode, … } — the
+	 *                             first four are required by the API.
+	 * @return array|\WP_Error Attached client on success.
+	 */
+	public function attach_secure_payment_client( $client_token, array $client ) {
+		$client_token = (string) $client_token;
+		if ( '' === $this->base_url || '' === $client_token ) {
+			return new \WP_Error( 'vezmopay_config', __( 'VezmoPay API credentials are not configured.', 'vezmopay-woocommerce' ) );
+		}
+		return $this->raw_request(
+			'POST',
+			'/secure-payments/' . rawurlencode( $client_token ) . '/client',
+			$client,
+			array()
+		);
 	}
 
 	/**

@@ -187,7 +187,7 @@ sequenceDiagram
 | Saved cards / tokenization | ⛔ no vault API on the platform yet |
 | WooCommerce Subscriptions / Pre-Orders | ⛔ requires off-session charging the platform doesn't expose |
 | Authorize-then-capture | ⛔ platform captures immediately |
-| Apple Pay / Google Pay in embedded modes | ⛔ not exposed by the platform's embed |
+| Apple Pay / Google Pay | ✅ everywhere, including the checkout payment box. A wallet sheet charges on the shopper's own tap inside the embed, so in the payment box the approval is **held**: the plugin places the order first and only then lets the charge through |
 | Hosted-checkout redirect back to store | ⛔ no return-URL support yet — orders complete via webhook/cron |
 
 Every ⛔ is a **platform** limitation verified against the VezmoPay API source — the full audit lives in [`docs/FEATURE-MAPPING.md`](docs/FEATURE-MAPPING.md) and [`docs/VEZMOPAY-API-CONTRACT.md`](docs/VEZMOPAY-API-CONTRACT.md). The plugin is structured so each one can light up the moment the API ships it.
