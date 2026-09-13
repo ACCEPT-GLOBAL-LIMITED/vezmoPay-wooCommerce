@@ -230,6 +230,11 @@ Endpoint: `https://{store}/wp-json/vezmopay/v1/webhook`, events `payment.success
 - [ ] **T-18.1** **[P]** USD store, element mode, **US bank account** in the element → `pending`; "Your bank payment is processing…"; order **On hold** with the settlement note and the transaction id.
 - [ ] **T-18.2** **[P]** Unverified bank (micro-deposits) → the "submitted, verify by email" state; order stays On hold; no failure note.
 - [ ] **T-18.3** **[P]** After settlement, `payment.success` moves the order to paid exactly once.
+- [ ] **T-18.4** **[P]** Saved-bank instant reuse (email OTP): the frame reports `processing` then a terminal state — the order never sits on a spinner and the 60-second bound does not fire during the OTP step.
+- [ ] **T-18.5** **[S]** An order left **On hold** by an ACH `pending` is not completed by the thank-you page, the poll or the cron until VezmoPay reports `CAPTURED`.
+- [ ] **T-18.6** **[P]** Non-USD store: ACH is not offered inside the form (platform gating) and a card payment is unaffected.
+- [ ] **T-18.7** **[P]** **Late ACH return** (an R-code days after settlement) → `payment.failed` on an order that is already paid. Current behaviour: the order stays paid and gains no note — the plugin will not un-pay an order from a payload. Confirm the merchant has some other signal, and record the gap if not.
+- [ ] **T-18.8** **[P]** Cash App, where the account offers it: the same `processing` → terminal sequence, on desktop (modal) and on mobile (app hand-off and return).
 
 ## 19. Refunds
 
@@ -251,9 +256,37 @@ Endpoint: `https://{store}/wp-json/vezmopay/v1/webhook`, events `payment.success
 - [ ] **T-21.1** `languages/vezmopay-woocommerce.pot` regenerates cleanly and contains every customer-facing string added this release.
 - [ ] **T-21.2** With a translation installed, checkout messages, order notes and settings labels are translated; no raw HTML entities leak into the Pay button label.
 
+## 23. Wallets — Apple Pay / Google Pay
+
+The embedded form renders its own wallet buttons (Stripe `PaymentRequest`) when the merchant's
+VezmoPay account has Apple Pay or Google Pay enabled **and** the shopper's device offers one. There
+is no `isEmbedded` guard on them, and the wallet sheet confirms the payment **inside the frame** —
+it does not wait for the store's submit message. On the checkout page the order does not exist yet
+at that moment, so this is the one path that can take money the store knows nothing about.
+
+- [ ] **T-23.1** **[S]** **Double-charge probe.** With the payment box mounted and **no** order placed, complete a wallet payment inside the frame, then press Place order. Expected today: the frame's success is ignored, the captured payment cannot be bound (it is no longer `INITIATED`), a second payment is minted and the shopper pays **twice** for one basket, with the first capture attached to no order. This is reproducible in the sandbox and must be re-run after any change to the wallet posture.
+- [ ] **T-23.2** **[P]** With Apple Pay and Google Pay **off** in the plugin's VezmoPay account panel, the buttons do not appear inside the embedded form on either surface — this is the mitigation available today.
+- [ ] **T-23.3** **[P]** Hosted mode with wallets on: the wallet works on VezmoPay's own page, the order completes by webhook, and exactly one payment exists.
+- [ ] **T-23.4** **[P]** Order-pay page, wallets on: a wallet payment there **does** have an order to attach to — confirm the order completes once, with the wallet's payment id, and that no second payment is minted.
+- [ ] **T-23.5** Wallet availability is device-driven: check Chrome with a saved card (Google Pay) and Safari with a card in Wallet (Apple Pay). A browser offering neither must show the normal card form with no empty wallet slot.
+- [ ] **T-23.6** The embed's `allow="payment *; storage-access *"` attribute is present on every frame the plugin creates (checkout box, both pay-page drivers, the SDK-less fallback) — bare `payment` scopes the permission to the frame's first origin and breaks wallets across the checkout redirect.
+
+## 24. Merchant of record — what the store must live with
+
+VezmoPay is the merchant of record for these payments. The plugin has no MoR surface of its own;
+these cases exist so the consequences are checked once and understood rather than discovered by a
+customer.
+
+- [ ] **T-24.1** **[P]** The customer's card statement shows **VezmoPay's** descriptor, not the store name. The merchant knows this before going live, and support staff can answer "what is this charge?".
+- [ ] **T-24.2** **[P]** The customer receives VezmoPay's branded receipt **and** WooCommerce's order confirmation — two emails, no contradiction between them, and the payments partner never sends its own receipt (the platform deliberately omits `receipt_email`).
+- [ ] **T-24.3** Refunds are impossible from WooCommerce (T-19.1) and must be issued in the VezmoPay dashboard; the resulting state reaches the order only through reconciliation (T-19.2). Confirm the store's refund process reflects that.
+- [ ] **T-24.4** **[P]** A **dispute / chargeback** produces no webhook and no WooCommerce change — a disputed order sits in Processing indefinitely. Confirm where the merchant learns about disputes, and record the gap.
+- [ ] **T-24.5** **[S]** The amount VezmoPay charges equals the WooCommerce order total to the cent, with tax and shipping included — a mismatch parks the order for review rather than completing it (T-14.5).
+- [ ] **T-24.6** Store terms / checkout copy do not claim the store is the payee where VezmoPay is; the "Payments secured by VezmoPay" line renders once, below the Pay button, on every surface.
+
 ---
 
-## 22. Regression grid — run before every release
+## 25. Regression grid — run before every release
 
 | | `4242…` | 3-D Secure | Declined | Silent (no signal) **[D1]** |
 |---|---|---|---|---|
@@ -263,4 +296,5 @@ Endpoint: `https://{store}/wp-json/vezmopay/v1/webhook`, events `payment.success
 | Order-pay · iframe | T-8.1 | T-8.1 | T-8.1 | T-8.1 |
 
 Plus, every release: T-13.2 (paid order must not show the declined message), T-14.3 (no double
-completion), T-15.3 – T-15.5 (webhook authenticity), T-17.1 – T-17.3 (update integrity).
+completion), T-15.3 – T-15.5 (webhook authenticity), T-17.1 – T-17.3 (update integrity), and
+T-23.1 (the wallet double-charge probe) for as long as wallets can appear inside the embed.
