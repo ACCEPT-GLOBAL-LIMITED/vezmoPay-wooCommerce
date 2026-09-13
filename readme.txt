@@ -50,7 +50,7 @@ These reflect the VezmoPay platform as it exists today (verified against the pla
 * **No authorize-then-capture.** Payments are captured immediately.
 * **Hosted checkout does not redirect the customer back to your store** — VezmoPay has no return-URL support yet. The order is completed by webhook (with polling reconciliation as backup), and the customer receives the order confirmation email as usual.
 * **Zero-decimal currencies (JPY, KRW, VND, …) are refused.** The platform currently mishandles them, so the gateway hides itself rather than charging wrong amounts.
-* Express wallets (Apple Pay / Google Pay) are not available in the embedded modes.
+* **Express wallets (Apple Pay / Google Pay) need the customer's checkout details filled in first.** A wallet sheet charges the moment the customer approves it, on their own tap inside VezmoPay's form, so in the payment box the plugin holds that approval, places the order, and only then allows the charge. The buttons stay greyed out until the required checkout fields are complete, and an order that cannot be placed cancels the payment rather than taking it. The wallet does not supply the shipping address — the customer still fills the form.
 
 == Installation ==
 

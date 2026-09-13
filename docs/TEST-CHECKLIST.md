@@ -121,3 +121,44 @@ no improvement at all, because the code that was fixed was not the code that ran
 
 - [ ] Enable Debug logging, run a full payment, then inspect WooCommerce → Status → Logs (source `vezmopay`): request/webhook activity is present, but **no** `vzm_` key value, API secret, `whsec_` value, Bearer token, or clientToken appears anywhere — only `[redacted]` placeholders.
 - [ ] Trigger an API error (bad secret) → error is logged even with debug off, still redacted.
+
+## 14. Wallet authorize handshake (Apple Pay / Google Pay in the payment box)
+
+Needs a device that can actually offer a wallet: Chrome signed into Google with a saved test card,
+or Safari on a Mac/iPhone with Apple Pay in the sandbox. `canMakePayment()` decides whether the
+buttons appear at all — if they never show, the rest of this section cannot be run, and that is a
+device problem, not a plugin one.
+
+**Why this section exists.** A wallet sheet charges the moment the customer approves it, on their
+own tap inside VezmoPay's iframe. In the payment box that used to happen before WooCommerce had
+created an order, so the money moved and no order existed. The plugin now holds that approval,
+places the order, and only then allows the charge. Every case below is asking the same question:
+**did money move without an order to put it on?**
+
+- [ ] **Happy path, classic checkout.** Fill every required field, tap Google Pay, approve → the
+      message reads "Payment approved — placing your order…", the order is created, the charge goes
+      through, and you land on the order-received page. One order, one payment, status paid.
+- [ ] **Happy path, Blocks checkout.** Same, on a checkout built with the WooCommerce Checkout block.
+- [ ] **Incomplete checkout gates the button.** Load the checkout with required fields empty → the
+      wallet buttons are greyed out and read "Complete your details above to pay this way". Fill the
+      last required field → they become active without a page reload.
+- [ ] **Validation refuses the order.** Force a server-side checkout failure (e.g. a required
+      field a plugin validates only on submit), tap the wallet and approve → the sheet closes,
+      **nothing is charged**, and the checkout shows the refused-order message plus Woo's own field
+      errors. Confirm in the VezmoPay dashboard that no payment was captured.
+- [ ] **Abandoned sheet.** Tap the wallet, then dismiss the sheet without approving → no order, no
+      charge, the checkout is usable again and the Pay button still works for a card.
+- [ ] **Store never answers.** With the browser devtools throttling the checkout POST (or the site
+      briefly stopped), approve a wallet payment and wait → after roughly 14 seconds the payment is
+      cancelled with "Your order took too long to place, so nothing was charged." Nothing captured.
+- [ ] **Card still works alongside.** On the same checkout, ignore the wallet and pay by card → the
+      normal Place order flow is unchanged.
+- [ ] **No double charge on retry.** Approve a wallet payment and let it complete → confirm exactly
+      one capture in the VezmoPay dashboard. (The submit retry must not also drive the card form.)
+- [ ] **JavaScript blocked.** Disable JavaScript, or block `vezmo.js` in devtools → the checkout
+      falls back to the pay page and the wallet buttons there behave as they always have.
+- [ ] **Older VezmoPay checkout.** If a staging API is running a build without the handshake, the
+      wallet buttons must be **absent** from the payment box — not present and charging. With Debug
+      on, the log says the checkout cannot hold a wallet approval.
+- [ ] **Pay page unchanged.** Run a wallet payment on the order-pay page → it still charges on
+      approval, as it always did, and completes the order.

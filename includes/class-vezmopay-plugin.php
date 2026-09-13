@@ -307,6 +307,21 @@ final class Plugin {
 					// as well as a payment that simply never resolved — the wording
 					// must be true of both.
 					'noResult'    => __( 'VezmoPay did not report a result for that payment. Please check your card details and try again — if the payment did go through, your order will be updated automatically.', 'vezmopay-woocommerce' ),
+					// A payment the shopper made in the payment box WITHOUT pressing
+					// Place order, so there is no order to attach it to. The wallet
+					// buttons used to do this — they charge on their own gesture —
+					// and now hold the charge until we have placed the order, so
+					// this should never be seen. It exists because the alternative,
+					// which is what happened before, is saying nothing at all while
+					// the money is gone.
+					'unsolicited' => __( 'That payment went through, but your order has not been placed yet. Please do not pay again — contact the store to complete your order.', 'vezmopay-woocommerce' ),
+					// The wallet handshake. The shopper has approved Apple/Google
+					// Pay and the charge is being HELD while WooCommerce places
+					// the order; nothing has been charged in any of these cases.
+					'walletPlacing' => __( 'Payment approved — placing your order…', 'vezmopay-woocommerce' ),
+					'walletRefused' => __( 'Your order could not be placed, so nothing was charged. Please check the highlighted fields and try again.', 'vezmopay-woocommerce' ),
+					'walletSlow'    => __( 'Your order took too long to place, so nothing was charged. Please try again.', 'vezmopay-woocommerce' ),
+					'walletBusy'    => __( 'A payment is already in progress. Please wait for it to finish.', 'vezmopay-woocommerce' ),
 				),
 			)
 		);
