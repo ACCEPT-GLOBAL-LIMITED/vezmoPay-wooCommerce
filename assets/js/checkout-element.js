@@ -40,6 +40,12 @@
 		// This is the ad-blocker fallback path, so it runs exactly when things are
 		// already degraded.
 		frame.setAttribute( 'allow', 'payment *; storage-access *' );
+		// The embedded page resolves who it may report an outcome to from
+		// document.referrer; inheriting a store that sends `Referrer-Policy:
+		// no-referrer` empties it and silences every message it sends back. Pin
+		// the policy so that cannot depend on the store's headers. See the same
+		// attribute in checkout-inline.js for the whole story.
+		frame.setAttribute( 'referrerpolicy', 'origin' );
 		frame.setAttribute( 'title', ( params.i18n && params.i18n.frameTitle ) || 'VezmoPay secure payment' );
 		frame.addEventListener( 'load', attempt.markReady );
 		container.appendChild( frame );
@@ -111,6 +117,14 @@
 			var sdkFrame = container.querySelector( 'iframe' );
 			if ( sdkFrame ) {
 				sdkFrame.addEventListener( 'load', attempt.markReady );
+				// Best effort: the SDK owns this frame and has already set its
+				// src, so whether this applies to the current load is up to the
+				// browser. Free, cannot reload the frame, and where it lands it
+				// keeps the page's outcome messages working on a store that
+				// sends `Referrer-Policy: no-referrer`.
+				if ( ! sdkFrame.getAttribute( 'referrerpolicy' ) ) {
+					sdkFrame.setAttribute( 'referrerpolicy', 'origin' );
+				}
 			}
 
 			// Posts vezmo:secure-payment:submit into the frame, which runs the

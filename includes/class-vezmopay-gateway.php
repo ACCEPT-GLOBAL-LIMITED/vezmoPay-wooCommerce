@@ -1932,7 +1932,16 @@ class Gateway extends \WC_Payment_Gateway {
 			// defaults to 300x150, which renders the checkout in its mobile
 			// layout inside a tiny box — so the frame must be full width even
 			// if the stylesheet is missing, blocked or stale.
-			echo '<iframe id="vezmopay-frame" src="' . esc_url( $iframe_url ) . '" width="100%" height="720" allow="payment *; storage-access *" title="' . esc_attr__( 'VezmoPay secure payment', 'vezmopay-woocommerce' ) . '"></iframe>';
+			// referrerpolicy: the embedded page works out who it may report a
+			// payment outcome to by reading document.referrer and checking it
+			// against the merchant's trusted origins. Inheriting a store that
+			// sends `Referrer-Policy: no-referrer` — several security plugins do
+			// — empties it, and the page then sends its messages nowhere while
+			// still rendering and still accepting our submit: the payment is
+			// made and this page never hears about it. Pinned so it cannot
+			// depend on the store's headers. `origin` is what the browser
+			// default already sends cross-origin, so nothing loses information.
+			echo '<iframe id="vezmopay-frame" src="' . esc_url( $iframe_url ) . '" width="100%" height="720" allow="payment *; storage-access *" referrerpolicy="origin" title="' . esc_attr__( 'VezmoPay secure payment', 'vezmopay-woocommerce' ) . '"></iframe>';
 		}
 		echo '</div>';
 		echo '</div>';

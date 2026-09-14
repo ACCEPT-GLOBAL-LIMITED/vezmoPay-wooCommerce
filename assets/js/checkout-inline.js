@@ -341,6 +341,19 @@
 					if ( mounted && ! mounted.getAttribute( 'title' ) ) {
 						mounted.setAttribute( 'title', params.i18n.frameTitle );
 					}
+					// Best effort only, and the difference matters: the SDK owns
+					// this frame and has already set its src, so whether the
+					// policy applies to THIS load depends on the browser not
+					// having started the navigation yet. Set it anyway — it is
+					// free, it cannot reload the frame, and on the engines where
+					// it does land it saves an element-mode store whose site
+					// sends `Referrer-Policy: no-referrer` from a payment form
+					// that charges and then reports nothing. The frames this
+					// plugin creates itself (below, and on the pay page) carry
+					// the attribute from the start, where it always applies.
+					if ( mounted && ! mounted.getAttribute( 'referrerpolicy' ) ) {
+						mounted.setAttribute( 'referrerpolicy', 'origin' );
+					}
 					// Kept for the requires_action listener below, which is the
 					// only way that event reaches us in this mode.
 					sdkFrame = mounted;
@@ -812,6 +825,23 @@
 		// Apple/Google Pay, and storage-access lets captcha / 3-D Secure run in
 		// a third-party frame.
 		frame.setAttribute( 'allow', 'payment *; storage-access *' );
+		// The embedded page decides who it may report a payment outcome to by
+		// reading document.referrer and checking it against the merchant's
+		// trusted-origins list. With no policy of our own the frame inherits the
+		// STORE's, and a site sending `Referrer-Policy: no-referrer` (several
+		// security plugins do) empties that referrer — so the page resolves no
+		// parent, and every success / pending / error message it sends is dropped
+		// on the floor. The frame still renders (frame-ancestors is a separate
+		// check) and it still accepts our submit (checked by source, not origin),
+		// so the form charges the card and then goes silent: the checkout learns
+		// nothing and falls back to polling.
+		//
+		// Pinning the policy here makes that independent of the store's own
+		// headers. `origin` sends the scheme+host and never the path — the same
+		// thing the browser default already sends cross-origin, so nothing that
+		// works today loses information, and a permissive store policy no longer
+		// leaks the checkout URL into the frame either.
+		frame.setAttribute( 'referrerpolicy', 'origin' );
 		frame.setAttribute( 'title', params.i18n.frameTitle );
 		frame.addEventListener( 'load', markReady );
 		// No request-resize ping. It fired on `load` at frameOrigin(), which
