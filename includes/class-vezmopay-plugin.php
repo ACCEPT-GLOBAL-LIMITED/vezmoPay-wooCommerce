@@ -559,7 +559,7 @@ final class Plugin {
 			wp_send_json_error( array( 'message' => __( 'Invalid order.', 'vezmopay-woocommerce' ) ), 400 );
 		}
 
-		$result = $gateway->reconcile_order_with_api( $order );
+		$result = $gateway->reconcile_for_browser( $order );
 		if ( is_wp_error( $result ) ) {
 			wp_send_json_error( array( 'message' => $result->get_error_message() ), 502 );
 		}
@@ -606,7 +606,7 @@ final class Plugin {
 			);
 		}
 
-		$result = $gateway->reconcile_order_with_api( $order );
+		$result = $gateway->reconcile_for_browser( $order );
 		if ( is_wp_error( $result ) ) {
 			wp_send_json_error( array( 'message' => $result->get_error_message() ), 502 );
 		}
@@ -660,10 +660,18 @@ final class Plugin {
 			$reason = 'unknown';
 		}
 
-		$status = $order->is_paid() ? 'CAPTURED' : $gateway->reconcile_order_with_api( $order );
-		if ( is_wp_error( $status ) ) {
+		$status = $order->is_paid() ? 'CAPTURED' : $gateway->reconcile_for_browser( $order );
+		if ( is_wp_error( $status ) || 'LOCKED' === $status ) {
 			// Could not check. Say nothing on the order rather than record a
 			// failure that may not have happened.
+			//
+			// LOCKED belongs here and not below: another actor is settling this
+			// order at this very moment, and it is the one case where a failure
+			// note is not merely unproven but actively wrong. This endpoint used
+			// to write one anyway, so an order that completed a few seconds later
+			// carried "VezmoPay reported no result for this payment attempt
+			// (payment …, still LOCKED)" immediately above its own "payment
+			// captured" note.
 			wp_send_json_success( array( 'status' => 'UNKNOWN', 'redirect' => '' ) );
 		}
 
@@ -955,7 +963,7 @@ final class Plugin {
 		if ( ! $gateway || $order->get_payment_method() !== Plugin::GATEWAY_ID ) {
 			return;
 		}
-		$result = $gateway->reconcile_order_with_api( $order );
+		$result = $gateway->reconcile_for_browser( $order );
 		if ( is_wp_error( $result ) ) {
 			$order->add_order_note(
 				sprintf(
@@ -963,6 +971,11 @@ final class Plugin {
 					__( 'VezmoPay status check failed: %s', 'vezmopay-woocommerce' ),
 					$result->get_error_message()
 				)
+			);
+		} elseif ( 'LOCKED' === $result ) {
+			// An internal marker, not a payment status — never show it as one.
+			$order->add_order_note(
+				__( 'VezmoPay status check: another check was already running for this order. Try again in a moment.', 'vezmopay-woocommerce' )
 			);
 		} else {
 			$order->add_order_note(

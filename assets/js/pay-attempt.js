@@ -46,6 +46,18 @@ window.VezmoPayAttempt = function ( params ) {
 	var pollTimer = null;
 	var pollStarted = 0;
 	var attemptTimer = null;
+	// The store answered a poll with LOCKED: another actor — the webhook, the
+	// five-minute cron, another tab — is inside the store's reconcile right now,
+	// writing the answer this poll wants. That holder runs payment_complete(),
+	// which sends the order emails synchronously and can take tens of seconds,
+	// and calling the attempt failed underneath it tells a shopper whose order is
+	// completing that their payment reported no result. Both bounds are lifted for
+	// as long as it lasts and start again from the store's next answer for itself;
+	// the store breaks an abandoned reconcile lock on its own, so this cannot wait
+	// forever.
+	var storeBusy = false;
+	var busyMs = 0;
+	var lastTick = 0;
 
 	function setMessage( text, kind ) {
 		if ( ! els.message ) {
@@ -143,16 +155,53 @@ window.VezmoPayAttempt = function ( params ) {
 		}
 	}
 
+	/** The store is mid-reconcile: hold the attempt open rather than fail it. */
+	function noteStoreBusy() {
+		if ( storeBusy ) {
+			return;
+		}
+		storeBusy = true;
+		clearAttemptTimer();
+	}
+
+	/** The store is answering for itself again: restore the bound it suspended. */
+	function noteStoreFree() {
+		if ( ! storeBusy ) {
+			return;
+		}
+		storeBusy = false;
+		if ( ! settled && paying && ! awaitingAction && ! attemptTimer ) {
+			attemptTimer = window.setTimeout( onAttemptTimeout, ATTEMPT_LIMIT_MS );
+		}
+	}
+
+	/** Nothing reported an outcome inside the attempt's time limit. */
+	function onAttemptTimeout() {
+		if ( settled || ! paying || awaitingAction ) {
+			return;
+		}
+		failAttempt( 'timeout', params.i18n.noResult );
+	}
+
 	function startPolling() {
 		if ( pollTimer || settled ) {
 			return;
 		}
 		pollStarted = Date.now();
+		lastTick = pollStarted;
+		busyMs = 0;
 		pollTimer = window.setInterval( function () {
 			if ( settled ) {
 				return;
 			}
-			if ( Date.now() - pollStarted > POLL_LIMIT_MS ) {
+			var now = Date.now();
+			if ( storeBusy ) {
+				busyMs += now - lastTick;
+			}
+			lastTick = now;
+			// Time the store spent settling this order is not time the shopper
+			// spent waiting on nothing, so it does not count against the limit.
+			if ( now - pollStarted - busyMs > POLL_LIMIT_MS ) {
 				stopPolling();
 				return;
 			}
@@ -178,9 +227,13 @@ window.VezmoPayAttempt = function ( params ) {
 							setMessage( params.i18n.pending, 'info' );
 						}
 						window.location = res.data.redirect;
+					} else if ( 'LOCKED' === res.data.status ) {
+						noteStoreBusy();
 					} else if ( 'FAILED' === res.data.status ) {
+						noteStoreFree();
 						failAttempt( 'status', params.i18n.failed );
 					} else if ( 'MISMATCH' === res.data.status ) {
+						noteStoreFree();
 						// Manual review required — polling will never resolve it,
 						// and the shopper must not be told to pay again.
 						settled = true;
@@ -188,6 +241,8 @@ window.VezmoPayAttempt = function ( params ) {
 						clearAttemptTimer();
 						setPaying( false );
 						setMessage( params.i18n.review, 'info' );
+					} else {
+						noteStoreFree();
 					}
 				} )
 				.catch( function () {
@@ -211,12 +266,8 @@ window.VezmoPayAttempt = function ( params ) {
 		setPaying( true );
 		setMessage( '' );
 		clearAttemptTimer();
-		attemptTimer = window.setTimeout( function () {
-			if ( settled || ! paying || awaitingAction ) {
-				return;
-			}
-			failAttempt( 'timeout', params.i18n.noResult );
-		}, ATTEMPT_LIMIT_MS );
+		storeBusy = false;
+		attemptTimer = window.setTimeout( onAttemptTimeout, ATTEMPT_LIMIT_MS );
 		startPolling();
 		return true;
 	}

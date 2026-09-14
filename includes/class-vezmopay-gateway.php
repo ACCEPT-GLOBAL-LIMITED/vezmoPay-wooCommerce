@@ -31,6 +31,25 @@ class Gateway extends \WC_Payment_Gateway {
 	const TOKEN_TTL_MINUTES = 60;
 
 	/**
+	 * How long a reconcile lock may be held before another pass may break it,
+	 * in seconds.
+	 *
+	 * The holder releases in a `finally`, so this is not about a slow reconcile —
+	 * it is about one that never returns at all: a PHP fatal, an OOM, a request
+	 * killed by the host mid-flight. The lock is a plain option row with no
+	 * expiry, so an abandoned one wedged that order's reconcile PERMANENTLY —
+	 * every confirm, poll, webhook delivery and cron pass answered LOCKED and
+	 * nothing could ever complete the order again.
+	 *
+	 * Generous on purpose: a legitimate holder runs payment_complete(), which
+	 * sends the order emails synchronously, and breaking a lock that is still
+	 * doing that risks the duplicate payment_complete() the lock exists to
+	 * prevent. Longer than any request PHP will allow to run, so in practice
+	 * only a dead holder is ever broken.
+	 */
+	const RECONCILE_LOCK_TTL = 120;
+
+	/**
 	 * Logger.
 	 *
 	 * @var Logger
@@ -2115,8 +2134,25 @@ class Gateway extends \WC_Payment_Gateway {
 		// one caller gets the lock and the rest back off.
 		$lock = 'vezmopay_recon_' . $order->get_id();
 		if ( ! add_option( $lock, time(), '', 'no' ) ) {
-			$this->logger->debug( 'Reconciliation for order #' . $order->get_id() . ' is already running; skipping this pass.' );
-			return 'LOCKED';
+			// Held. Usually by a live pass — but the option has no expiry, and a
+			// holder that died before its `finally` leaves one behind forever.
+			// See RECONCILE_LOCK_TTL.
+			if ( ! self::lock_is_stale( (int) get_option( $lock, 0 ), time() ) ) {
+				$this->logger->debug( 'Reconciliation for order #' . $order->get_id() . ' is already running; skipping this pass.' );
+				return 'LOCKED';
+			}
+			// Take it over. Claiming with add_option() again rather than simply
+			// proceeding keeps the mutex honest: if two passes both read the same
+			// stale lock, exactly one of them wins the re-claim.
+			delete_option( $lock );
+			if ( ! add_option( $lock, time(), '', 'no' ) ) {
+				$this->logger->debug( 'Order #' . $order->get_id() . ': another pass claimed the stale reconcile lock first.' );
+				return 'LOCKED';
+			}
+			$this->logger->error(
+				'Broke an abandoned reconcile lock on order #' . $order->get_id()
+				. ' (held for more than ' . self::RECONCILE_LOCK_TTL . 's). A previous reconcile did not finish.'
+			);
 		}
 
 		try {
@@ -2124,6 +2160,94 @@ class Gateway extends \WC_Payment_Gateway {
 		} finally {
 			delete_option( $lock );
 		}
+	}
+
+	/**
+	 * Whether a reconcile lock claimed at `$since` may be broken at `$now`.
+	 *
+	 * A lock with no readable timestamp is stale by definition: it cannot be
+	 * aged, and a lock that can never be aged is exactly the one that wedges an
+	 * order for good. A timestamp in the future (a clock correction between the
+	 * claim and this read) is treated as live rather than immortal.
+	 *
+	 * Pure, so the decision is testable without WordPress.
+	 *
+	 * @param int $since Unix time the lock was claimed, or 0 when unreadable.
+	 * @param int $now   Unix time now.
+	 * @return bool
+	 */
+	public static function lock_is_stale( $since, $now ) {
+		if ( $since <= 0 ) {
+			return true;
+		}
+		return ( $now - $since ) >= self::RECONCILE_LOCK_TTL;
+	}
+
+	/**
+	 * Answer a LOCKED reconcile from the order's own state.
+	 *
+	 * LOCKED does not mean "no news from VezmoPay". It means another actor — the
+	 * webhook, the five-minute cron, a second tab — is inside reconcile_locked()
+	 * RIGHT NOW, writing the very answer the caller is asking for. That holder
+	 * runs payment_complete(), which sends the order emails synchronously and can
+	 * take tens of seconds, and every browser-facing endpoint used to read LOCKED
+	 * as "still waiting": the checkout's sixty-second attempt limit expired
+	 * underneath a completing order, the shopper was told their payment had
+	 * reported no result and was asked to try again, and the order collected a
+	 * failure note seconds before its own "payment captured" one.
+	 *
+	 * The holder writes the order's state before it releases, so re-reading the
+	 * order answers the question without an API call. Only the two states that
+	 * mean the money is committed are reported — an unsettled order stays LOCKED
+	 * so the caller keeps waiting, and a `failed` order is deliberately NOT read
+	 * as FAILED here: that status may be left over from an earlier attempt while
+	 * the retry this caller is watching is the one holding the lock.
+	 *
+	 * Pure, so the decision is testable without WordPress.
+	 *
+	 * @param string $result     Result from reconcile_order_with_api().
+	 * @param bool   $is_paid    Whether the order reads as paid.
+	 * @param bool   $is_on_hold Whether the order is on-hold (awaiting settlement).
+	 * @return string
+	 */
+	public static function status_from_local_state( $result, $is_paid, $is_on_hold ) {
+		if ( 'LOCKED' !== $result ) {
+			return $result;
+		}
+		if ( $is_paid ) {
+			return 'CAPTURED';
+		}
+		if ( $is_on_hold ) {
+			return 'PENDING';
+		}
+		return 'LOCKED';
+	}
+
+	/**
+	 * reconcile_order_with_api(), with a LOCKED result resolved against the
+	 * order's own state. What every browser-facing endpoint should call.
+	 *
+	 * @param \WC_Order $order Order.
+	 * @return string|\WP_Error
+	 */
+	public function reconcile_for_browser( $order ) {
+		$result = $this->reconcile_order_with_api( $order );
+		if ( is_wp_error( $result ) || 'LOCKED' !== $result ) {
+			return $result;
+		}
+		// Re-read from storage: the holder's writes are not on our in-memory copy.
+		$fresh = wc_get_order( $order->get_id() );
+		if ( ! $fresh ) {
+			return $result;
+		}
+		$resolved = self::status_from_local_state( $result, $fresh->is_paid(), $fresh->has_status( 'on-hold' ) );
+		if ( 'LOCKED' !== $resolved ) {
+			$this->logger->debug(
+				'Order #' . $order->get_id() . ': a reconcile is running, but the order already reads as '
+				. $resolved . '; answering from the order.'
+			);
+		}
+		return $resolved;
 	}
 
 	/**
