@@ -4,7 +4,7 @@ Tags: payments, payment gateway, credit card, ach, woocommerce
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.3.6
+Stable tag: 0.3.7
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -112,6 +112,17 @@ This plugin connects your store to the VezmoPay payment platform, operated by Ve
 VezmoPay is operated by Vezmo Technology, Inc.: [https://vezmo.com](https://vezmo.com) — see the site for terms of service and privacy policy.
 
 == Changelog ==
+
+= 0.3.7 =
+
+* Apple Pay and Google Pay are available in the payment box again, and a wallet approval can no longer take money without creating an order. A wallet sheet charges the instant the customer approves it, on their own tap inside VezmoPay's form — before WooCommerce has an order for that money to belong to. The customer was charged and no order ever existed, and pressing Place order afterwards could not fix it because the payment had already been taken. The plugin now holds the approval, places the order, and only then lets the charge complete; a checkout WooCommerce refuses cancels the payment instead of taking it. The buttons stay greyed out until the required checkout fields are filled.
+* Bank (ACH) payments can be selected at checkout. The payment form is created for the cart, before any billing field is filled, so it carried no customer — and an ACH debit mandate requires the payer's email. Choosing Bank simply failed with "Bank payments need a customer email." The checkout now sends the billing details to VezmoPay as they are typed, on both the classic and Blocks checkouts, and the order's own billing is attached as a backstop before anything is charged. Nothing the customer typed is thrown away.
+* A submitted bank payment now completes the order instead of stranding the customer. The debit went through, the form said "Payment initiated", and the order never moved — then after a minute the checkout told the customer their payment had reported no result and asked them to try again, for money that had already been taken. A bank debit on its way now puts the order on hold with a note saying it is clearing, sends the customer to the order-received page, and the order updates itself when the debit settles (usually 1–2 business days).
+* Pressing Place order again while a bank payment was on its way no longer starts a second payment. The first debit was orphaned — still heading for the bank, with nothing on the order pointing at it — and the customer was invited to pay twice. An order whose money is already moving now goes to the order-received page instead.
+* Fixed the checkout calling a payment failed while the store was in the middle of completing it. Confirming an order sends its emails, which can take tens of seconds, and everything else that asked about the payment during that window — the checkout's own polling above all — was told "still waiting". The customer was shown a failure and asked to try again, and the order collected a note saying the payment reported no result seconds before its own "payment captured" note. Those questions are now answered from the order itself, and the checkout waits rather than giving up while the store is working.
+* A status check that never finished can no longer freeze an order permanently. Only one check may run per order at a time, and if the one holding that claim was killed mid-way (a PHP error, a request the host cut short) nothing released it — so every later check, webhook delivery and scheduled retry for that order was turned away forever and the order could never be completed by any of them. An abandoned claim is now broken after two minutes and logged.
+* The "Check VezmoPay payment status" order action no longer writes `VezmoPay status check: LOCKED` as though it were a payment status. It says a check was already running and to try again.
+* Debug logging no longer writes a live payment credential to wp-content. The secure-payment token travels in the request path, and only request bodies were being redacted.
 
 = 0.3.6 =
 
