@@ -1068,24 +1068,6 @@ class Gateway extends \WC_Payment_Gateway {
 			);
 		}
 
-		// A payment is ALREADY in flight on this order — an ACH debit on its way to
-		// the bank, which takes days. Never start a second one.
-		//
-		// can_recharge_bound_payment() above answers false for it (it re-charges
-		// only an INITIATED payment, and this one has moved on), so without this
-		// the order fell through to ensure_secure_payment() below, which mints a
-		// fresh payment and OVERWRITES _vezmopay_payment_id — orphaning the debit
-		// already on its way and inviting the shopper to pay a second time. Send
-		// them to the order-received page instead, which is where the first
-		// payment was always going to take them.
-		if ( $this->payment_already_in_flight( $order ) ) {
-			$this->release_cart();
-			return array(
-				'result'   => 'success',
-				'redirect' => $this->get_return_url( $order ),
-			);
-		}
-
 		$result = $this->ensure_secure_payment( $order );
 		if ( is_wp_error( $result ) ) {
 			$this->handle_start_failure( $order, $result );
@@ -2124,57 +2106,6 @@ class Gateway extends \WC_Payment_Gateway {
 		}
 
 		return new \WP_Error( 'vezmopay_no_ref', __( 'No VezmoPay payment reference on this order.', 'vezmopay-woocommerce' ) );
-	}
-
-	/**
-	 * Whether this order already has money moving that a second Place order
-	 * would duplicate.
-	 *
-	 * Reads the payment from the API rather than trusting the order's status,
-	 * and reconciles while it is there — so an order whose ACH went in flight
-	 * before this plugin knew how to record it is picked up here too.
-	 *
-	 * Fails OPEN, deliberately, and the inverse of is_bindable()/
-	 * can_recharge_bound_payment(): those refuse to charge when they cannot read
-	 * the payment, which is the safe answer for THEM. Here a false negative
-	 * starts a second payment, so an unreadable payment must not be reported as
-	 * in flight — the shopper keeps the pay-page fallback and the cron still
-	 * reconciles whatever was already running.
-	 *
-	 * @param \WC_Order $order Order.
-	 * @return bool
-	 */
-	private function payment_already_in_flight( $order ) {
-		if ( $order->is_paid() || $order->has_status( 'on-hold' ) ) {
-			return true;
-		}
-		if ( '' === (string) $order->get_meta( '_vezmopay_payment_id' ) ) {
-			return false;
-		}
-
-		$state = $this->reconcile_order_with_api( $order );
-		if ( is_wp_error( $state ) ) {
-			return false;
-		}
-		// Another pass holds the reconcile lock, which is itself proof that
-		// something is settling this order right now.
-		if ( 'LOCKED' === $state ) {
-			return true;
-		}
-
-		// Re-read: the reconcile may have just moved the order, and our copy was
-		// loaded before it ran. This also catches states that are not about money
-		// in flight but must still never mint a second payment — MISMATCH parks
-		// the order on-hold for the merchant to look at, and returns a value that
-		// says nothing about whether a payment is running.
-		$fresh = wc_get_order( $order->get_id() );
-		if ( $fresh && ( $fresh->is_paid() || $fresh->has_status( 'on-hold' ) ) ) {
-			return true;
-		}
-
-		// PENDING is an ACH clearing (or an authorized payment awaiting capture);
-		// CAPTURED and REFUNDED are money that has already moved.
-		return in_array( $state, array( 'PENDING', 'CAPTURED', 'REFUNDED' ), true );
 	}
 
 	/**
