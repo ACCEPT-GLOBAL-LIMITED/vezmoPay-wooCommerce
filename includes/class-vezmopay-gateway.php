@@ -2109,6 +2109,29 @@ class Gateway extends \WC_Payment_Gateway {
 	}
 
 	/**
+	 * Park an order whose money is committed but not yet settled.
+	 *
+	 * on-hold is WooCommerce's own "awaiting payment" state: stock is reduced,
+	 * the shopper is out of the checkout, and the order is not treated as paid.
+	 * The cron reconciles pending AND on-hold orders, so this is picked up again
+	 * when the payment finally captures or fails.
+	 *
+	 * @param \WC_Order $order      Order.
+	 * @param string    $payment_id VezmoPay payment id, or ''.
+	 * @param string    $note       Order note explaining the wait.
+	 */
+	private function hold_for_settlement( $order, $payment_id, $note ) {
+		if ( $order->has_status( 'on-hold' ) || $order->is_paid() ) {
+			return;
+		}
+		$order->update_status( 'on-hold', $note );
+		if ( $payment_id ) {
+			$order->set_transaction_id( $payment_id );
+			$order->save();
+		}
+	}
+
+	/**
 	 * Map a VezmoPay payment record onto the WooCommerce order state machine.
 	 *
 	 * @param \WC_Order $order   Order.
@@ -2139,13 +2162,32 @@ class Gateway extends \WC_Payment_Gateway {
 				return 'CAPTURED';
 
 			case 'AUTHORIZED':
-				if ( ! $order->has_status( 'on-hold' ) && ! $order->is_paid() ) {
-					$order->update_status( 'on-hold', __( 'VezmoPay payment authorized / bank settlement pending (e.g. ACH). Awaiting final confirmation.', 'vezmopay-woocommerce' ) );
-					if ( $payment_id ) {
-						$order->set_transaction_id( $payment_id );
-						$order->save();
-					}
-				}
+				$this->hold_for_settlement(
+					$order,
+					$payment_id,
+					__( 'VezmoPay payment authorized / bank settlement pending (e.g. ACH). Awaiting final confirmation.', 'vezmopay-woocommerce' )
+				);
+				return 'PENDING';
+
+			// An ACH debit that is in flight. VezmoPay holds a submitted ACH
+			// separately from settled payments and reports it as PROCESSING, and
+			// without a case here it fell to `default` — so the order sat at
+			// `pending` while the bank debit was already on its way, the cart was
+			// never released, and the checkout polled until it timed out and told
+			// the shopper their payment had not reported a result. It had; it just
+			// takes days to clear.
+			//
+			// Same answer as AUTHORIZED, because it is the same situation: the
+			// money is committed and the outcome is not known yet. 'PENDING' is
+			// what the confirm and status endpoints already treat as settled
+			// enough to forward the customer to the order-received page, and the
+			// cron keeps reconciling on-hold orders until it settles or fails.
+			case 'PROCESSING':
+				$this->hold_for_settlement(
+					$order,
+					$payment_id,
+					__( 'VezmoPay bank payment (ACH) submitted and processing. Bank debits usually clear within 1–2 business days; the order will update automatically.', 'vezmopay-woocommerce' )
+				);
 				return 'PENDING';
 
 			case 'FAILED':
