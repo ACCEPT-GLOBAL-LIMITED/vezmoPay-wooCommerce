@@ -978,6 +978,52 @@
 	}
 
 	/**
+	 * The store answered a poll with LOCKED: another actor — the webhook, the
+	 * five-minute cron, a second tab — is inside the store's reconcile RIGHT NOW,
+	 * writing the answer this poll is asking for. That holder runs
+	 * payment_complete(), which sends the order emails synchronously and can take
+	 * tens of seconds.
+	 *
+	 * This page used to keep counting through it and call the attempt failed
+	 * underneath a completing order: the shopper was told their payment reported
+	 * no result and asked to try again, while the order was collecting its
+	 * "payment captured" note and its confirmation emails.
+	 *
+	 * Treated like a live verification: the bounds are lifted while it lasts,
+	 * because the wait is on our own store rather than on the shopper. The first
+	 * answer the store gives for itself starts them again from there. Nothing
+	 * here can wait forever — the store breaks an abandoned reconcile lock after
+	 * RECONCILE_LOCK_TTL, and the poll keeps asking throughout.
+	 */
+	function noteStoreBusy() {
+		if ( ! charging || charging.storeBusy ) {
+			return;
+		}
+		charging.storeBusy = true;
+		log( 'the store is already settling this order — holding the attempt open' );
+		if ( charging.stallTimer ) {
+			window.clearTimeout( charging.stallTimer );
+			charging.stallTimer = null;
+		}
+		if ( charging.attemptTimer ) {
+			window.clearTimeout( charging.attemptTimer );
+			charging.attemptTimer = null;
+		}
+	}
+
+	/** The store is answering for itself again: restore the bound it suspended. */
+	function noteStoreFree() {
+		if ( ! charging || ! charging.storeBusy ) {
+			return;
+		}
+		charging.storeBusy = false;
+		log( 'the store finished its reconcile — the attempt is bounded again' );
+		if ( ! charging.awaitingAction && ! charging.attemptTimer ) {
+			charging.attemptTimer = window.setTimeout( attemptTimedOut, ATTEMPT_LIMIT_MS );
+		}
+	}
+
+	/**
 	 * `requires_action`, in element mode.
 	 *
 	 * vezmo.js relays eight event names — ready, processing, success, error,
@@ -1121,7 +1167,12 @@
 			if ( ! charging ) {
 				return;
 			}
-			if ( ! document.hidden ) {
+			// Neither while the tab is hidden, nor while the STORE is mid-reconcile
+			// (see noteStoreBusy): time spent waiting on our own server is not the
+			// shopper staring at a spinner with nothing happening, and handing off
+			// to the pay page in the middle of the order completing is the same
+			// mistake the attempt limit used to make.
+			if ( ! document.hidden && ! charging.storeBusy ) {
 				charging.elapsed += Date.now() - charging.lastTick;
 			}
 			charging.lastTick = Date.now();
@@ -1167,8 +1218,13 @@
 					log( 'status poll:', res.data.status, res.data.redirect ? '(settled)' : '(still waiting)' );
 					if ( res.data.redirect ) {
 						finish( res.data.redirect );
+					} else if ( 'LOCKED' === res.data.status ) {
+						noteStoreBusy();
 					} else if ( 'FAILED' === res.data.status ) {
+						noteStoreFree();
 						failCharge( params.i18n.failed, 'status' );
+					} else {
+						noteStoreFree();
 					}
 					// Anything else: still settling — keep polling.
 				} )
@@ -1350,6 +1406,7 @@
 			attemptTimer: null,
 			sawSuccess: false,
 			sawProcessing: false,
+			storeBusy: false,
 			submitTries: 0,
 			submitTimer: null,
 			returnUrl: ( marker && marker.returnUrl ) || '',
