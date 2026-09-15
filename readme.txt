@@ -4,7 +4,7 @@ Tags: payments, payment gateway, credit card, ach, woocommerce
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.3.7
+Stable tag: 0.3.8
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -112,6 +112,10 @@ This plugin connects your store to the VezmoPay payment platform, operated by Ve
 VezmoPay is operated by Vezmo Technology, Inc.: [https://vezmo.com](https://vezmo.com) — see the site for terms of service and privacy policy.
 
 == Changelog ==
+
+= 0.3.8 =
+
+* Documentation only — the plugin behaves exactly as 0.3.7 does. The QA checklist now covers everything 0.3.7 changed (wallet approvals, bank payments, the stale status-check claim) and gives every case an id, so a tester can report "T-22.4 failed" rather than describing it.
 
 = 0.3.7 =
 
