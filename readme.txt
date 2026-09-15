@@ -4,7 +4,7 @@ Tags: payments, payment gateway, credit card, ach, woocommerce
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.3.10
+Stable tag: 0.3.11
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -112,6 +112,10 @@ This plugin connects your store to the VezmoPay payment platform, operated by Ve
 VezmoPay is operated by Vezmo Technology, Inc.: [https://vezmo.com](https://vezmo.com) — see the site for terms of service and privacy policy.
 
 == Changelog ==
+
+= 0.3.11 =
+
+* The settings screen now tells you when webhook deliveries are being refused, and what to do about it. A store with its secret saved could have every delivery rejected — because the endpoint in the VezmoPay dashboard has no signing secret of its own, or because the secret saved here belongs to a different endpoint — and the only sign of it was a line in WooCommerce → Status → Logs saying what happened but not what to fix. The notice names the cause, counts the refusals, says when the last one was, and disappears as soon as one delivery is accepted. The log lines carry the same guidance.
 
 = 0.3.10 =
 
