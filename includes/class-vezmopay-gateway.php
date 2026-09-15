@@ -2352,34 +2352,15 @@ class Gateway extends \WC_Payment_Gateway {
 		// payment_complete(): duplicate emails, duplicate notes, and two stock
 		// reductions that each read _order_stock_reduced = no.
 		//
-		// The claim is one INSERT IGNORE against the options table's unique index,
-		// and it carries a TOKEN.
-		//
-		// add_option() was the wrong primitive, however atomic the comment here
-		// used to claim it was: it reads first — through the object cache — and
-		// only then writes with ON DUPLICATE KEY UPDATE, so two passes can both
-		// read "absent", both write, and both believe they hold the lock. And
-		// because the old release deleted the key by name, a slow holder that
-		// revived after its lock had been broken deleted the NEW holder's lock on
-		// its way out, handing the order to a third pass mid-flight.
-		//
-		// INSERT IGNORE cannot insert a duplicate, so exactly one caller sees a
-		// row affected; and a release that matches on the token only ever removes
-		// its own claim.
-		$lock  = 'vezmopay_recon_' . $order->get_id();
-		$token = wp_generate_uuid4();
-		if ( ! $this->claim_reconcile_lock( $lock, $token ) ) {
-			$held = (string) $this->read_reconcile_lock( $lock );
-			if ( ! self::lock_is_stale( self::lock_claimed_at( $held ), time() ) ) {
-				$this->logger->debug( 'Reconciliation for order #' . $order->get_id() . ' is already running; skipping this pass.' );
-				return 'LOCKED';
-			}
-			// Take it over, but only from the exact holder we just read: two passes
-			// looking at the same abandoned lock, and only one wins the swap.
-			if ( ! $this->steal_reconcile_lock( $lock, $held, $token ) ) {
-				$this->logger->debug( 'Order #' . $order->get_id() . ': another pass claimed the stale reconcile lock first.' );
-				return 'LOCKED';
-			}
+		// One shared primitive, because the webhook's event claim needs exactly the
+		// same thing and a second implementation is a second place to get it
+		// wrong — see Lock, which explains why add_option() cannot do this job.
+		$claim = Lock::claim( 'vezmopay_recon_' . $order->get_id(), self::RECONCILE_LOCK_TTL );
+		if ( ! $claim ) {
+			$this->logger->debug( 'Reconciliation for order #' . $order->get_id() . ' is already running; skipping this pass.' );
+			return 'LOCKED';
+		}
+		if ( $claim->was_stolen() ) {
 			$this->logger->error(
 				'Broke an abandoned reconcile lock on order #' . $order->get_id()
 				. ' (held for more than ' . self::RECONCILE_LOCK_TTL . 's). A previous reconcile did not finish.'
@@ -2389,130 +2370,10 @@ class Gateway extends \WC_Payment_Gateway {
 		try {
 			return $this->reconcile_locked( $order );
 		} finally {
-			$this->release_reconcile_lock( $lock, $token );
+			$claim->release();
 		}
 	}
 
-	/**
-	 * The lock's stored value: "<uuid>|<unix time>".
-	 *
-	 * @param string $token Claim token.
-	 * @return string
-	 */
-	private static function lock_value( $token ) {
-		return $token . '|' . time();
-	}
-
-	/**
-	 * When a stored lock value was claimed, or 0 when it cannot be read.
-	 *
-	 * @param string $value Stored value.
-	 * @return int
-	 */
-	public static function lock_claimed_at( $value ) {
-		$parts = explode( '|', (string) $value );
-		return isset( $parts[1] ) ? (int) $parts[1] : 0;
-	}
-
-	/**
-	 * Claim the lock, or fail because someone already holds it.
-	 *
-	 * @param string $lock  Option name.
-	 * @param string $token Our token.
-	 * @return bool
-	 */
-	private function claim_reconcile_lock( $lock, $token ) {
-		global $wpdb;
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- the unique index IS the mutex; add_option() reads through the cache first and cannot serve as one.
-		$wpdb->query(
-			$wpdb->prepare(
-				"INSERT IGNORE INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'no')",
-				$lock,
-				self::lock_value( $token )
-			)
-		);
-		$claimed = ( 1 === (int) $wpdb->rows_affected );
-		wp_cache_delete( $lock, 'options' );
-		wp_cache_delete( 'notoptions', 'options' );
-		return $claimed;
-	}
-
-	/**
-	 * Read the lock straight from storage, never from the object cache.
-	 *
-	 * @param string $lock Option name.
-	 * @return string
-	 */
-	private function read_reconcile_lock( $lock ) {
-		global $wpdb;
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- a cached read cannot decide who holds a mutex.
-		return (string) $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", $lock ) );
-	}
-
-	/**
-	 * Swap an abandoned claim for ours, atomically.
-	 *
-	 * @param string $lock  Option name.
-	 * @param string $held  The exact value we read and judged stale.
-	 * @param string $token Our token.
-	 * @return bool
-	 */
-	private function steal_reconcile_lock( $lock, $held, $token ) {
-		global $wpdb;
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- compare-and-swap; see claim_reconcile_lock().
-		$wpdb->query(
-			$wpdb->prepare(
-				"UPDATE {$wpdb->options} SET option_value = %s WHERE option_name = %s AND option_value = %s",
-				self::lock_value( $token ),
-				$lock,
-				$held
-			)
-		);
-		$won = ( 1 === (int) $wpdb->rows_affected );
-		wp_cache_delete( $lock, 'options' );
-		return $won;
-	}
-
-	/**
-	 * Release the lock — ours only.
-	 *
-	 * @param string $lock  Option name.
-	 * @param string $token Our token.
-	 */
-	private function release_reconcile_lock( $lock, $token ) {
-		global $wpdb;
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- delete our own claim only; see claim_reconcile_lock().
-		$wpdb->query(
-			$wpdb->prepare(
-				"DELETE FROM {$wpdb->options} WHERE option_name = %s AND option_value LIKE %s",
-				$lock,
-				$wpdb->esc_like( $token . '|' ) . '%'
-			)
-		);
-		wp_cache_delete( $lock, 'options' );
-		wp_cache_delete( 'notoptions', 'options' );
-	}
-
-	/**
-	 * Whether a reconcile lock claimed at `$since` may be broken at `$now`.
-	 *
-	 * A lock with no readable timestamp is stale by definition: it cannot be
-	 * aged, and a lock that can never be aged is exactly the one that wedges an
-	 * order for good. A timestamp in the future (a clock correction between the
-	 * claim and this read) is treated as live rather than immortal.
-	 *
-	 * Pure, so the decision is testable without WordPress.
-	 *
-	 * @param int $since Unix time the lock was claimed, or 0 when unreadable.
-	 * @param int $now   Unix time now.
-	 * @return bool
-	 */
-	public static function lock_is_stale( $since, $now ) {
-		if ( $since <= 0 ) {
-			return true;
-		}
-		return ( $now - $since ) >= self::RECONCILE_LOCK_TTL;
-	}
 
 	/**
 	 * Answer a LOCKED reconcile from the order's own state.

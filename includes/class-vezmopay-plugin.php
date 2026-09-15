@@ -1017,6 +1017,17 @@ final class Plugin {
 			)
 		);
 
+		// Housekeeping first, and bounded: an event claim is KEPT for its TTL — that
+		// is what makes a replayed delivery a duplicate — so nothing removed it at
+		// the end of a request and a busy store grew one wp_options row per webhook
+		// event for the life of the install. They are not autoloaded, so this is
+		// table size rather than page weight, but it is unbounded either way.
+		$swept = Lock::sweep( 'vezmopay_evt_', Webhook::EVENT_CLAIM_TTL )
+			+ Lock::sweep( 'vezmopay_recon_', Gateway::RECONCILE_LOCK_TTL );
+		if ( $swept > 0 ) {
+			$gateway->logger()->debug( 'Swept ' . $swept . ' expired VezmoPay claim rows.' );
+		}
+
 		foreach ( $orders as $order ) {
 			$has_ref = '' !== (string) $order->get_meta( '_vezmopay_payment_id' ) || '' !== (string) $order->get_meta( '_vezmopay_paylink_code' );
 			if ( ! $has_ref ) {

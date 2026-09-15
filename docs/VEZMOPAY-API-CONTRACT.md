@@ -117,6 +117,15 @@ Response `data`:
   `data` includes `id` (payment id) / `paymentId`, `amount`, `currency`, `status`,
   `type` (`secure-payment` | `paylink` | `manual` | ach flows), `payment.failed` adds `reason`.
 - Retries: 4 attempts at +0h/+6h/+12h/+24h, 5s timeout, no ordering guarantee. Dedupe on envelope `id`.
+- **Delivery rate and egress (asked 2026-09-15, partly unanswered).** The delivery queue
+  (`BullModule.registerQueue({ name: 'webhook' })`) sets no limiter and no concurrency, so the rate
+  reaching one store is whatever the worker processes produce — nothing in the platform caps it per
+  merchant. The **egress IP addresses are not in the source**; if deliveries come from one address
+  or a small NAT pool, a per-address rate limit on the store side throttles genuine traffic. ❓ Ask
+  the platform for the egress addresses and any per-merchant delivery cap, and record them here.
+  Until then the plugin does not rate-limit deliveries that carry a valid signature at all — only
+  unauthenticated traffic is capped, behind a much higher unconditional ceiling that exists solely
+  so the endpoint cannot be used to make the store compute HMACs.
 - ✅ **Signing is LIVE** (corrected 2026-09-10). `webhook.processor.ts` signs the raw JSON body with
   the endpoint's `whsec_…` secret — `HMAC-SHA256` hex in `X-Webhook-Signature` — and sends
   `X-Webhook-Timestamp` (unix seconds) alongside it; an endpoint with no secret is delivered

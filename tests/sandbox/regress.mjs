@@ -4,6 +4,50 @@ import { execFileSync } from 'node:child_process';
 const wp = (c) => execFileSync('docker',['exec','wc-test-cli-1','wp','eval',c],{encoding:'utf8'})
   .split('\n').filter(l=>!l.includes('sendmail')).join('\n').trim();
 const [surface='box', mode='element', outcome='success', waitMs='14000'] = process.argv.slice(2);
+
+// `webhook-race`: two identical deliveries fired without awaiting the first.
+// Exactly one may reconcile; the other must come back as a duplicate, and the
+// one that loses must not free the winner's claim. This is the case the event
+// claim exists for, and it cannot be seen one request at a time.
+if ( surface === 'webhook-race' ) {
+  const out = execFileSync('docker', ['exec','wc-test-cli-1','wp','eval', `
+    $g = WC()->payment_gateways()->payment_gateways()["vezmopay"];
+    $secret = $g->get_option( "webhook_secret" );
+    if ( "" === $secret ) { echo "SKIP: no webhook secret saved in the sandbox"; return; }
+
+    // An order the delivery can match, with a payment the mock reports captured.
+    $o = wc_create_order(); $o->add_product( wc_get_product(10), 1 );
+    $o->set_payment_method("vezmopay"); $o->calculate_totals(); $o->set_status("pending");
+    $pid = "pay_mock_race" . wp_rand( 1000, 9999 );
+    $o->update_meta_data("_vezmopay_payment_id", $pid);
+    $o->update_meta_data("_vezmopay_environment","test");
+    $o->save();
+    set_transient( "mockpay_" . $pid, array( "amount" => (float) $o->get_total(), "currency" => "USD" ), HOUR_IN_SECONDS );
+    set_transient( "mockpay_captured_" . $pid, 1, HOUR_IN_SECONDS );
+
+    $body = wp_json_encode( array( "id" => "evt_race_" . wp_rand( 1000, 9999 ), "event" => "payment.success", "data" => array( "id" => $pid ) ) );
+    $sig  = hash_hmac( "sha256", $body, $secret );
+    $fire = function () use ( $body, $sig ) {
+      $r = new WP_REST_Request( "POST", "/vezmopay/v1/webhook" );
+      $r->set_header( "content-type", "application/json" );
+      $r->set_header( "x-webhook-signature", $sig );
+      $r->set_body( $body );
+      $res = rest_do_request( $r );
+      return $res->get_status() . " " . wp_json_encode( $res->get_data() );
+    };
+    // Same process, so this is the claim's logic rather than true parallelism —
+    // the atomicity itself is proven by Lock's own INSERT IGNORE.
+    echo "first : " . $fire() . "\n";
+    echo "second: " . $fire() . "\n";
+    $notes = wc_get_order_notes( array( "order_id" => $o->get_id() ) );
+    $captured = 0;
+    foreach ( $notes as $n ) { if ( false !== strpos( $n->content, "payment captured" ) ) { $captured++; } }
+    echo "order #" . $o->get_id() . " " . wc_get_order( $o->get_id() )->get_status() . ", capture notes: " . $captured . " (want 1)\n";
+  `], { encoding: 'utf8' }).split('\n').filter(l => !l.includes('sendmail')).join('\n').trim();
+  console.log(out);
+  process.exit(0);
+}
+
 execFileSync('docker',['exec','wc-test-cli-1','wp','option','update','mockpay_outcome',outcome]);
 try { execFileSync('docker',['exec','wc-test-cli-1','wp','transient','delete','mockpay_created']); } catch {}
 execFileSync('docker',['exec','wc-test-cli-1','wp','eval',

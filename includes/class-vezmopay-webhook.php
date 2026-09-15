@@ -33,6 +33,13 @@ class Webhook {
 	 * Deliveries allowed per sender per THROTTLE_WINDOW before 429s begin.
 	 */
 	const THROTTLE_MAX    = 60;
+
+	/**
+	 * Unconditional ceiling per sender per window, applied before any signature
+	 * is computed. High enough that no genuine delivery rate reaches it; it
+	 * exists so the endpoint cannot be used to make the store compute HMACs.
+	 */
+	const THROTTLE_CEILING = 600;
 	const THROTTLE_WINDOW = 5 * MINUTE_IN_SECONDS;
 
 	/**
@@ -92,8 +99,16 @@ class Webhook {
 		// necessarily unauthenticated at the WP layer, and each delivery can drive
 		// a 20-second outbound API call — an easy way to burn PHP workers and the
 		// merchant's API rate limit.
-		if ( $this->is_throttled( $request ) ) {
-			$logger->error( 'Webhook throttled: too many deliveries from ' . $this->client_fingerprint( $request ) . '.' );
+		// An unconditional ceiling, ahead of any HMAC work, purely so the endpoint
+		// cannot be used to burn CPU. Deliberately far above any real delivery
+		// rate — the RATE limit below applies only to traffic that turns out to be
+		// unauthenticated, so a store taking hundreds of orders an hour can never
+		// have genuine signed deliveries refused by it. That was the risk in the
+		// old arrangement: one throttle, before the signature check, at 60 per five
+		// minutes per address, which a single-egress platform would trip for a
+		// store above roughly twelve orders a minute.
+		if ( $this->is_throttled( $request, 'all', self::THROTTLE_CEILING ) ) {
+			$this->log_refusal( $logger, 'throttled', 'Webhook ceiling reached for ' . $this->client_fingerprint( $request ) . '; refusing until the window rolls.' );
 			return new \WP_REST_Response( array( 'received' => false, 'reason' => 'throttled' ), 429 );
 		}
 
@@ -101,23 +116,34 @@ class Webhook {
 		$event_id = isset( $body['id'] ) ? sanitize_text_field( (string) $body['id'] ) : '';
 		$data     = isset( $body['data'] ) && is_array( $body['data'] ) ? $body['data'] : array();
 
-		// Signature verification. With a secret configured, a signature is
-		// MANDATORY: accepting unsigned deliveries meant the header could simply
-		// be omitted, which left an unauthenticated way to drive outbound API
-		// calls. Without a secret there is nothing to verify against, and the
-		// permissive path stays only for that case.
+		// Signature verification, and there is no permissive path past it. With a
+		// secret configured a signature is MANDATORY — accepting unsigned
+		// deliveries left the header optional, which is no check at all. Without a
+		// secret nothing here can be authenticated, so nothing is processed; the
+		// cost of that is reconciliation latency, never correctness, because the
+		// five-minute cron and the checkout's own polling settle every order
+		// regardless.
 		$signature = $request->get_header( 'x-webhook-signature' );
 		$signature = is_string( $signature ) ? trim( $signature ) : '';
 		$secret    = (string) $gateway->get_option( 'webhook_secret' );
 
+		// A refusal is unauthenticated traffic, and THAT is what the rate limit is
+		// for. Counted once per refused delivery, whatever the reason.
+		$refuse = function ( $reason, $message ) use ( $logger, $request ) {
+			if ( $this->is_throttled( $request, 'bad', self::THROTTLE_MAX ) ) {
+				$this->log_refusal( $logger, 'throttled', 'Too many unauthenticated webhook deliveries from ' . $this->client_fingerprint( $request ) . '.' );
+				return new \WP_REST_Response( array( 'received' => false, 'reason' => 'throttled' ), 429 );
+			}
+			$this->log_refusal( $logger, $reason, $message );
+			return new \WP_REST_Response( array( 'received' => false, 'reason' => $reason ), 401 );
+		};
+
 		if ( '' !== $secret ) {
 			if ( '' === $signature ) {
-				$logger->error( 'Webhook rejected: a webhook secret is configured but the delivery carried no signature.' );
-				return new \WP_REST_Response( array( 'received' => false, 'reason' => 'signature-required' ), 401 );
+				return $refuse( 'signature-required', 'Webhook rejected: a webhook secret is configured but the delivery carried no signature.' );
 			}
 			if ( ! $this->signature_valid( $raw, $signature, $secret ) ) {
-				$logger->error( 'Webhook signature mismatch; rejecting.' );
-				return new \WP_REST_Response( array( 'received' => false, 'reason' => 'bad-signature' ), 401 );
+				return $refuse( 'bad-signature', 'Webhook signature mismatch; rejecting.' );
 			}
 		} else {
 			// No secret saved: NOTHING that arrives here can be authenticated, so
@@ -133,11 +159,11 @@ class Webhook {
 			// cron and the checkout's own polling still settle every order. The
 			// merchant is told in the admin (see Plugin::webhook_secret_notice()),
 			// not only in a log nobody reads.
-			$logger->error(
+			return $refuse(
+				'no-secret',
 				'Webhook rejected: this store has no webhook secret saved, so the delivery could not be authenticated. '
 				. 'Paste the whsec_… secret from the VezmoPay dashboard into the gateway settings.'
 			);
-			return new \WP_REST_Response( array( 'received' => false, 'reason' => 'no-secret' ), 401 );
 		}
 
 		$logger->debug( 'Webhook received: ' . $event, array( 'event_id' => $event_id ) );
@@ -154,12 +180,13 @@ class Webhook {
 			return new \WP_REST_Response( array( 'received' => true, 'handled' => false ), 200 );
 		}
 
-		// Idempotency, claimed ATOMICALLY before any work. The old sequence was
-		// check-meta, reconcile, then write-meta — three steps, so two concurrent
-		// deliveries of one event both passed the check. And the record was a
-		// last-25 slice on the order, so a late retry of an older event was
-		// reprocessed once 25 newer ones had arrived. add_option() on a key that
-		// includes the event id is atomic and self-expiring.
+		// Idempotency, claimed before any work and with a primitive that really is
+		// atomic. The original sequence was check-meta, reconcile, write-meta —
+		// three steps, so two concurrent deliveries of one event both passed the
+		// check — and the record was a last-25 slice on the order, so a late retry
+		// of an older event was reprocessed once 25 newer ones had arrived. Its
+		// replacement claimed with add_option(), which reads through the object
+		// cache before writing and is therefore not a mutex either (see Lock).
 		// A delivery with no envelope id was never claimed, so the same POST could
 		// be replayed indefinitely and each replay drove a fresh reconcile. Claim
 		// on the body's own digest instead: identical bodies are the same event,
@@ -167,7 +194,8 @@ class Webhook {
 		if ( '' === $event_id ) {
 			$event_id = 'raw-' . md5( (string) $raw );
 		}
-		if ( ! $this->claim_event( $event_id ) ) {
+		$claim = $this->claim_event( $event_id );
+		if ( ! $claim ) {
 			$logger->debug( 'Webhook ' . $event_id . ' is already claimed; treating as a duplicate.' );
 			return new \WP_REST_Response( array( 'received' => true, 'handled' => true, 'duplicate' => true ), 200 );
 		}
@@ -177,7 +205,7 @@ class Webhook {
 		if ( is_wp_error( $result ) || 'LOCKED' === $result ) {
 			// Release the claim: this delivery did no work, and the platform's
 			// retry (4 attempts over 24h) must not be swallowed as a duplicate.
-			$this->release_event( $event_id );
+			$this->release_event( $claim );
 			if ( 'LOCKED' === $result ) {
 				$logger->debug( 'Webhook for order #' . $order->get_id() . ' arrived while a reconcile was running; asking for a retry.' );
 				return new \WP_REST_Response( array( 'received' => false, 'reason' => 'busy' ), 503 );
@@ -213,41 +241,36 @@ class Webhook {
 	}
 
 	/**
-	 * Claim an event id for processing, atomically.
+	 * Claim this event, or report that another delivery already has it.
 	 *
-	 * add_option() succeeds for exactly one caller on the options table's unique
-	 * index, so two concurrent deliveries of the same event cannot both proceed.
-	 * The claim carries its own expiry, so a retry outside the window is
-	 * reprocessed deliberately rather than because a fixed-size list forgot it.
+	 * Built on Lock for the reasons that class documents: add_option() reads
+	 * through the object cache before it writes, so two deliveries of one event
+	 * could both believe they had claimed it — and the release deleted by NAME,
+	 * so a delivery told "busy" could free the claim of the delivery actually
+	 * doing the work. The platform's retry then drove the whole reconcile again
+	 * for an event already handled: no double completion (the reconcile lock
+	 * stops that) but a wasted blocking API call per replay, which is exactly
+	 * the idempotency this code exists to provide.
 	 *
-	 * @param string $event_id Event id from the envelope.
-	 * @return bool True when this caller owns the event.
+	 * Kept deliberately on the success path: the claim IS the duplicate record,
+	 * and it must outlive the request until EVENT_CLAIM_TTL expires.
+	 *
+	 * @param string $event_id Event id from the envelope, or a raw-<md5> stand-in.
+	 * @return Lock|null
 	 */
 	private function claim_event( $event_id ) {
-		$key   = self::event_claim_key( $event_id );
-		$now   = time();
-		$owned = add_option( $key, $now, '', 'no' );
-		if ( $owned ) {
-			return true;
-		}
-
-		// An old claim (a crashed delivery) must not block the platform's retry.
-		$claimed = (int) get_option( $key );
-		if ( $claimed > 0 && ( $now - $claimed ) > self::EVENT_CLAIM_TTL ) {
-			update_option( $key, $now, false );
-			return true;
-		}
-		return false;
+		return Lock::claim( self::event_claim_key( $event_id ), self::EVENT_CLAIM_TTL );
 	}
 
 	/**
-	 * Give an event id back, so a retry is not mistaken for a duplicate.
+	 * Give the claim back, so the platform's retry is not swallowed as a
+	 * duplicate — ours only, never whatever claim happens to be there.
 	 *
-	 * @param string $event_id Event id, may be empty.
+	 * @param Lock|null $claim Claim returned by claim_event().
 	 */
-	private function release_event( $event_id ) {
-		if ( '' !== $event_id ) {
-			delete_option( self::event_claim_key( $event_id ) );
+	private function release_event( $claim ) {
+		if ( $claim instanceof Lock ) {
+			$claim->release();
 		}
 	}
 
@@ -323,10 +346,52 @@ class Webhook {
 	 * @param \WP_REST_Request $request Request.
 	 * @return bool
 	 */
-	private function is_throttled( \WP_REST_Request $request ) {
-		$key   = 'vezmopay_wh_' . md5( $this->client_fingerprint( $request ) );
+	/**
+	 * Log a refusal loudly the first time and quietly after that.
+	 *
+	 * Every refusal branch used to call error(), which logs whatever the Debug
+	 * setting says — so a store that has not pasted its webhook secret (the
+	 * default for every manual-key install) wrote one error line per delivery,
+	 * times the platform's four retries, for ever. A hundred orders a day buried
+	 * the errors a merchant actually needs under hundreds of identical lines,
+	 * and made a correctly-behaving endpoint read as broken.
+	 *
+	 * The response is untouched: same status, same reason. Only the volume of
+	 * the log changes. The merchant is told properly by
+	 * Plugin::webhook_secret_notice(), which is a channel they will actually see.
+	 *
+	 * @param Logger $logger  Logger.
+	 * @param string $reason  Refusal reason, used as the throttle key.
+	 * @param string $message What to write.
+	 */
+	private function log_refusal( $logger, $reason, $message ) {
+		// A mismatched signature is the one refusal that can mean a real
+		// misconfiguration or an attack rather than an unfinished onboarding, so
+		// it is never quietened.
+		if ( 'bad-signature' === $reason ) {
+			$logger->error( $message );
+			return;
+		}
+
+		$key = 'vezmopay_wh_logged_' . $reason;
+		if ( get_transient( $key ) ) {
+			$logger->debug( $message . ' (repeated; logged once per ' . ( self::THROTTLE_WINDOW / MINUTE_IN_SECONDS ) . ' minutes)' );
+			return;
+		}
+		set_transient( $key, 1, self::THROTTLE_WINDOW );
+		$logger->error( $message );
+	}
+
+	private function is_throttled( \WP_REST_Request $request, $bucket = 'all', $max = self::THROTTLE_MAX ) {
+		// Approximate on purpose: get_transient/set_transient is a read-then-write,
+		// so two requests can read the same count and both pass. That makes the cap
+		// soft by a handful of requests under concurrency, which is fine for what
+		// it defends — this is a brake on volume, not a mutex, and the two things
+		// it protects (CPU before the HMAC, log churn after a refusal) both
+		// tolerate being a little late.
+		$key   = 'vezmopay_wh_' . $bucket . '_' . md5( $this->client_fingerprint( $request ) );
 		$count = (int) get_transient( $key );
-		if ( $count >= self::THROTTLE_MAX ) {
+		if ( $count >= $max ) {
 			return true;
 		}
 		set_transient( $key, $count + 1, self::THROTTLE_WINDOW );
