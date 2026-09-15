@@ -154,7 +154,15 @@ class Gateway extends \WC_Payment_Gateway {
 		// would leave a "Loading secure payment fields…" spinner that nothing
 		// ever resolves. Guard it here too, so a wrong has_fields cannot produce
 		// that again.
-		if ( 'hosted' === $this->integration_mode() ) {
+		if ( 'hosted' === $this->integration_mode() || self::is_pay_form() ) {
+			// …and the same is true of WooCommerce's pay form
+			// (?pay_for_order=true, reached from My Account → Orders and the
+			// customer-invoice email). enqueue_checkout_scripts() deliberately
+			// skips the order-pay endpoint, so the scaffolding printed here had
+			// nothing to fill it: a spinner that never resolved, no frame, and a
+			// button that reloaded the same dead page. Description only; the
+			// submit then falls through to process_payment(), which sends the
+			// shopper to the receipt page where the form really is mounted.
 			$description = $this->get_description();
 			if ( $description ) {
 				echo '<p class="vezmopay-inline-description">' . wp_kses_post( wpautop( wptexturize( $description ) ) ) . '</p>';
@@ -664,10 +672,59 @@ class Gateway extends \WC_Payment_Gateway {
 		}
 		// The VezmoPay platform converts amounts with an unconditional ×100, which
 		// corrupts zero-decimal currencies — refuse to offer the gateway for them.
-		if ( in_array( get_woocommerce_currency(), Settings::ZERO_DECIMAL_CURRENCIES, true ) ) {
+		if ( ! self::currency_supported( get_woocommerce_currency() ) ) {
 			return false;
 		}
 		return true;
+	}
+
+	/**
+	 * Whether VezmoPay can be trusted with money in this currency.
+	 *
+	 * The platform multiplies every amount by 100 unconditionally, so a
+	 * zero-decimal currency is charged a hundred times over — ¥1,000 becomes
+	 * ¥100,000 — and the plugin's own tamper check cannot catch it, because it
+	 * compares the major-unit figure the plugin SENT, which matches.
+	 *
+	 * This has to be asked of the money actually being charged, not only of the
+	 * store's configured currency. An order can carry a different one: a
+	 * multi-currency plugin, an order created in the admin, or a store whose
+	 * currency changed after the order was placed. is_available() checking the
+	 * store alone let every one of those through.
+	 *
+	 * @param string $currency ISO code.
+	 * @return bool
+	 */
+	public static function currency_supported( $currency ) {
+		return ! in_array( strtoupper( (string) $currency ), Settings::ZERO_DECIMAL_CURRENCIES, true );
+	}
+
+	/**
+	 * Whether this request is WooCommerce's own pay form (`?pay_for_order=true`).
+	 *
+	 * Two things hang off this, and both are about the inline script not being
+	 * there: the payment box must not render scaffolding nothing will fill, and
+	 * process_payment() must not answer with a '#vezmopay-charge:' fragment that
+	 * only that script understands. WooCommerce assigns the fragment to
+	 * window.location on the checkout, where a hashchange listener is waiting;
+	 * on this non-AJAX POST it is a bare fragment, so the browser resolves it
+	 * against the current URL and re-renders the same page for ever.
+	 *
+	 * Detected from the POST rather than is_wc_endpoint_url(): WC_Form_Handler
+	 * runs pay_action() on `wp_loaded`, before the query is parsed, so the
+	 * endpoint helpers answer false there. `woocommerce_pay` is the field that
+	 * handler itself keys on. Rendering is a normal page load, where the
+	 * endpoint check does work — hence both.
+	 *
+	 * @return bool
+	 */
+	public static function is_pay_form() {
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- reading which SURFACE this is; WC_Form_Handler::pay_action() verifies the nonce before any of this runs.
+		if ( isset( $_POST['woocommerce_pay'] ) ) {
+			return true;
+		}
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- same.
+		return function_exists( 'is_wc_endpoint_url' ) && is_wc_endpoint_url( 'order-pay' ) && isset( $_GET['pay_for_order'] );
 	}
 
 	/* ---------------------------------------------------------------------
@@ -1009,6 +1066,18 @@ class Gateway extends \WC_Payment_Gateway {
 			return array( 'result' => 'failure' );
 		}
 
+		// THIS order's currency, which is not always the store's — see
+		// currency_supported(). Charging a zero-decimal currency here would take
+		// a hundred times the money and still reconcile as correct.
+		if ( ! self::currency_supported( $order->get_currency() ) ) {
+			$this->logger->error(
+				'Refusing to charge order #' . $order->get_id() . ': ' . $order->get_currency()
+				. ' is a zero-decimal currency and VezmoPay multiplies every amount by 100.'
+			);
+			wc_add_notice( __( 'This order’s currency cannot be processed by VezmoPay.', 'vezmopay-woocommerce' ), 'error' );
+			return array( 'result' => 'failure' );
+		}
+
 		$order->update_meta_data( '_vezmopay_environment', $this->environment() );
 		$order->update_meta_data( '_vezmopay_mode', $this->integration_mode() );
 
@@ -1035,8 +1104,13 @@ class Gateway extends \WC_Payment_Gateway {
 		// browser still has that exact form mounted with their details in it, so
 		// the right answer is to hand back the same marker and let them charge it
 		// again where they are.
+		//
+		// …but never from the pay form: the marker below is meaningless without
+		// checkout-inline.js, which is not loaded there (see is_pay_form()). Fall
+		// through to redirect_to_pay_page() instead, which is the surface that
+		// does mount a payment form.
 		$session = $this->checkout_session();
-		if ( $session->bind_to_order( $order ) || $this->can_recharge_bound_payment( $order ) ) {
+		if ( ! self::is_pay_form() && ( $session->bind_to_order( $order ) || $this->can_recharge_bound_payment( $order ) ) ) {
 			// Keep the cart. Every other route hands the shopper to another page,
 			// so emptying it there is right; here the shopper stays on the
 			// checkout and the charge has not happened yet. Emptying it at this

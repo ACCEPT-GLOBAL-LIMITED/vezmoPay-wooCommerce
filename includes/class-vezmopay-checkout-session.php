@@ -178,6 +178,16 @@ class Checkout_Session {
 			return new \WP_Error( 'vezmopay_amount', __( 'This cart total cannot be processed by VezmoPay.', 'vezmopay-woocommerce' ) );
 		}
 
+		// The cart's currency, asked of the same guard the order is asked of:
+		// VezmoPay multiplies every amount by 100, so a zero-decimal currency
+		// takes a hundred times the money (see Gateway::currency_supported()).
+		if ( ! Gateway::currency_supported( get_woocommerce_currency() ) ) {
+			return new \WP_Error(
+				'vezmopay_currency',
+				__( 'This currency cannot be processed by VezmoPay.', 'vezmopay-woocommerce' )
+			);
+		}
+
 		$environment = $this->gateway->environment();
 		$stored      = $this->stored();
 		if ( $this->is_usable( $stored, $environment, $amount ) ) {
