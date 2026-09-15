@@ -357,6 +357,14 @@
 					// Kept for the requires_action listener below, which is the
 					// only way that event reaches us in this mode.
 					sdkFrame = mounted;
+				// The SDK sets `allow` itself today, so this is belt and braces —
+				// but it is the one frame in the plugin whose wallet and
+				// storage-access permissions we do not guarantee, and a future SDK
+				// build shipping a bare `allow="payment"` would scope the
+				// permission to the frame's FIRST origin and break wallets across
+				// the checkout redirect, silently. Only fill a gap; never fight a
+				// value the SDK chose that already carries the scope.
+				ensureFramePermissions( sdkFrame );
 					[ 'ready', 'processing', 'success', 'error', 'pending', 'already-paid', 'expired', 'cancel' ].forEach(
 						function ( name ) {
 							vezmo.on( name, function ( evt ) {
@@ -808,6 +816,25 @@
 			window.clearTimeout( billingTimer );
 		}
 		billingTimer = window.setTimeout( syncBilling, BILLING_DEBOUNCE_MS );
+	}
+
+
+	/**
+	 * Give a frame the permissions every other frame in the plugin is created
+	 * with, when whatever made it did not.
+	 *
+	 * @param {HTMLIFrameElement} frame Frame to patch.
+	 */
+	function ensureFramePermissions( frame ) {
+		if ( ! frame ) {
+			return;
+		}
+		var allow = frame.getAttribute( 'allow' ) || '';
+		if ( allow.indexOf( 'payment *' ) !== -1 && allow.indexOf( 'storage-access *' ) !== -1 ) {
+			return;
+		}
+		frame.setAttribute( 'allow', 'payment *; storage-access *' );
+		log( 'patched a missing `allow` on the SDK frame (was "' + allow + '")' );
 	}
 
 	function mountFrame( host ) {
@@ -1708,7 +1735,14 @@
 		if ( 'hosted' === params.mode ) {
 			return;
 		}
-		pendingNotice = reason ? reason + ' ' + params.i18n.retryHint : '';
+		// Only a message from the FRAME needs the instruction appended; this
+		// plugin's own strings already end with "try again", and appending gave
+		// the shopper "Payment failed. Please check your card details and try
+		// again. Please re-enter your card details below and try again."
+		pendingNotice = '';
+		if ( reason ) {
+			pendingNotice = ownMessage( reason ) ? reason : reason + ' ' + params.i18n.retryHint;
+		}
 		setMessage( pendingNotice || '', 'error' );
 		dropSession();
 		log( 'this payment cannot be charged again — fetching a fresh session' );

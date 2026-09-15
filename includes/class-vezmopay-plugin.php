@@ -96,6 +96,15 @@ final class Plugin {
 	 */
 	const RATE_IP_FACTOR = 6;
 
+	/**
+	 * How long the cron keeps asking about an order that never settles.
+	 *
+	 * Long enough for a slow bank debit (1–2 business days is covered by the
+	 * on-hold path, which this does not touch) and short enough that a merchant
+	 * hears about a stranded hosted order the next morning rather than never.
+	 */
+	const ABANDON_AFTER = 24 * HOUR_IN_SECONDS;
+
 	const SESSION_RATE_MAX    = 10;
 	const SESSION_RATE_WINDOW = 10 * MINUTE_IN_SECONDS;
 
@@ -843,9 +852,14 @@ final class Plugin {
 	}
 
 	public function ajax_account_update() {
+		// The guard FIRST — account_ajax_gateway() is where the nonce and the
+		// manage_woocommerce capability are checked. Flushing before it let any
+		// logged-out request clear the cache and force the next admin page load to
+		// re-fetch from the API.
+		$client = $this->account_ajax_gateway()->api_client();
+
 		// Whatever this changes, the cached panel is now stale.
 		$this->flush_account_panel_cache();
-		$client = $this->account_ajax_gateway()->api_client();
 
 		$kind = isset( $_POST['kind'] ) ? sanitize_key( wp_unslash( $_POST['kind'] ) ) : '';
 
@@ -1008,6 +1022,9 @@ final class Plugin {
 			if ( ! $has_ref ) {
 				continue;
 			}
+			if ( $this->give_up_on_order( $gateway, $order ) ) {
+				continue;
+			}
 
 			// Stamp BEFORE the call: an order whose reconcile throws must still go
 			// to the back of the queue, or it blocks everything behind it.
@@ -1019,6 +1036,48 @@ final class Plugin {
 				$gateway->logger()->debug( 'Cron reconcile failed for order #' . $order->get_id() . ': ' . $result->get_error_message() );
 			}
 		}
+	}
+
+	/**
+	 * Stop re-reading an order that is never going to answer.
+	 *
+	 * A hosted order on an account VezmoPay has not activated is the case that
+	 * matters: the customer meets an "unavailable" page, no payment is made, no
+	 * webhook is sent, and GET /merchant/paylinks/{code} answers INITIATED for
+	 * ever — so the cron re-read a dead link every five minutes for a week and
+	 * the merchant was never told. One note, once, then leave it alone.
+	 *
+	 * @param Gateway    $gateway Gateway.
+	 * @param \WC_Order $order   Order.
+	 * @return bool Whether this order should be skipped from here on.
+	 */
+	private function give_up_on_order( $gateway, $order ) {
+		if ( '' !== (string) $order->get_meta( '_vezmopay_gave_up' ) ) {
+			return true;
+		}
+		// NEVER an on-hold order: that is a bank debit on its way, which takes one
+		// to two business days and settles on its own. Only a pending order, where
+		// nothing is moving, is a candidate for giving up on.
+		if ( ! $order->has_status( 'pending' ) ) {
+			return false;
+		}
+		$created = $order->get_date_created();
+		if ( ! $created || ( time() - $created->getTimestamp() ) < self::ABANDON_AFTER ) {
+			return false;
+		}
+
+		$gateway->logger()->error(
+			'Order #' . $order->get_id() . ' has not settled in ' . round( self::ABANDON_AFTER / HOUR_IN_SECONDS )
+			. ' hours; stopping automatic checks.'
+		);
+		$order->add_order_note(
+			'' !== (string) $order->get_meta( '_vezmopay_paylink_code' )
+				? __( 'VezmoPay has reported no payment against this order’s payment link in 24 hours, and the plugin has stopped checking automatically. If the customer says they paid, check the payment in your VezmoPay dashboard. If the link showed them “unavailable”, this account is not activated for payment links — contact VezmoPay, and consider switching Integration mode away from Hosted checkout so customers get the embedded payment form instead.', 'vezmopay-woocommerce' )
+				: __( 'VezmoPay has reported no result for this order’s payment in 24 hours, and the plugin has stopped checking automatically. Check the payment in your VezmoPay dashboard before cancelling the order.', 'vezmopay-woocommerce' )
+		);
+		$order->update_meta_data( '_vezmopay_gave_up', time() );
+		$order->save();
+		return true;
 	}
 
 	/**

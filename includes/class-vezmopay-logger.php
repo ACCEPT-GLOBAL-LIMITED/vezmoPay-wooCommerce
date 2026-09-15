@@ -84,7 +84,17 @@ class Logger {
 	 */
 	public static function redact( array $data ) {
 		// Compared with separators stripped, so e.g. api_key, api-key and apiKey all match.
-		$sensitive = array( 'xapikey', 'xapisecret', 'authorization', 'token', 'accesstoken', 'refreshtoken', 'secret', 'apisecret', 'apikey', 'clienttoken', 'webhooksecret' );
+		//
+		// The second group is the shopper's, not the merchant's: since 0.3.7 the
+		// checkout sends billing details to VezmoPay as they are typed, and that
+		// request body was being written to wp-content in full. A debug log is
+		// read by support, shipped in bug reports and backed up — it is not a
+		// place to keep somebody's name, address and phone number.
+		$sensitive = array(
+			'xapikey', 'xapisecret', 'authorization', 'token', 'accesstoken', 'refreshtoken',
+			'secret', 'apisecret', 'apikey', 'clienttoken', 'webhooksecret',
+			'name', 'email', 'phone', 'line1', 'line2', 'address', 'postalcode', 'company',
+		);
 		foreach ( $data as $key => $value ) {
 			if ( is_array( $value ) ) {
 				$data[ $key ] = self::redact( $value );

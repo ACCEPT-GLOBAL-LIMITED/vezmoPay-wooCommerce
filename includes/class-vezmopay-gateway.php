@@ -433,6 +433,57 @@ class Gateway extends \WC_Payment_Gateway {
 	 * @param string[] $allowed Allowed host suffixes.
 	 * @return bool
 	 */
+	/**
+	 * A URL the API handed us, checked before the plugin will act on it.
+	 *
+	 * The API and checkout BASES are allow-listed at the settings boundary, but
+	 * the URLs that come back inside a payment response were not: the sdkUrl
+	 * becomes a <script src> on the pay page, the secure-payment url becomes an
+	 * iframe src and, in one branch, a top-level redirect. Those are the highest-
+	 * trust uses in the plugin and they were taking the provider's word through
+	 * esc_url_raw(), which only vets the scheme.
+	 *
+	 * Returns '' for anything that is not https on an allowed VezmoPay host, so
+	 * callers store nothing rather than storing something they must remember not
+	 * to trust.
+	 *
+	 * @param string $url     Candidate URL.
+	 * @param string $context What it would have been used for, for the log.
+	 * @return string The URL, or ''.
+	 */
+	public function allowed_provider_url( $url, $context ) {
+		$url = esc_url_raw( (string) $url );
+		if ( '' === $url ) {
+			return '';
+		}
+		/** This filter is documented in validated_vezmo_base(). */
+		$allowed = (array) apply_filters( 'vezmopay_allowed_api_hosts', array( 'vezmo.com' ) );
+		if ( self::host_matches_allowed( $url, $allowed ) ) {
+			return $url;
+		}
+
+		// One exemption, and it cannot exist on a live store: a host the SITE
+		// OWNER added to the allow-list themselves, on a WordPress whose declared
+		// environment is local or development. That is a mock API on a developer's
+		// machine, which is http by nature. WP_ENVIRONMENT_TYPE has to be set
+		// deliberately and defaults to 'production', so a real store never reaches
+		// this branch however its provider URLs look.
+		if ( self::host_matches_allowed( 'https://' . (string) wp_parse_url( $url, PHP_URL_HOST ), $allowed )
+			&& function_exists( 'wp_get_environment_type' )
+			&& in_array( wp_get_environment_type(), array( 'local', 'development' ), true ) ) {
+			$this->logger->debug(
+				'Allowing a non-https ' . $context . ' on an allow-listed host because this WordPress declares itself '
+				. wp_get_environment_type() . '. This would be refused in production.'
+			);
+			return $url;
+		}
+
+		$this->logger->error(
+			'Refusing the ' . $context . ' VezmoPay returned: "' . $url . '" is not an https URL on an allowed VezmoPay host.'
+		);
+		return '';
+	}
+
 	public static function host_matches_allowed( $url, array $allowed ) {
 		$scheme = strtolower( (string) wp_parse_url( $url, PHP_URL_SCHEME ) );
 		$host   = strtolower( (string) wp_parse_url( $url, PHP_URL_HOST ) );
@@ -827,11 +878,23 @@ class Gateway extends \WC_Payment_Gateway {
 		// is the one check worth an API call, because the alternative is orders
 		// that strand. Warmed here so checkout only ever reads the cache.
 		if ( 'hosted' === $this->configured_mode() && ! $this->paylink_capable( true ) ) {
-			echo '<div class="notice notice-error inline"><p><strong>';
-			echo esc_html__( 'Hosted checkout is not active.', 'vezmopay-woocommerce' );
-			echo '</strong> ';
-			echo esc_html__( 'VezmoPay does not yet report whether this account is activated for payment-link payments, so customers are being served the embedded payment form instead of a page they may not be able to pay on. If payment links already work on your account, tick “My VezmoPay account is activated for payment links” below to use the redirect anyway.', 'vezmopay-woocommerce' );
-			echo '</p></div>';
+			// Which of the two is true depends on the override, exactly as
+			// integration_mode() computes it. Reading configured_mode() alone told
+			// a merchant who had already ticked the box that hosted was not active
+			// and instructed them to tick it — both halves false.
+			if ( 'hosted' === $this->integration_mode() ) {
+				echo '<div class="notice notice-warning inline"><p><strong>';
+				echo esc_html__( 'Hosted checkout is active by your override.', 'vezmopay-woocommerce' );
+				echo '</strong> ';
+				echo esc_html__( 'VezmoPay still does not report whether this account is activated for payment-link payments, so the plugin cannot check it for you. If payment links do not actually work on your account, customers will be sent to a page that cannot take their money and their orders will sit unpaid — the plugin has no way to detect that. Untick the override to serve the embedded payment form instead.', 'vezmopay-woocommerce' );
+				echo '</p></div>';
+			} else {
+				echo '<div class="notice notice-error inline"><p><strong>';
+				echo esc_html__( 'Hosted checkout is not active.', 'vezmopay-woocommerce' );
+				echo '</strong> ';
+				echo esc_html__( 'VezmoPay does not yet report whether this account is activated for payment-link payments, so customers are being served the embedded payment form instead of a page they may not be able to pay on. If payment links already work on your account, tick “My VezmoPay account is activated for payment links” below to use the redirect anyway.', 'vezmopay-woocommerce' );
+				echo '</p></div>';
+			}
 		}
 
 		// Explain a silent downgrade: element/iframe selected, but this origin is
@@ -1560,12 +1623,25 @@ class Gateway extends \WC_Payment_Gateway {
 			if ( ! empty( $paylink['id'] ) ) {
 				$order->update_meta_data( '_vezmopay_paylink_id', (string) $paylink['id'] );
 			}
+			// The promise depends on whether VezmoPay has confirmed this account can
+			// take a payment-link payment. On a store running hosted by merchant
+			// override it has not, and an account that is not activated renders an
+			// "UNAVAILABLE" page the shopper cannot pay on — no webhook is ever
+			// sent, and GET /merchant/paylinks/{code} keeps reporting INITIATED, so
+			// nothing here can detect it. Do not tell the merchant to wait for a
+			// delivery that may not exist.
 			$order->add_order_note(
-				sprintf(
-					/* translators: %s: paylink code */
-					__( 'VezmoPay paylink created (%s). Customer redirected to the hosted checkout. The order will be completed by webhook when VezmoPay confirms payment.', 'vezmopay-woocommerce' ),
-					$code
-				)
+				$this->paylink_capable()
+					? sprintf(
+						/* translators: %s: paylink code */
+						__( 'VezmoPay paylink created (%s). Customer redirected to the hosted checkout. The order will be completed by webhook when VezmoPay confirms payment.', 'vezmopay-woocommerce' ),
+						$code
+					)
+					: sprintf(
+						/* translators: %s: paylink code */
+						__( 'VezmoPay paylink created (%s). Customer redirected to the hosted checkout. Hosted mode is running by merchant override — VezmoPay has not confirmed this account can take payment-link payments, so if the link shows “unavailable” to the customer no payment and no webhook will follow, and this order will need chasing manually.', 'vezmopay-woocommerce' ),
+						$code
+					)
 			);
 			$existing = $code;
 		}
@@ -1709,9 +1785,33 @@ class Gateway extends \WC_Payment_Gateway {
 		// still-unexpired token re-mounted the dead payment, so "try again" on the
 		// pay page — and the inline retry that falls through to it — could only
 		// fail again. Recorded by apply_payment_state(), so this costs no API read.
-		$failed = (string) $order->get_meta( '_vezmopay_failed_payment_id' );
-		if ( '' !== $failed && $failed === (string) $order->get_meta( '_vezmopay_payment_id' ) ) {
+		$payment_id = (string) $order->get_meta( '_vezmopay_payment_id' );
+		$failed     = (string) $order->get_meta( '_vezmopay_failed_payment_id' );
+		if ( '' !== $failed && $failed === $payment_id ) {
 			$force_new = true;
+		}
+
+		// …but only when the payment being replaced took no money. The pay page
+		// asks for force_new from a ?vezmopay_retry link, which a shopper can
+		// reach with the browser's back button after a capture the store has not
+		// reconciled yet — and minting then OVERWRITES _vezmopay_payment_id,
+		// orphaning the captured payment and inviting a second one. is_paid()
+		// upstream closes the common case; this closes the window.
+		if ( $force_new && '' !== $payment_id ) {
+			$stamped = (string) $order->get_meta( '_vezmopay_environment' );
+			$live    = $this->api_client( in_array( $stamped, array( 'test', 'live' ), true ) ? $stamped : null )
+				->get_payment( $payment_id );
+			$state   = is_wp_error( $live ) ? '' : strtoupper( (string) ( $live['status'] ?? '' ) );
+			$spent   = ! in_array( $state, array( 'INITIATED', 'FAILED' ), true );
+			if ( is_wp_error( $live ) || $spent ) {
+				$this->logger->error(
+					'Refusing to replace payment ' . $payment_id . ' on order #' . $order->get_id()
+					. ': it reads ' . ( '' === $state ? 'unreadable' : $state ) . ', not INITIATED or FAILED.'
+				);
+				// Let what is already there settle; reconciliation owns it now.
+				$this->reconcile_order_with_api( $order );
+				$force_new = false;
+			}
 		}
 
 		// Reuse a live token so page refreshes don't mint new payments.
@@ -1806,8 +1906,13 @@ class Gateway extends \WC_Payment_Gateway {
 		$order->update_meta_data( '_vezmopay_attempt', $attempt );
 		$order->update_meta_data( '_vezmopay_payment_id', (string) $data['payment']['id'] );
 		$order->update_meta_data( '_vezmopay_client_token', (string) $secure['clientToken'] );
-		$order->update_meta_data( '_vezmopay_iframe_url', isset( $secure['url'] ) ? esc_url_raw( $secure['url'] ) : '' );
-		$order->update_meta_data( '_vezmopay_sdk_url', isset( $secure['sdkUrl'] ) ? esc_url_raw( $secure['sdkUrl'] ) : '' );
+		// Both are acted on at the highest trust the plugin has — one becomes an
+		// iframe src (and, when the embed is not allowed, a top-level redirect),
+		// the other a <script src> on the pay page — so both go through the same
+		// allow-list the settings bases do. A refused URL is stored as '', which
+		// every reader already treats as "unavailable".
+		$order->update_meta_data( '_vezmopay_iframe_url', $this->allowed_provider_url( $secure['url'] ?? '', 'secure payment URL' ) );
+		$order->update_meta_data( '_vezmopay_sdk_url', $this->allowed_provider_url( $secure['sdkUrl'] ?? '', 'SDK URL' ) );
 		$order->update_meta_data( '_vezmopay_token_expires', ! empty( $secure['expiresAt'] ) ? strtotime( $secure['expiresAt'] ) : time() + self::TOKEN_TTL_MINUTES * MINUTE_IN_SECONDS );
 		$order->save();
 
@@ -2247,22 +2352,31 @@ class Gateway extends \WC_Payment_Gateway {
 		// payment_complete(): duplicate emails, duplicate notes, and two stock
 		// reductions that each read _order_stock_reduced = no.
 		//
-		// add_option() is atomic on the options table's unique index, so exactly
-		// one caller gets the lock and the rest back off.
-		$lock = 'vezmopay_recon_' . $order->get_id();
-		if ( ! add_option( $lock, time(), '', 'no' ) ) {
-			// Held. Usually by a live pass — but the option has no expiry, and a
-			// holder that died before its `finally` leaves one behind forever.
-			// See RECONCILE_LOCK_TTL.
-			if ( ! self::lock_is_stale( (int) get_option( $lock, 0 ), time() ) ) {
+		// The claim is one INSERT IGNORE against the options table's unique index,
+		// and it carries a TOKEN.
+		//
+		// add_option() was the wrong primitive, however atomic the comment here
+		// used to claim it was: it reads first — through the object cache — and
+		// only then writes with ON DUPLICATE KEY UPDATE, so two passes can both
+		// read "absent", both write, and both believe they hold the lock. And
+		// because the old release deleted the key by name, a slow holder that
+		// revived after its lock had been broken deleted the NEW holder's lock on
+		// its way out, handing the order to a third pass mid-flight.
+		//
+		// INSERT IGNORE cannot insert a duplicate, so exactly one caller sees a
+		// row affected; and a release that matches on the token only ever removes
+		// its own claim.
+		$lock  = 'vezmopay_recon_' . $order->get_id();
+		$token = wp_generate_uuid4();
+		if ( ! $this->claim_reconcile_lock( $lock, $token ) ) {
+			$held = (string) $this->read_reconcile_lock( $lock );
+			if ( ! self::lock_is_stale( self::lock_claimed_at( $held ), time() ) ) {
 				$this->logger->debug( 'Reconciliation for order #' . $order->get_id() . ' is already running; skipping this pass.' );
 				return 'LOCKED';
 			}
-			// Take it over. Claiming with add_option() again rather than simply
-			// proceeding keeps the mutex honest: if two passes both read the same
-			// stale lock, exactly one of them wins the re-claim.
-			delete_option( $lock );
-			if ( ! add_option( $lock, time(), '', 'no' ) ) {
+			// Take it over, but only from the exact holder we just read: two passes
+			// looking at the same abandoned lock, and only one wins the swap.
+			if ( ! $this->steal_reconcile_lock( $lock, $held, $token ) ) {
 				$this->logger->debug( 'Order #' . $order->get_id() . ': another pass claimed the stale reconcile lock first.' );
 				return 'LOCKED';
 			}
@@ -2275,8 +2389,108 @@ class Gateway extends \WC_Payment_Gateway {
 		try {
 			return $this->reconcile_locked( $order );
 		} finally {
-			delete_option( $lock );
+			$this->release_reconcile_lock( $lock, $token );
 		}
+	}
+
+	/**
+	 * The lock's stored value: "<uuid>|<unix time>".
+	 *
+	 * @param string $token Claim token.
+	 * @return string
+	 */
+	private static function lock_value( $token ) {
+		return $token . '|' . time();
+	}
+
+	/**
+	 * When a stored lock value was claimed, or 0 when it cannot be read.
+	 *
+	 * @param string $value Stored value.
+	 * @return int
+	 */
+	public static function lock_claimed_at( $value ) {
+		$parts = explode( '|', (string) $value );
+		return isset( $parts[1] ) ? (int) $parts[1] : 0;
+	}
+
+	/**
+	 * Claim the lock, or fail because someone already holds it.
+	 *
+	 * @param string $lock  Option name.
+	 * @param string $token Our token.
+	 * @return bool
+	 */
+	private function claim_reconcile_lock( $lock, $token ) {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- the unique index IS the mutex; add_option() reads through the cache first and cannot serve as one.
+		$wpdb->query(
+			$wpdb->prepare(
+				"INSERT IGNORE INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'no')",
+				$lock,
+				self::lock_value( $token )
+			)
+		);
+		$claimed = ( 1 === (int) $wpdb->rows_affected );
+		wp_cache_delete( $lock, 'options' );
+		wp_cache_delete( 'notoptions', 'options' );
+		return $claimed;
+	}
+
+	/**
+	 * Read the lock straight from storage, never from the object cache.
+	 *
+	 * @param string $lock Option name.
+	 * @return string
+	 */
+	private function read_reconcile_lock( $lock ) {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- a cached read cannot decide who holds a mutex.
+		return (string) $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", $lock ) );
+	}
+
+	/**
+	 * Swap an abandoned claim for ours, atomically.
+	 *
+	 * @param string $lock  Option name.
+	 * @param string $held  The exact value we read and judged stale.
+	 * @param string $token Our token.
+	 * @return bool
+	 */
+	private function steal_reconcile_lock( $lock, $held, $token ) {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- compare-and-swap; see claim_reconcile_lock().
+		$wpdb->query(
+			$wpdb->prepare(
+				"UPDATE {$wpdb->options} SET option_value = %s WHERE option_name = %s AND option_value = %s",
+				self::lock_value( $token ),
+				$lock,
+				$held
+			)
+		);
+		$won = ( 1 === (int) $wpdb->rows_affected );
+		wp_cache_delete( $lock, 'options' );
+		return $won;
+	}
+
+	/**
+	 * Release the lock — ours only.
+	 *
+	 * @param string $lock  Option name.
+	 * @param string $token Our token.
+	 */
+	private function release_reconcile_lock( $lock, $token ) {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- delete our own claim only; see claim_reconcile_lock().
+		$wpdb->query(
+			$wpdb->prepare(
+				"DELETE FROM {$wpdb->options} WHERE option_name = %s AND option_value LIKE %s",
+				$lock,
+				$wpdb->esc_like( $token . '|' ) . '%'
+			)
+		);
+		wp_cache_delete( $lock, 'options' );
+		wp_cache_delete( 'notoptions', 'options' );
 	}
 
 	/**

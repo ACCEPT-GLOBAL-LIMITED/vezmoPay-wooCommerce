@@ -160,7 +160,14 @@ class Webhook {
 		// last-25 slice on the order, so a late retry of an older event was
 		// reprocessed once 25 newer ones had arrived. add_option() on a key that
 		// includes the event id is atomic and self-expiring.
-		if ( '' !== $event_id && ! $this->claim_event( $event_id ) ) {
+		// A delivery with no envelope id was never claimed, so the same POST could
+		// be replayed indefinitely and each replay drove a fresh reconcile. Claim
+		// on the body's own digest instead: identical bodies are the same event,
+		// which is exactly what the id would have told us.
+		if ( '' === $event_id ) {
+			$event_id = 'raw-' . md5( (string) $raw );
+		}
+		if ( ! $this->claim_event( $event_id ) ) {
 			$logger->debug( 'Webhook ' . $event_id . ' is already claimed; treating as a duplicate.' );
 			return new \WP_REST_Response( array( 'received' => true, 'handled' => true, 'duplicate' => true ), 200 );
 		}

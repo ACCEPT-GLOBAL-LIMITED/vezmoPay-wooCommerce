@@ -240,8 +240,11 @@ class Checkout_Session {
 			'idemKey'     => $key,
 			'paymentId'   => (string) $data['payment']['id'],
 			'clientToken' => (string) $secure['clientToken'],
-			'url'         => isset( $secure['url'] ) ? esc_url_raw( $secure['url'] ) : '',
-			'sdkUrl'      => isset( $secure['sdkUrl'] ) ? esc_url_raw( $secure['sdkUrl'] ) : '',
+			// Allow-listed, not merely escaped: this URL becomes an iframe src on
+			// the checkout and the sdkUrl becomes a <script src>. See
+			// Gateway::allowed_provider_url().
+			'url'         => $this->gateway->allowed_provider_url( $secure['url'] ?? '', 'secure payment URL' ),
+			'sdkUrl'      => $this->gateway->allowed_provider_url( $secure['sdkUrl'] ?? '', 'SDK URL' ),
 			'amount'      => $amount,
 			'currency'    => $currency,
 			'environment' => $environment,

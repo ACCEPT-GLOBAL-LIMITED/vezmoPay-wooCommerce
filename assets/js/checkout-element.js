@@ -125,6 +125,19 @@
 				if ( ! sdkFrame.getAttribute( 'referrerpolicy' ) ) {
 					sdkFrame.setAttribute( 'referrerpolicy', 'origin' );
 				}
+				// Same treatment for `allow`. The SDK sets it itself today, so this
+				// is belt and braces — but it is the one frame in the plugin whose
+				// wallet and storage-access permissions we do not guarantee, and a
+				// future build shipping a bare `allow="payment"` would scope the
+				// permission to the frame's FIRST origin and break wallets across
+				// the checkout redirect, silently. Only fill a gap.
+				var allow = sdkFrame.getAttribute( 'allow' ) || '';
+				if ( allow.indexOf( 'payment *' ) === -1 || allow.indexOf( 'storage-access *' ) === -1 ) {
+					sdkFrame.setAttribute( 'allow', 'payment *; storage-access *' );
+					if ( window.console && params.debug ) {
+						window.console.log( '[VezmoPay] patched a missing `allow` on the SDK frame (was "' + allow + '")' );
+					}
+				}
 			}
 
 			// Posts vezmo:secure-payment:submit into the frame, which runs the
