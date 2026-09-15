@@ -1435,13 +1435,34 @@ class Gateway extends \WC_Payment_Gateway {
 			return true;
 		}
 
-		$payment_id = (string) $order->get_meta( '_vezmopay_payment_id' );
-		if ( '' === $payment_id ) {
-			return false;
-		}
-
+		$payment_id  = (string) $order->get_meta( '_vezmopay_payment_id' );
 		$environment = (string) $order->get_meta( '_vezmopay_environment' );
 		$client      = $this->api_client( in_array( $environment, array( 'test', 'live' ), true ) ? $environment : null );
+
+		if ( '' === $payment_id ) {
+			// Hosted mode has no payment id until the webhook brings one, so this
+			// used to answer "nothing in flight" for exactly the state where a
+			// paylink may already have been PAID — and the retry then minted a
+			// second paylink, orphaning money the shopper had already sent.
+			$code = (string) $order->get_meta( '_vezmopay_paylink_code' );
+			if ( '' === $code ) {
+				return false;
+			}
+			$paylink = $client->get_paylink( $code );
+			if ( is_wp_error( $paylink ) ) {
+				$this->logger->error(
+					'Could not read paylink ' . $code . ' before placing order #' . $order->get_id()
+					. ' again (' . $paylink->get_error_message() . '); continuing, which may start a second payment.'
+				);
+				return false;
+			}
+			$link_status = isset( $paylink['status'] ) ? strtoupper( (string) $paylink['status'] ) : '';
+			if ( 'PAID' === $link_status ) {
+				$this->logger->debug( 'Order #' . $order->get_id() . ': paylink ' . $code . ' is already PAID — not starting another payment.' );
+				return true;
+			}
+			return false;
+		}
 
 		$payment = $client->get_payment( $payment_id );
 		if ( is_wp_error( $payment ) ) {
@@ -2580,7 +2601,21 @@ class Gateway extends \WC_Payment_Gateway {
 				strtoupper( $order->get_currency() )
 			)
 		);
-		if ( ! $order->has_status( 'on-hold' ) ) {
+		// Never walk a PAID order backwards. A merchant who edits an order's total
+		// after it was paid makes the provider's figure disagree with it for ever,
+		// and every later reconcile — poll, webhook, cron, thank-you page — was
+		// knocking the completed order back to on-hold. on-hold then reads as
+		// "money already moving" to payment_already_in_flight(), so the shopper
+		// could not retry either. hold_for_settlement() has always had this guard;
+		// this branch did not.
+		if ( $order->is_paid() ) {
+			$this->logger->error(
+				'Order #' . $order->get_id() . ' is already paid and its total no longer matches what VezmoPay reports. '
+				. 'Left as it is — review the note above manually.'
+			);
+			return;
+		}
+		if ( ! $order->has_status( array( 'on-hold', 'refunded', 'cancelled' ) ) ) {
 			$order->update_status( 'on-hold' );
 		}
 	}

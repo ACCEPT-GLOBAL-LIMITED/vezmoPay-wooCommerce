@@ -119,25 +119,25 @@ class Webhook {
 				$logger->error( 'Webhook signature mismatch; rejecting.' );
 				return new \WP_REST_Response( array( 'received' => false, 'reason' => 'bad-signature' ), 401 );
 			}
-		} elseif ( '' !== $signature ) {
-			// The platform signs every delivery now (HMAC-SHA256 hex over the raw
-			// body, verified above whenever a secret is saved). Rejecting a signed
-			// delivery because THIS store has no secret to check it with rejected
-			// every genuine webhook while an attacker who simply omitted the
-			// header landed in the branch below and was accepted — it cost the
-			// merchant their reconciliation and bought no security at all.
-			//
-			// So: accept it on the same terms as an unsigned one, and say loudly
-			// what it costs. Nothing here trusts the payload either way — every
-			// delivery is re-read from the API before an order is touched.
-			$logger->error(
-				'Webhook delivered WITH a signature but this store has no webhook secret saved, so it could not be '
-				. 'verified. Paste the whsec_… secret from the VezmoPay dashboard into the gateway settings.'
-			);
 		} else {
-			// No secret saved, so there is nothing to verify against. Reconnect (or
-			// paste the secret) to make signatures mandatory.
-			$logger->debug( 'Unsigned webhook accepted: no webhook secret is configured for this store.' );
+			// No secret saved: NOTHING that arrives here can be authenticated, so
+			// nothing is processed. 0.3.5 accepted these — the reasoning was that
+			// a forged payload is harmless because every delivery is re-read from
+			// the API before an order is touched, which is true of the ORDER but
+			// not of the store: each accepted delivery drives a blocking outbound
+			// API call, so an unauthenticated endpoint is an amplifier pointed at
+			// the merchant's own rate limit. Signed-but-unverifiable is the same
+			// position — a signature this store cannot check is not a credential.
+			//
+			// The cost is reconciliation speed, not correctness: the five-minute
+			// cron and the checkout's own polling still settle every order. The
+			// merchant is told in the admin (see Plugin::webhook_secret_notice()),
+			// not only in a log nobody reads.
+			$logger->error(
+				'Webhook rejected: this store has no webhook secret saved, so the delivery could not be authenticated. '
+				. 'Paste the whsec_… secret from the VezmoPay dashboard into the gateway settings.'
+			);
+			return new \WP_REST_Response( array( 'received' => false, 'reason' => 'no-secret' ), 401 );
 		}
 
 		$logger->debug( 'Webhook received: ' . $event, array( 'event_id' => $event_id ) );

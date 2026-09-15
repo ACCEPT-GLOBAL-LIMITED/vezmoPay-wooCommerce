@@ -87,6 +87,15 @@ final class Plugin {
 	 * for a shopper editing their cart, bounded enough that nobody can mint
 	 * provider resources in a loop.
 	 */
+	/**
+	 * How much larger the per-address budget is than the per-visitor one.
+	 *
+	 * A shared address (office NAT, mobile carrier) carries several honest
+	 * shoppers, so this is generous — it exists to bound abuse, not to ration
+	 * ordinary traffic.
+	 */
+	const RATE_IP_FACTOR = 6;
+
 	const SESSION_RATE_MAX    = 10;
 	const SESSION_RATE_WINDOW = 10 * MINUTE_IN_SECONDS;
 
@@ -136,6 +145,10 @@ final class Plugin {
 		// The order-received page decides what to show from the order's status, so
 		// the API has to be read before it renders — not from inside the template.
 		add_action( 'template_redirect', array( $this, 'reconcile_order_received' ) );
+
+		// Without a webhook secret nothing that arrives at the webhook endpoint can
+		// be authenticated, so nothing is processed — say so where it will be seen.
+		add_action( 'admin_notices', array( $this, 'webhook_secret_notice' ) );
 
 		// Admin: live VezmoPay account settings (payment methods, 3-D Secure).
 		add_action( 'wp_ajax_vezmopay_account_get', array( $this, 'ajax_account_get' ) );
@@ -342,6 +355,38 @@ final class Plugin {
 	}
 
 	/**
+	 * Admin notice: the gateway is live but webhook deliveries cannot be checked.
+	 *
+	 * Orders still settle — the five-minute cron and the checkout's own polling
+	 * see to that — but slower, and the merchant has no other way to learn that
+	 * every delivery is being refused.
+	 */
+	public function webhook_secret_notice() {
+		if ( ! current_user_can( 'manage_woocommerce' ) ) {
+			return;
+		}
+		// Only where a merchant is already looking at their store, not on every
+		// admin page of the site.
+		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+		$where  = array( 'woocommerce_page_wc-settings', 'dashboard', 'plugins' );
+		if ( ! $screen || ! in_array( $screen->id, $where, true ) ) {
+			return;
+		}
+		$gateway = $this->gateway();
+		if ( ! $gateway || 'yes' !== $gateway->get_option( 'enabled' ) || '' !== (string) $gateway->get_option( 'webhook_secret' ) ) {
+			return;
+		}
+
+		echo '<div class="notice notice-warning"><p><strong>';
+		echo esc_html__( 'VezmoPay: webhook deliveries are being rejected.', 'vezmopay-woocommerce' );
+		echo '</strong> ';
+		echo esc_html__( 'No webhook secret is saved, so nothing arriving at the webhook endpoint can be authenticated and none of it is processed. Orders still complete — the plugin checks VezmoPay every five minutes — but they complete more slowly. Paste the whsec_… secret from your VezmoPay dashboard into the gateway settings.', 'vezmopay-woocommerce' );
+		echo ' <a href="' . esc_url( admin_url( 'admin.php?page=wc-settings&tab=checkout&section=vezmopay' ) ) . '">';
+		echo esc_html__( 'Open VezmoPay settings', 'vezmopay-woocommerce' );
+		echo '</a></p></div>';
+	}
+
+	/**
 	 * Verify an unsettled VezmoPay order as the order-received page loads.
 	 *
 	 * Resolving the gateway is safe here: template_redirect is long past the
@@ -378,15 +423,41 @@ final class Plugin {
 	 * @return bool Whether the budget is already spent.
 	 */
 	private function rate_limited( $bucket, $max, $window ) {
-		$who = '';
+		// TWO counters, and either one can refuse.
+		//
+		// The customer-id bucket is the fair one — it limits a shopper without
+		// punishing the office they share an address with — but it cannot be the
+		// only one: get_customer_id() mints a fresh random id for any request
+		// arriving without a WooCommerce session cookie, so an empty cookie jar
+		// bought a fresh budget every time. That counted cookie jars, not
+		// visitors, which is no limit at all.
+		//
+		// So the address is always counted as well, at a multiple of the cap so a
+		// shared NAT is not throttled by ordinary shopping, while an unbounded
+		// minting run from one place still stops.
+		$ip      = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : 'anonymous';
+		$limited = $this->bump_counter( 'vezmopay_' . $bucket . '_rl_ip_' . md5( $ip ), $max * self::RATE_IP_FACTOR, $window );
+
 		if ( function_exists( 'WC' ) && isset( WC()->session ) && WC()->session ) {
-			$who = (string) WC()->session->get_customer_id();
-		}
-		if ( '' === $who ) {
-			$who = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : 'anonymous';
+			$id = (string) WC()->session->get_customer_id();
+			if ( '' !== $id ) {
+				// Deliberately not short-circuited: both counters must advance.
+				$limited = $this->bump_counter( 'vezmopay_' . $bucket . '_rl_' . md5( $id ), $max, $window ) || $limited;
+			}
 		}
 
-		$key   = 'vezmopay_' . $bucket . '_rl_' . md5( $who );
+		return $limited;
+	}
+
+	/**
+	 * Advance one counter and say whether it was already spent.
+	 *
+	 * @param string $key    Transient key.
+	 * @param int    $max    Requests allowed in the window.
+	 * @param int    $window Seconds.
+	 * @return bool
+	 */
+	private function bump_counter( $key, $max, $window ) {
 		$count = (int) get_transient( $key );
 		if ( $count >= $max ) {
 			return true;
