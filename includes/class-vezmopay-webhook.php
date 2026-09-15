@@ -91,7 +91,7 @@ class Webhook {
 		$raw  = $request->get_body();
 		$body = json_decode( $raw, true );
 		if ( ! is_array( $body ) || empty( $body['event'] ) ) {
-			$logger->error( 'Webhook rejected: malformed payload.' );
+			$this->log_refusal( $logger, 'malformed', 'Webhook rejected: malformed payload.' );
 			return new \WP_REST_Response( array( 'received' => false, 'reason' => 'malformed' ), 400 );
 		}
 
@@ -165,6 +165,9 @@ class Webhook {
 				. 'Paste the whsec_… secret from the VezmoPay dashboard into the gateway settings.'
 			);
 		}
+
+		// Authenticated. Anything the admin was being warned about is resolved.
+		$this->note_accepted();
 
 		$logger->debug( 'Webhook received: ' . $event, array( 'event_id' => $event_id ) );
 
@@ -364,7 +367,79 @@ class Webhook {
 	 * @param string $reason  Refusal reason, used as the throttle key.
 	 * @param string $message What to write.
 	 */
+	/**
+	 * Key under which the last refusal is remembered for the admin notice.
+	 */
+	const HEALTH_KEY = 'vezmopay_wh_health';
+
+	/**
+	 * What a merchant should actually DO about each refusal.
+	 *
+	 * The log said what happened and left them to infer the rest. These are the
+	 * two states a correctly-installed store can still be in, and neither is
+	 * guessable from "signature mismatch":
+	 *
+	 *  - signature-required: the endpoint record at VezmoPay has no signing
+	 *    secret, so the platform delivers unsigned by design and logs that it
+	 *    did. Nothing pasted into this store can fix that; the endpoint has to be
+	 *    recreated, because the secret is generated once, at creation.
+	 *  - bad-signature: the delivery WAS signed, with a different secret from the
+	 *    one saved here — a second endpoint, or one whose secret was regenerated.
+	 *
+	 * @param string $reason Refusal reason.
+	 * @return string
+	 */
+	public static function refusal_remedy( $reason ) {
+		switch ( $reason ) {
+			case 'signature-required':
+				return __( 'VezmoPay is delivering these events unsigned, which means the webhook endpoint in your VezmoPay dashboard has no signing secret. A secret is only generated when an endpoint is created, so delete that endpoint, create it again, and paste the new whsec_… value here.', 'vezmopay-woocommerce' );
+			case 'bad-signature':
+				return __( 'These deliveries are signed with a different secret from the one saved here. Copy the whsec_… value for this exact endpoint from your VezmoPay dashboard again — or, if it was regenerated, paste the new one.', 'vezmopay-woocommerce' );
+			case 'no-secret':
+				return __( 'Paste the whsec_… secret from your VezmoPay dashboard into the gateway settings.', 'vezmopay-woocommerce' );
+			case 'malformed':
+				return __( 'Something posted to the webhook URL that was not a VezmoPay event. If it keeps happening, check what else knows that URL.', 'vezmopay-woocommerce' );
+			default:
+				return '';
+		}
+	}
+
+	/**
+	 * Remember that deliveries are being refused, and why.
+	 *
+	 * 0.3.9 told the merchant about a MISSING secret in the admin, but not about
+	 * a store that has one and is refusing every delivery anyway — which is the
+	 * state that reads as "the webhook is broken" while the endpoint is doing
+	 * exactly what it should.
+	 *
+	 * @param string $reason Refusal reason.
+	 */
+	private function note_refusal( $reason ) {
+		$health = get_transient( self::HEALTH_KEY );
+		$health = is_array( $health ) && isset( $health['reason'] ) && $health['reason'] === $reason
+			? $health
+			: array( 'reason' => $reason, 'count' => 0, 'first' => time() );
+
+		$health['count'] = (int) $health['count'] + 1;
+		$health['last']  = time();
+		set_transient( self::HEALTH_KEY, $health, WEEK_IN_SECONDS );
+	}
+
+	/**
+	 * A delivery got through: whatever was wrong is over.
+	 */
+	private function note_accepted() {
+		if ( get_transient( self::HEALTH_KEY ) ) {
+			delete_transient( self::HEALTH_KEY );
+		}
+	}
+
 	private function log_refusal( $logger, $reason, $message ) {
+		$this->note_refusal( $reason );
+		$remedy = self::refusal_remedy( $reason );
+		if ( '' !== $remedy ) {
+			$message .= ' ' . $remedy;
+		}
 		// A mismatched signature is the one refusal that can mean a real
 		// misconfiguration or an attack rather than an unfinished onboarding, so
 		// it is never quietened.

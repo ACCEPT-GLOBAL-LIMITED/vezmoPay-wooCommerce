@@ -382,14 +382,44 @@ final class Plugin {
 			return;
 		}
 		$gateway = $this->gateway();
-		if ( ! $gateway || 'yes' !== $gateway->get_option( 'enabled' ) || '' !== (string) $gateway->get_option( 'webhook_secret' ) ) {
+		if ( ! $gateway || 'yes' !== $gateway->get_option( 'enabled' ) ) {
+			return;
+		}
+
+		$secret = (string) $gateway->get_option( 'webhook_secret' );
+		$health = get_transient( Webhook::HEALTH_KEY );
+		$health = is_array( $health ) ? $health : array();
+
+		// Two different problems, and the second is the one 0.3.9 could not see:
+		// a store WITH a secret whose every delivery is being refused. That is
+		// what reads as "the webhook is broken" while the endpoint is behaving
+		// exactly as designed — and the only place it showed was a log.
+		if ( '' === $secret ) {
+			$headline = __( 'VezmoPay: webhook deliveries are being rejected.', 'vezmopay-woocommerce' );
+			$detail   = __( 'No webhook secret is saved, so nothing arriving at the webhook endpoint can be authenticated and none of it is processed. Orders still complete — the plugin checks VezmoPay every five minutes — but they complete more slowly.', 'vezmopay-woocommerce' )
+				. ' ' . Webhook::refusal_remedy( 'no-secret' );
+		} elseif ( ! empty( $health['reason'] ) && '' !== Webhook::refusal_remedy( $health['reason'] ) ) {
+			$headline = sprintf(
+				/* translators: 1: number of refused deliveries, 2: how long ago the last one was, e.g. "5 mins" */
+				_n(
+					'VezmoPay: %1$d webhook delivery has been refused (the last one %2$s ago).',
+					'VezmoPay: %1$d webhook deliveries have been refused (the last one %2$s ago).',
+					(int) $health['count'],
+					'vezmopay-woocommerce'
+				),
+				(int) $health['count'],
+				human_time_diff( (int) $health['last'] )
+			);
+			$detail = Webhook::refusal_remedy( $health['reason'] )
+				. ' ' . __( 'Until then orders still complete, just more slowly — the plugin checks VezmoPay every five minutes. This notice clears itself as soon as one delivery is accepted.', 'vezmopay-woocommerce' );
+		} else {
 			return;
 		}
 
 		echo '<div class="notice notice-warning"><p><strong>';
-		echo esc_html__( 'VezmoPay: webhook deliveries are being rejected.', 'vezmopay-woocommerce' );
+		echo esc_html( $headline );
 		echo '</strong> ';
-		echo esc_html__( 'No webhook secret is saved, so nothing arriving at the webhook endpoint can be authenticated and none of it is processed. Orders still complete — the plugin checks VezmoPay every five minutes — but they complete more slowly. Paste the whsec_… secret from your VezmoPay dashboard into the gateway settings.', 'vezmopay-woocommerce' );
+		echo esc_html( $detail );
 		echo ' <a href="' . esc_url( admin_url( 'admin.php?page=wc-settings&tab=checkout&section=vezmopay' ) ) . '">';
 		echo esc_html__( 'Open VezmoPay settings', 'vezmopay-woocommerce' );
 		echo '</a></p></div>';
