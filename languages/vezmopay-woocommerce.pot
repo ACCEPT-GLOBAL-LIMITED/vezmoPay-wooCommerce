@@ -2,14 +2,14 @@
 # This file is distributed under the GPL-2.0-or-later.
 msgid ""
 msgstr ""
-"Project-Id-Version: VezmoPay for WooCommerce 0.3.8\n"
+"Project-Id-Version: VezmoPay for WooCommerce 0.3.9\n"
 "Report-Msgid-Bugs-To: https://github.com/ACCEPT-GLOBAL-LIMITED/vezmoPay-wooCommerce/issues\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-09-15T08:49:54+00:00\n"
+"POT-Creation-Date: 2026-09-15T10:35:09+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: vezmopay-woocommerce\n"
@@ -41,7 +41,7 @@ msgstr ""
 
 #: includes/blocks/class-vezmopay-blocks-support.php:119
 #: includes/class-vezmopay-gateway.php:79
-#: includes/class-vezmopay-gateway.php:739
+#: includes/class-vezmopay-gateway.php:847
 #: includes/class-vezmopay-settings.php:54
 #: assets/js/blocks.js:33
 msgid "VezmoPay"
@@ -68,25 +68,29 @@ msgstr ""
 msgid "This cart total cannot be processed by VezmoPay."
 msgstr ""
 
+#: includes/class-vezmopay-checkout-session.php:187
+msgid "This currency cannot be processed by VezmoPay."
+msgstr ""
+
 #. translators: %s: site name
-#: includes/class-vezmopay-checkout-session.php:191
+#: includes/class-vezmopay-checkout-session.php:201
 #, php-format
 msgid "%s — checkout"
 msgstr ""
 
-#: includes/class-vezmopay-checkout-session.php:225
-#: includes/class-vezmopay-gateway.php:1693
-#: includes/class-vezmopay-plugin.php:461
+#: includes/class-vezmopay-checkout-session.php:235
+#: includes/class-vezmopay-gateway.php:1901
+#: includes/class-vezmopay-plugin.php:541
 msgid "VezmoPay returned an incomplete payment session."
 msgstr ""
 
-#: includes/class-vezmopay-checkout-session.php:274
+#: includes/class-vezmopay-checkout-session.php:287
 msgid "There is no VezmoPay payment session to update."
 msgstr ""
 
 #: includes/class-vezmopay-connect.php:71
 #: includes/class-vezmopay-connect.php:250
-#: includes/class-vezmopay-plugin.php:702
+#: includes/class-vezmopay-plugin.php:782
 msgid "You are not allowed to do that."
 msgstr ""
 
@@ -180,639 +184,689 @@ msgstr ""
 msgid "Accept payments through VezmoPay — hosted checkout, inline payment element, or secure iframe. Card data never touches your server."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:170
+#: includes/class-vezmopay-gateway.php:178
 #: assets/js/blocks.js:175
 msgid "Test mode — no real money will move."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:174
+#: includes/class-vezmopay-gateway.php:182
 msgid "Loading secure payment fields…"
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:180
+#: includes/class-vezmopay-gateway.php:188
 #: assets/js/blocks.js:193
 msgid "Pay"
 msgstr ""
 
 #. translators: 1: submitted URL, 2: shipped default URL
-#: includes/class-vezmopay-gateway.php:633
+#: includes/class-vezmopay-gateway.php:692
 #, php-format
 msgid "“%1$s” is not a valid VezmoPay checkout URL. It must be an https address on a VezmoPay host (for example %2$s). This address decides which origin may report a payment result to your checkout, so it was not saved."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:741
+#: includes/class-vezmopay-gateway.php:849
 msgid "Modern payments for your WooCommerce store."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:745
-#: includes/class-vezmopay-gateway.php:1915
-#: includes/class-vezmopay-gateway.php:2000
+#: includes/class-vezmopay-gateway.php:853
+#: includes/class-vezmopay-gateway.php:2128
+#: includes/class-vezmopay-gateway.php:2213
 msgid "Test mode"
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:745
+#: includes/class-vezmopay-gateway.php:853
 msgid "Live mode"
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:754
+#: includes/class-vezmopay-gateway.php:862
 msgid "VezmoPay is in TEST mode."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:756
+#: includes/class-vezmopay-gateway.php:864
 msgid "No real money will move. Switch the Environment setting to Live when you are ready."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:760
+#: includes/class-vezmopay-gateway.php:868
 msgid "VezmoPay is in LIVE mode."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:765
+#: includes/class-vezmopay-gateway.php:873
 msgid "Your store currency is a zero-decimal currency (e.g. JPY, KRW). VezmoPay does not currently handle these correctly, so the gateway will not be offered at checkout."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:774
+#: includes/class-vezmopay-gateway.php:887
+msgid "Hosted checkout is active by your override."
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php:889
+msgid "VezmoPay still does not report whether this account is activated for payment-link payments, so the plugin cannot check it for you. If payment links do not actually work on your account, customers will be sent to a page that cannot take their money and their orders will sit unpaid — the plugin has no way to detect that. Untick the override to serve the embedded payment form instead."
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php:893
 msgid "Hosted checkout is not active."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:776
+#: includes/class-vezmopay-gateway.php:895
 msgid "VezmoPay does not yet report whether this account is activated for payment-link payments, so customers are being served the embedded payment form instead of a page they may not be able to pay on. If payment links already work on your account, tick “My VezmoPay account is activated for payment links” below to use the redirect anyway."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:785
+#: includes/class-vezmopay-gateway.php:905
 msgid "Embedded checkout is not active."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:793
+#: includes/class-vezmopay-gateway.php:913
 msgid "VezmoPay will not appear at checkout yet."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:797
+#: includes/class-vezmopay-gateway.php:917
 msgid "VezmoPay is active and will appear at checkout."
 msgstr ""
 
 #. translators: %s: this store's origin, e.g. https://shop.example
-#: includes/class-vezmopay-gateway.php:833
+#: includes/class-vezmopay-gateway.php:953
 #, php-format
 msgid "%s is not one of your VezmoPay trusted origins, so the payment form cannot be embedded and shoppers are sent to the VezmoPay secure page instead. Click \"Connect with VezmoPay\" above to register this store, then place a test order."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:847
+#: includes/class-vezmopay-gateway.php:967
 msgid "Tick “Enable VezmoPay” above and save."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:850
+#: includes/class-vezmopay-gateway.php:970
 msgid "Your store currency is not supported by VezmoPay yet."
 msgstr ""
 
 #. translators: %s: environment name (test/live)
-#: includes/class-vezmopay-gateway.php:855
+#: includes/class-vezmopay-gateway.php:975
 #, php-format
 msgid "No API credentials are saved for the %s environment. Click “Connect with VezmoPay”, or paste your key and secret, then save."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:880
+#: includes/class-vezmopay-gateway.php:1000
 msgid "Connect with VezmoPay"
 msgstr ""
 
 #. translators: %s: environment name
-#: includes/class-vezmopay-gateway.php:886
+#: includes/class-vezmopay-gateway.php:1006
 #, php-format
 msgid "Credentials saved (%s environment)"
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:891
+#: includes/class-vezmopay-gateway.php:1011
 msgid "Request production access"
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:894
+#: includes/class-vezmopay-gateway.php:1014
 msgid "Log in to your VezmoPay account and your API credentials — and your webhook — are created and filled in automatically. Connecting deactivates any previous API key on your account. Prefer manual setup? Paste a key and secret below instead."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:896
+#: includes/class-vezmopay-gateway.php:1016
 msgid "Going live: click \"Request production access\" to complete VezmoPay account verification. Once approved, switch Environment to Live and connect again to get your live credentials."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:924
+#: includes/class-vezmopay-gateway.php:1044
 msgid "Connect your VezmoPay account (above) to manage these settings here."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:928
+#: includes/class-vezmopay-gateway.php:1048
 msgid "More account settings"
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:929
+#: includes/class-vezmopay-gateway.php:1049
 msgid "Account verification, payout bank, reserve, checkout branding, Pre-Dispute Protection, Dispute Auto-Resolution and your fee schedule are managed in your VezmoPay console."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:931
+#: includes/class-vezmopay-gateway.php:1051
 msgid "Open VezmoPay console settings →"
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:977
+#: includes/class-vezmopay-gateway.php:1097
 #: includes/class-vezmopay-settings.php:162
 msgid "Test connection"
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:980
+#: includes/class-vezmopay-gateway.php:1100
 msgid "Validates the saved API key and secret for the selected environment against the VezmoPay API. Save your changes first."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:1002
-#: includes/class-vezmopay-gateway.php:2273
+#: includes/class-vezmopay-gateway.php:1122
+#: includes/class-vezmopay-gateway.php:2595
 msgid "Order not found."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:1008
+#: includes/class-vezmopay-gateway.php:1128
 msgid "This order total cannot be processed by VezmoPay."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:1048
+#: includes/class-vezmopay-gateway.php:1140
+msgid "This order’s currency cannot be processed by VezmoPay."
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php:1185
 msgid "Awaiting VezmoPay payment on the checkout page."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:1138
+#: includes/class-vezmopay-gateway.php:1275
 msgid "VezmoPay did not return a checkout URL. Please try again."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:1142
+#: includes/class-vezmopay-gateway.php:1279
 msgid "Awaiting payment on the VezmoPay secure checkout page."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:1158
+#: includes/class-vezmopay-gateway.php:1295
 msgid "Awaiting VezmoPay payment on the store pay page."
 msgstr ""
 
 #. translators: %s: paylink code
-#: includes/class-vezmopay-gateway.php:1426
+#: includes/class-vezmopay-gateway.php:1584
 #, php-format
 msgid "Order total or currency changed since VezmoPay paylink %s was created; creating a new link for the current total."
 msgstr ""
 
 #. translators: 1: order number, 2: site name
-#: includes/class-vezmopay-gateway.php:1443
+#: includes/class-vezmopay-gateway.php:1601
 #, php-format
 msgid "Order %1$s at %2$s"
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:1457
+#: includes/class-vezmopay-gateway.php:1615
 msgid "VezmoPay did not return a payment link. Please try again."
 msgstr ""
 
 #. translators: %s: paylink code
-#: includes/class-vezmopay-gateway.php:1471
+#: includes/class-vezmopay-gateway.php:1637
 #, php-format
 msgid "VezmoPay paylink created (%s). Customer redirected to the hosted checkout. The order will be completed by webhook when VezmoPay confirms payment."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:1483
+#. translators: %s: paylink code
+#: includes/class-vezmopay-gateway.php:1642
+#, php-format
+msgid "VezmoPay paylink created (%s). Customer redirected to the hosted checkout. Hosted mode is running by merchant override — VezmoPay has not confirmed this account can take payment-link payments, so if the link shows “unavailable” to the customer no payment and no webhook will follow, and this order will need chasing manually."
+msgstr ""
+
+#: includes/class-vezmopay-gateway.php:1654
 msgid "Awaiting VezmoPay hosted checkout payment."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:1743
+#: includes/class-vezmopay-gateway.php:1956
 msgid "VezmoPay checkout is unavailable right now. Please try again."
 msgstr ""
 
 #. translators: %s: order total, e.g. $300.00
 #. translators: %s: order total, e.g. $500.00
-#: includes/class-vezmopay-gateway.php:1810
-#: includes/class-vezmopay-plugin.php:299
+#: includes/class-vezmopay-gateway.php:2023
+#: includes/class-vezmopay-plugin.php:321
 #, php-format
 msgid "Pay %s"
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:1817
-#: includes/class-vezmopay-gateway.php:1944
-#: includes/class-vezmopay-plugin.php:307
+#: includes/class-vezmopay-gateway.php:2030
+#: includes/class-vezmopay-gateway.php:2157
+#: includes/class-vezmopay-plugin.php:329
 msgid "VezmoPay secure payment"
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:1818
-#: includes/class-vezmopay-plugin.php:300
+#: includes/class-vezmopay-gateway.php:2031
+#: includes/class-vezmopay-plugin.php:322
 msgid "Processing your payment…"
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:1819
+#: includes/class-vezmopay-gateway.php:2032
 msgid "Your bank payment is processing. We will email you when it completes."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:1820
+#: includes/class-vezmopay-gateway.php:2033
 msgid "Payment failed. Please try again or use a different payment method."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:1821
+#: includes/class-vezmopay-gateway.php:2034
 msgid "This payment session expired. Reloading…"
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:1822
+#: includes/class-vezmopay-gateway.php:2035
 msgid "Something went wrong. Please try again."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:1823
+#: includes/class-vezmopay-gateway.php:2036
 msgid "We received your payment, but this order needs a quick manual review before it is confirmed. Please contact us — do not pay again."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:1824
-#: includes/class-vezmopay-plugin.php:304
+#: includes/class-vezmopay-gateway.php:2037
+#: includes/class-vezmopay-plugin.php:326
 msgid "The payment was cancelled. You can try again."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:1829
-#: includes/class-vezmopay-plugin.php:314
+#: includes/class-vezmopay-gateway.php:2042
+#: includes/class-vezmopay-plugin.php:336
 msgid "You can correct your card details and try again."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:1830
-#: includes/class-vezmopay-plugin.php:306
+#: includes/class-vezmopay-gateway.php:2043
+#: includes/class-vezmopay-plugin.php:328
 msgid "Completing an extra verification step with your bank…"
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:1835
+#: includes/class-vezmopay-gateway.php:2048
 msgid "VezmoPay did not report a result for that payment. Please check your card details and press Pay again — if the payment did go through, your order will be updated automatically."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:1920
+#: includes/class-vezmopay-gateway.php:2133
 msgid "Preparing your secure payment…"
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:1965
+#: includes/class-vezmopay-gateway.php:2178
 msgid "Trouble with the form? Continue on the VezmoPay page →"
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:1970
+#: includes/class-vezmopay-gateway.php:2183
 msgid "JavaScript is disabled. After paying in the secure form above, your order will be confirmed by email once VezmoPay notifies us."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:1977
-#: includes/class-vezmopay-gateway.php:2021
+#: includes/class-vezmopay-gateway.php:2190
+#: includes/class-vezmopay-gateway.php:2234
 msgid "Payments secured by"
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:1978
-#: includes/class-vezmopay-gateway.php:2022
+#: includes/class-vezmopay-gateway.php:2191
+#: includes/class-vezmopay-gateway.php:2235
 msgid "PCI DSS"
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:1978
-#: includes/class-vezmopay-gateway.php:2022
+#: includes/class-vezmopay-gateway.php:2191
+#: includes/class-vezmopay-gateway.php:2235
 msgid "3-D Secure"
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:2007
+#: includes/class-vezmopay-gateway.php:2220
 msgid "Your payment was not completed."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:2008
+#: includes/class-vezmopay-gateway.php:2221
 msgid "Try payment again"
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:2011
+#: includes/class-vezmopay-gateway.php:2224
 msgid "Taking you to the secure VezmoPay checkout…"
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:2012
+#: includes/class-vezmopay-gateway.php:2225
 msgid "Continue to payment"
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:2056
+#: includes/class-vezmopay-gateway.php:2269
 msgid "Your VezmoPay payment is being confirmed. You will receive an email as soon as it completes."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:2306
+#: includes/class-vezmopay-gateway.php:2628
 msgid "payment link"
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:2310
+#: includes/class-vezmopay-gateway.php:2632
 msgid "VezmoPay paylink reported as paid."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:2316
+#: includes/class-vezmopay-gateway.php:2638
 msgid "No VezmoPay payment reference on this order."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:2362
+#: includes/class-vezmopay-gateway.php:2684
 msgid "payment"
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:2369
+#: includes/class-vezmopay-gateway.php:2691
 msgid "VezmoPay payment captured."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:2376
+#: includes/class-vezmopay-gateway.php:2698
 msgid "VezmoPay payment authorized / bank settlement pending (e.g. ACH). Awaiting final confirmation."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:2397
+#: includes/class-vezmopay-gateway.php:2719
 msgid "VezmoPay bank payment (ACH) submitted and processing. Bank debits usually clear within 1–2 business days; the order will update automatically."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:2410
+#: includes/class-vezmopay-gateway.php:2732
 msgid "VezmoPay reported the payment as failed."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:2416
+#: includes/class-vezmopay-gateway.php:2738
 msgid "VezmoPay reports this payment as refunded (refund performed on the VezmoPay side)."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:2492
+#: includes/class-vezmopay-gateway.php:2814
 msgid "an amount it did not report"
 msgstr ""
 
 #. translators: 1: what was read (payment / payment link), 2: amount and currency VezmoPay reported, 3: order total, 4: order currency
-#: includes/class-vezmopay-gateway.php:2502
+#: includes/class-vezmopay-gateway.php:2824
 #, php-format
 msgid "VezmoPay %1$s mismatch: provider reports %2$s but the order total is %3$s %4$s. Order NOT completed automatically — review manually."
 msgstr ""
 
 #. translators: %s: transaction id
-#: includes/class-vezmopay-gateway.php:2532
+#: includes/class-vezmopay-gateway.php:2868
 #, php-format
 msgid "Transaction ID: %s"
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:2565
+#: includes/class-vezmopay-gateway.php:2901
 #, php-format
 msgid "The VezmoPay payment form reported a failed attempt (payment %1$s, VezmoPay still reports %2$s). The customer was not charged and was asked to try again."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:2568
+#: includes/class-vezmopay-gateway.php:2904
 #, php-format
 msgid "The customer cancelled the VezmoPay payment (payment %1$s, VezmoPay still reports %2$s)."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:2571
+#: includes/class-vezmopay-gateway.php:2907
 #, php-format
 msgid "The VezmoPay payment session expired before the payment completed (payment %1$s, VezmoPay still reports %2$s)."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:2574
+#: includes/class-vezmopay-gateway.php:2910
 #, php-format
 msgid "The VezmoPay payment form never finished loading, so the card was never submitted (payment %1$s, VezmoPay still reports %2$s)."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:2577
+#: includes/class-vezmopay-gateway.php:2913
 #, php-format
 msgid "VezmoPay reported this payment attempt as failed (payment %1$s, status %2$s). The customer was asked to try again."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:2581
+#: includes/class-vezmopay-gateway.php:2917
 #, php-format
 msgid "VezmoPay reported no result for this payment attempt within the time the checkout waits (payment %1$s, still %2$s). The customer was asked to try again. If VezmoPay later reports this payment as captured, the order will be updated automatically."
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:2588
+#: includes/class-vezmopay-gateway.php:2924
 msgid "none recorded"
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:2617
+#: includes/class-vezmopay-gateway.php:2953
 msgid "VezmoPay does not currently provide a refund API. Please issue the refund from your VezmoPay dashboard; the order will be marked refunded when the plugin next verifies the payment."
 msgstr ""
 
 #. translators: 1: site name, 2: order number
-#: includes/class-vezmopay-gateway.php:2635
+#: includes/class-vezmopay-gateway.php:2971
 #, php-format
 msgid "%1$s — Order %2$s"
 msgstr ""
 
 #. translators: %s: error detail from the VezmoPay API
-#: includes/class-vezmopay-gateway.php:2658
+#: includes/class-vezmopay-gateway.php:2994
 #, php-format
 msgid "VezmoPay could not start the payment: %s"
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:2672
+#: includes/class-vezmopay-gateway.php:3008
 msgid "Your VezmoPay API key is missing a required permission: inline and iframe modes need secure-payment.create, hosted mode needs paylink.create. Assign it to the key in the VezmoPay admin."
 msgstr ""
 
 #. translators: %s: technical error detail (shown to store managers only)
-#: includes/class-vezmopay-gateway.php:2676
+#: includes/class-vezmopay-gateway.php:3012
 #, php-format
 msgid "[Store managers only] Reason: %s"
 msgstr ""
 
-#: includes/class-vezmopay-gateway.php:2694
+#: includes/class-vezmopay-gateway.php:3030
 msgid "We could not start your VezmoPay payment. Please try again or choose a different payment method."
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:301
+#: includes/class-vezmopay-plugin.php:323
 msgid "Payment failed. Please check your card details and try again."
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:302
+#: includes/class-vezmopay-plugin.php:324
 msgid "Secure payment fields could not be loaded. Please reload the page or choose another payment method."
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:303
+#: includes/class-vezmopay-plugin.php:325
 msgid "Please complete your card details before placing the order."
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:305
+#: includes/class-vezmopay-plugin.php:327
 msgid "The payment session expired. Please reload the page and try again."
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:308
+#: includes/class-vezmopay-plugin.php:330
 msgid "The payment form did not finish loading, so your card was not charged. Reload the page and try again, or use the VezmoPay page link below."
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:309
+#: includes/class-vezmopay-plugin.php:331
 msgid "This is taking longer than usual. Your card has not been charged twice — you can finish the payment on the VezmoPay page below."
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:310
+#: includes/class-vezmopay-plugin.php:332
 msgid "Continue on the VezmoPay page →"
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:318
+#: includes/class-vezmopay-plugin.php:340
 msgid "Please re-enter your card details below and try again."
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:323
+#: includes/class-vezmopay-plugin.php:345
 msgid "VezmoPay did not report a result for that payment. Please check your card details and try again — if the payment did go through, your order will be updated automatically."
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:331
+#: includes/class-vezmopay-plugin.php:353
 msgid "That payment went through, but your order has not been placed yet. Please do not pay again — contact the store to complete your order."
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:335
+#: includes/class-vezmopay-plugin.php:357
 msgid "Payment approved — placing your order…"
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:336
+#: includes/class-vezmopay-plugin.php:358
 msgid "Your order could not be placed, so nothing was charged. Please check the highlighted fields and try again."
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:337
+#: includes/class-vezmopay-plugin.php:359
 msgid "Your order took too long to place, so nothing was charged. Please try again."
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:338
+#: includes/class-vezmopay-plugin.php:360
 msgid "A payment is already in progress. Please wait for it to finish."
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:437
-#: includes/class-vezmopay-plugin.php:499
+#: includes/class-vezmopay-plugin.php:390
+msgid "VezmoPay: webhook deliveries are being rejected."
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php:392
+msgid "No webhook secret is saved, so nothing arriving at the webhook endpoint can be authenticated and none of it is processed. Orders still complete — the plugin checks VezmoPay every five minutes — but they complete more slowly. Paste the whsec_… secret from your VezmoPay dashboard into the gateway settings."
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php:394
+msgid "Open VezmoPay settings"
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php:517
+#: includes/class-vezmopay-plugin.php:579
 msgid "VezmoPay is not accepting inline payments."
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:445
+#: includes/class-vezmopay-plugin.php:525
 msgid "Too many payment attempts. Please wait a moment and reload the page."
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:504
+#: includes/class-vezmopay-plugin.php:584
 msgid "Too many checkout updates. Please wait a moment and reload the page."
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:532
+#: includes/class-vezmopay-plugin.php:612
 msgid "Please enter a valid billing email address."
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:542
+#: includes/class-vezmopay-plugin.php:622
 msgid "Your billing details could not be saved to the payment. Please check them and try again."
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:559
-#: includes/class-vezmopay-plugin.php:595
-#: includes/class-vezmopay-plugin.php:653
+#: includes/class-vezmopay-plugin.php:639
+#: includes/class-vezmopay-plugin.php:675
+#: includes/class-vezmopay-plugin.php:733
 msgid "Invalid order."
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:706
+#: includes/class-vezmopay-plugin.php:786
 msgid "Connect your VezmoPay account first."
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:784
+#: includes/class-vezmopay-plugin.php:869
 msgid "Invalid payment method."
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:792
+#: includes/class-vezmopay-plugin.php:877
 msgid "Invalid setting."
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:824
+#: includes/class-vezmopay-plugin.php:913
 msgid "Loading your VezmoPay account settings…"
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:825
+#: includes/class-vezmopay-plugin.php:914
 msgid "We couldn't load your VezmoPay account settings. Make sure your API key has the account.read permission, or manage them in your VezmoPay console."
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:826
+#: includes/class-vezmopay-plugin.php:915
 msgid "Payment methods"
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:827
-msgid "Choose which methods are offered to your customers at checkout (this store, payment links, invoices and products). Cards are always on."
+#: includes/class-vezmopay-plugin.php:916
+msgid "Choose which methods your VezmoPay account offers. Cards are always on."
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:828
-msgid "Apple Pay and Google Pay appear automatically for eligible customers on supported devices when enabled. Disabling a method hides it everywhere immediately."
+#: includes/class-vezmopay-plugin.php:921
+msgid "These settings apply to your VezmoPay account — payment links, invoices and products. VezmoPay decides which methods the embedded payment form on this store offers, so a method shown here as unavailable can still appear at your checkout."
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:829
+#: includes/class-vezmopay-plugin.php:922
+msgid "Hosted checkout only"
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php:923
+msgid "Your checkout is set to the embedded payment form, which does not show wallet buttons on the current VezmoPay build — turning this on changes nothing for this store today. It still applies to payment links, invoices and products."
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php:924
+msgid "Apple Pay and Google Pay appear automatically for eligible customers on supported devices, wherever VezmoPay offers them. Disabling a method hides it everywhere immediately."
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php:925
 msgid "Cards"
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:830
+#: includes/class-vezmopay-plugin.php:926
 msgid "Visa, Mastercard, Amex and more. Always on — the baseline payment method for every checkout."
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:831
+#: includes/class-vezmopay-plugin.php:927
 msgid "Bank transfer (ACH)"
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:832
+#: includes/class-vezmopay-plugin.php:928
 msgid "Let US customers pay directly from a bank account. Lower fees; USD only."
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:833
+#: includes/class-vezmopay-plugin.php:929
 msgid "Apple Pay"
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:834
+#: includes/class-vezmopay-plugin.php:930
 msgid "One-tap checkout for customers on Apple devices (rides the card rail)."
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:835
+#: includes/class-vezmopay-plugin.php:931
 msgid "Google Pay"
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:836
+#: includes/class-vezmopay-plugin.php:932
 msgid "One-tap checkout for customers on Google / Android (rides the card rail)."
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:837
+#: includes/class-vezmopay-plugin.php:933
 msgid "Always on"
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:838
+#: includes/class-vezmopay-plugin.php:934
 msgid "Managed by Vezmo"
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:839
+#: includes/class-vezmopay-plugin.php:935
 msgid "Not available yet"
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:840
+#: includes/class-vezmopay-plugin.php:936
 msgid "Complete account verification to enable this method."
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:841
+#: includes/class-vezmopay-plugin.php:937
 msgid "3D Secure (card authentication)"
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:842
+#: includes/class-vezmopay-plugin.php:938
 msgid "3D Secure is on"
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:843
+#: includes/class-vezmopay-plugin.php:939
 msgid "3D Secure is off"
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:844
+#: includes/class-vezmopay-plugin.php:940
 msgid "Every card payment is authenticated with 3D Secure, reducing fraud and shifting chargeback liability to the card issuer."
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:845
+#: includes/class-vezmopay-plugin.php:941
 msgid "3D Secure is only requested when the card issuer or regulations require it."
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:846
+#: includes/class-vezmopay-plugin.php:942
 msgid "3D Secure is required on your account. Contact support if you need to change this."
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:847
+#: includes/class-vezmopay-plugin.php:943
 msgid "Cards from regions with regulatory requirements (e.g. Europe/SCA) are always authenticated regardless of this setting — turning it off only stops requesting 3D Secure on other cards."
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:848
+#: includes/class-vezmopay-plugin.php:944
 msgid "The change could not be saved: "
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:863
+#: includes/class-vezmopay-plugin.php:959
 msgid "Every 5 minutes (VezmoPay)"
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:951
+#: includes/class-vezmopay-plugin.php:1075
+msgid "VezmoPay has reported no payment against this order’s payment link in 24 hours, and the plugin has stopped checking automatically. If the customer says they paid, check the payment in your VezmoPay dashboard. If the link showed them “unavailable”, this account is not activated for payment links — contact VezmoPay, and consider switching Integration mode away from Hosted checkout so customers get the embedded payment form instead."
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php:1076
+msgid "VezmoPay has reported no result for this order’s payment in 24 hours, and the plugin has stopped checking automatically. Check the payment in your VezmoPay dashboard before cancelling the order."
+msgstr ""
+
+#: includes/class-vezmopay-plugin.php:1092
 msgid "Check VezmoPay payment status"
 msgstr ""
 
 #. translators: %s: error message
-#: includes/class-vezmopay-plugin.php:971
+#: includes/class-vezmopay-plugin.php:1112
 #, php-format
 msgid "VezmoPay status check failed: %s"
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:978
+#: includes/class-vezmopay-plugin.php:1119
 msgid "VezmoPay status check: another check was already running for this order. Try again in a moment."
 msgstr ""
 
 #. translators: %s: payment status reported by VezmoPay
-#: includes/class-vezmopay-plugin.php:984
+#: includes/class-vezmopay-plugin.php:1125
 #, php-format
 msgid "VezmoPay status check: %s"
 msgstr ""
 
-#: includes/class-vezmopay-plugin.php:999
+#: includes/class-vezmopay-plugin.php:1140
 msgid "Settings"
 msgstr ""
 

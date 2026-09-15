@@ -4,7 +4,7 @@ Tags: payments, payment gateway, credit card, ach, woocommerce
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.3.8
+Stable tag: 0.3.9
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -112,6 +112,19 @@ This plugin connects your store to the VezmoPay payment platform, operated by Ve
 VezmoPay is operated by Vezmo Technology, Inc.: [https://vezmo.com](https://vezmo.com) — see the site for terms of service and privacy policy.
 
 == Changelog ==
+
+= 0.3.9 =
+
+Update promptly. This fixes a way an order could be charged a hundred times over, and a payment page customers could not pay on.
+
+* Fixed a silent overcharge on any order whose currency is not the store's. VezmoPay multiplies every amount by 100, which is correct for dollars and catastrophic for yen — the plugin refused those currencies, but only ever checked the STORE's. An order in a zero-decimal currency (a multi-currency plugin, an order created in the admin, or a store whose currency changed after the order) was charged a hundred times its total, and the plugin's own amount check compared the figure it had sent, so the order completed as paid. The order's own currency is now checked before anything is charged.
+* Fixed the "Pay" button in My Account → Orders, the admin's customer payment link and the pay link in the customer invoice email. All three open a page the embedded payment form was never loaded on, so customers got "Loading secure payment fields…" for ever, and pressing Pay silently reloaded the same dead page while moving the order back to Pending. That page now takes the customer to a payment form that works.
+* A customer's payment can no longer be replaced while the money is still in play: a paid payment link is recognised before a retry starts a second one, and a "try again" link can no longer mint a new payment over one that has already been captured.
+* An order that was paid is no longer knocked back to On hold by a later check when the merchant has edited its total. The mismatch is still recorded as a note for review.
+* Webhook deliveries that cannot be authenticated are refused rather than processed, and the settings screen now tells you when no webhook secret is saved — orders still complete, just a little slower, via the five-minute check.
+* The settings panel no longer claims to control things it does not. Apple Pay and Google Pay say plainly that they do not appear in the embedded payment form, and the payment-method list says that VezmoPay decides what the embedded form offers — so a method shown as unavailable can still be offered to customers.
+* Hosted checkout: once you tick the override, the settings screen stops telling you hosted is inactive and tells you what you have actually taken on. An order that strands on an unactivated account is now given up on after 24 hours with one note saying what to check, instead of being re-checked silently for a week.
+* Billing details are no longer written to the debug log, a webhook without an event id can no longer be replayed indefinitely, the rate limit can no longer be reset by clearing cookies, and the decline message no longer repeats itself.
 
 = 0.3.8 =
 
