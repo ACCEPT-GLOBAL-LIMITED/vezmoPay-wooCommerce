@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  lint:
+    name: Syntax floor
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # The cheap floor, and it must never be allowed to go red: a parse error in
+      # a payment gateway is a white screen at checkout.
+      - name: php -l every PHP file
+        run: |
+          find . -path ./vendor -prune -o -path ./node_modules -prune -o -name '*.php' -print0 \
+            | xargs -0 -n1 -P4 php -l
+
+      - name: node --check every JS file
+        run: |
+          find assets/js -name '*.js' -print0 | xargs -0 -n1 node --check
+          node --check tests/sandbox/regress.mjs
+          node --check tests/sandbox/fixtures/mock-vezmo.js
+
+  standards:
+    name: Coding standards (advisory)
+    runs-on: ubuntu-latest
+    # ADVISORY FOR NOW. DEVELOPER.md has documented WordPress/WooCommerce
+    # standards since the first release but nothing has ever enforced them, so
+    # the existing backlog is unknown. Read the annotations, clear the backlog,
+    # then delete this line and let it block.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+          tools: composer
+
+      - name: Install standards
+        run: composer install --no-interaction --no-progress
+
+      - name: PHPCS
+        run: vendor/bin/phpcs --report=full --report-summary

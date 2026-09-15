@@ -1,0 +1,123 @@
+<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mock secure checkout</title>
+<style>
+ body{margin:0;font:14px system-ui;background:#fff;color:#0b1020}
+ .card{padding:18px}.row{margin:0 0 14px}
+ label{display:block;font-size:12px;color:#6b7280;margin:0 0 6px}
+ input,select{width:100%;box-sizing:border-box;height:44px;border:1px solid #e6e8ee;border-radius:10px;padding:0 12px;font-size:15px}
+ .wallet{height:48px;border:1px solid #e6e8ee;border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:700;margin:0 0 14px}
+ .state{margin-top:12px;padding:10px;border-radius:8px;background:#eef0ff;font-weight:700;font-size:13px}
+</style>
+<div class="card">
+  <div class="wallet">G Pay</div>
+  <div class="row"><label>Card number</label><input value="4242 4242 4242 4242"></div>
+  <div class="row"><label>Expiry</label><input value="12 / 39"></div>
+  <div class="row"><label>CVC</label><input value="100"></div>
+  <div class="row"><label>Name</label><input value="Demo"></div>
+  <div class="row"><label>Country</label><select><option>United States</option></select></div>
+  <div class="row"><label>Address</label><input value="28921 test"></div>
+  <div class="row"><label>ZIP</label><input value="12345"></div>
+  <div class="state" id="state">waiting for submit…</div>
+</div>
+<script>
+ // Mimics the real embedded checkout: hides its own submit button, announces
+ // ready + content height, and charges only when the store asks it to.
+ var qs = new URLSearchParams(location.search);
+ var outcome = qs.get("outcome") || "decline";
+ var paymentId = qs.get("p") || "pay_mock_unknown";
+ function send(type, extra){ parent.postMessage(Object.assign({type: type}, extra || {}), "*"); }
+ function reportHeight(){ send("vezmo:secure-payment:resize", { height: document.documentElement.scrollHeight }); }
+ send("vezmo:secure-payment:ready");
+ reportHeight();
+ window.addEventListener("resize", reportHeight);
+ function setState(t){ document.getElementById("state").textContent = t; }
+ // Tell the mock API this payment was really charged, THEN report the outcome —
+ // so the store polling the API sees the same truth the frame reports.
+ function capture(){
+   var fd = new FormData();
+   fd.append("action", "mockpay_capture");
+   fd.append("p", paymentId);
+   return fetch("/wp-admin/admin-ajax.php", { method: "POST", body: fd }).catch(function(){});
+ }
+ function fail(){
+   var fd = new FormData();
+   fd.append("action", "mockpay_fail");
+   fd.append("p", paymentId);
+   return fetch("/wp-admin/admin-ajax.php", { method: "POST", body: fd }).catch(function(){});
+ }
+ // "wallet": the shopper taps Apple Pay / Google Pay INSIDE the frame. The real
+ // embed renders those buttons (Stripe PaymentRequest) with no isEmbedded guard
+ // and confirms the intent on the wallet sheet — it never waits for the store's
+ // submit message. So: capture and report success without any submit.
+ if (outcome === "wallet") {
+   setTimeout(function(){
+     setState("WALLET tapped inside the frame - charging without a submit");
+     capture().then(function(){
+       setTimeout(function(){ send("vezmo:secure-payment:success", { paymentId: paymentId }); }, 300);
+     });
+   }, 2000);
+ }
+ var ignoreLeft = parseInt(qs.get("ignore") || "0", 10);
+ window.addEventListener("message", function (e) {
+   if (!e.data || e.data.type !== "vezmo:secure-payment:submit") { return; }
+   if (ignoreLeft > 0) { ignoreLeft--; setState("submit IGNORED (form not ready) - " + ignoreLeft + " left"); return; }
+   setState("SUBMIT received (" + outcome + ")");
+   // The real embed posts `processing` the moment it accepts the card.
+   send("vezmo:secure-payment:processing");
+   // First submit reports nothing (the platform's decline behaviour today), the
+   // second succeeds: the shopper correcting their card and pressing Pay again.
+   if (outcome === "nothing_then_success") {
+     if (!window.__vezmoTried) {
+       window.__vezmoTried = 1;
+       setState("first SUBMIT - reporting NOTHING");
+       return;
+     }
+     setState("second SUBMIT - paying");
+     capture().then(function(){ setTimeout(function(){ send("vezmo:secure-payment:success", { paymentId: paymentId }); }, 400); });
+     return;
+   }
+   if (outcome === "nothing") {
+     // What the platform actually does on a decline today: accepts the card and
+     // then reports nothing, ever, while the payment record stays INITIATED.
+     setState("SUBMIT received - reporting NOTHING (D-01)");
+     return;
+   }
+   if (outcome === "requires_action") {
+     setTimeout(function(){ send("vezmo:secure-payment:requires_action", {}); }, 300);
+     return;
+   }
+   // What a real decline looks like today: the form reports the error, and the
+   // payment record is NOT moved to FAILED (see D-01). First submit declines,
+   // the second — after the shopper corrects the card — succeeds.
+   if (outcome === "decline_then_success") {
+     if (!window.__vezmoTried) {
+       window.__vezmoTried = 1;
+       setState("first SUBMIT - declined (API left INITIATED)");
+       setTimeout(function(){ send("vezmo:secure-payment:error", { message: "Your card was declined." }); }, 400);
+       return;
+     }
+     setState("second SUBMIT - paying");
+     capture().then(function(){ setTimeout(function(){ send("vezmo:secure-payment:success", { paymentId: paymentId }); }, 400); });
+     return;
+   }
+   if (outcome === "decline_silentapi") {
+     setState("SUBMIT - declined (API left INITIATED)");
+     setTimeout(function(){ send("vezmo:secure-payment:error", { message: "Your card was declined." }); }, 400);
+     return;
+   }
+   if (outcome === "decline") {
+     // The real embed posts the failed PaymentIntent to /confirm, so the payment
+     // record reads FAILED afterwards. Do the same, then report the decline.
+     fail().then(function(){
+       setTimeout(function(){ send("vezmo:secure-payment:error", { message: "Mock decline: card was declined." }); }, 500);
+     });
+     return;
+   }
+   capture().then(function(){
+     setTimeout(function(){
+       if (outcome === "silent") { return; }
+       send("vezmo:secure-payment:success", { paymentId: paymentId });
+     }, 500);
+   });
+ });
+</script>

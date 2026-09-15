@@ -9,7 +9,7 @@ Every case has an id (`T-2.4`) — report failures by id.
 | Marker | Meaning |
 |---|---|
 | **[P]** | Needs the real platform; a local sandbox cannot prove it. |
-| **[S]** | Covered by the local WP + mock-API sandbox, so it can be re-run cheaply. |
+| **[S]** | Provable in the committed sandbox — `tests/sandbox/` (`docker compose up -d && ./setup.sh`, then `node regress.mjs <surface> <mode> <outcome>`). Cheap to re-run on every change. |
 | **[D1]** | Behaviour exists only because a declined card produces no signal — see the Declined-payment signal row in `VEZMOPAY-API-CONTRACT.md`. Delete these when the platform fixes it. |
 
 Stripe test cards (the embed is a Stripe Payment Element in test mode):

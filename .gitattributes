@@ -1,0 +1,8 @@
+# Keep development scaffolding out of the release zip (`git archive`).
+/tests           export-ignore
+/.github         export-ignore
+/docs            export-ignore
+/composer.json   export-ignore
+/phpcs.xml.dist  export-ignore
+/.gitattributes  export-ignore
+/scripts         export-ignore
