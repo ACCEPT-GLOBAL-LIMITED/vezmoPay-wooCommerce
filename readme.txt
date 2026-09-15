@@ -4,7 +4,7 @@ Tags: payments, payment gateway, credit card, ach, woocommerce
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.3.9
+Stable tag: 0.3.10
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -112,6 +112,13 @@ This plugin connects your store to the VezmoPay payment platform, operated by Ve
 VezmoPay is operated by Vezmo Technology, Inc.: [https://vezmo.com](https://vezmo.com) — see the site for terms of service and privacy policy.
 
 == Changelog ==
+
+= 0.3.10 =
+
+* Fixed duplicate webhook deliveries doing the work twice. Two deliveries of one event could both be accepted, and a delivery that arrived while the store was busy could cancel the record of the one actually doing the work — so VezmoPay's retry ran the whole check again for an event already handled. No order was ever completed twice, but each replay cost a call to VezmoPay. Claims are now held properly, and released only by the delivery that took them.
+* The log no longer fills with the same rejection. A store that has not saved its webhook secret was writing one error per delivery, four times per event, for ever — burying the errors that matter and making a correctly-working endpoint look broken. It now says it once per five minutes. A mismatched signature is still logged every time, because that one can mean something is wrong.
+* Genuine webhook deliveries can no longer be rate-limited. The limit sat in front of the signature check, so a busy store could have real deliveries refused; it now applies only to traffic that fails authentication, behind a much higher ceiling that exists only to stop the endpoint being used to waste the store's CPU.
+* Webhook records no longer accumulate in the database for the life of the install; the five-minute check sweeps the expired ones.
 
 = 0.3.9 =
 
