@@ -1729,6 +1729,19 @@ class Gateway extends \WC_Payment_Gateway {
 			$order->save_meta_data();
 		}
 
+		// TODO(platform): the embedded form's METHOD LIST cannot be controlled from
+		// here. POST /merchant/secure-payments takes title, amount, currency,
+		// description, dueDate, client, ttlMinutes, iframe, theme, saveCard and the
+		// return URLs — and nothing that restricts payment methods (verified
+		// against CreateSecurePaymentDto). VezmoPay resolves the list itself when
+		// the payment is created, from a different source than the one
+		// GET /merchant/account/payment-methods reports to the settings panel: a
+		// method that panel calls "Not available yet" (eligible: false) is still
+		// offered to shoppers in the form, bank transfer included, all the way into
+		// the bank-linking flow. Wanted, either: a method restriction on this
+		// request, or the created session's method list honouring the same
+		// eligibility the merchant is shown. Until then the panel says plainly that
+		// it does not govern this store's embedded form (see Plugin's pmScope).
 		$payload = array(
 			'title'      => $this->payment_title( $order ),
 			'amount'     => (float) wc_format_decimal( $order->get_total(), 2 ),

@@ -283,6 +283,13 @@ or Safari on a Mac/iPhone with Apple Pay in the sandbox. `canMakePayment()` deci
 buttons appear at all — if they never show, this section cannot be run, and that is a device
 problem, not a plugin one.
 
+> **Pending a provider build — do not read these as regressions.** The embedded Payment Element
+> draws no wallet buttons today (the canonical statement is the **Wallet buttons in the embed
+> iframe** row in `VEZMOPAY-API-CONTRACT.md`), so on the current build the buttons simply never
+> appear and this whole section is unrunnable. The plugin already sends the authorize-mode
+> handshake — `wallets=0&walletMode=authorize` — so the day a build honours it, these are the cases
+> that must pass before it ships. **T-22.12** and **T-22.13** (hosted mode) are runnable now.
+
 **Why this section exists.** A wallet sheet charges the moment the customer approves it, on their
 own tap inside VezmoPay's iframe. In the payment box that happened *before* WooCommerce had created
 an order: the money moved and no order existed, and pressing Place order afterwards started a

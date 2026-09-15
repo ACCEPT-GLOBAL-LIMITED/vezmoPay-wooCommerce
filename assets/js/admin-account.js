@@ -115,6 +115,13 @@
 			return;
 		}
 		box.appendChild( el( 'p', 'description', i18n.pmIntro ) );
+		// Scope, stated before the rows: this panel is the ACCOUNT's, and the
+		// embedded form's method list is VezmoPay's to decide. Without this a
+		// merchant reads "Not available yet" beside Bank transfer and is then
+		// surprised to find Bank Transfer offered at their own checkout.
+		if ( i18n.pmScope ) {
+			box.appendChild( el( 'p', 'description vezmopay-method-scope', i18n.pmScope ) );
+		}
 
 		var state = block.data && block.data.methods ? block.data.methods : {};
 
@@ -136,8 +143,20 @@
 			} else if ( ! eligible ) {
 				head.appendChild( pill( i18n.notAvailable, 'amber' ) );
 			}
+			// Wallets ride the card rail but are drawn by the payment page, and the
+			// embedded form on this store does not draw them on the current
+			// VezmoPay build. Say so on the row rather than letting the toggle
+			// promise a button no customer of this store will see.
+			var walletHere = ( 'applePay' === method.key || 'googlePay' === method.key )
+				&& 'hosted' !== params.mode;
+			if ( walletHere && i18n.embedOnly ) {
+				head.appendChild( pill( i18n.embedOnly, 'amber' ) );
+			}
 			info.appendChild( head );
 			var desc = method.desc + ( ! isCard && ! eligible && ! blockedByAdmin ? ' ' + i18n.verifyHint : '' );
+			if ( walletHere && i18n.embedOnlyDesc ) {
+				desc += ' ' + i18n.embedOnlyDesc;
+			}
 			info.appendChild( el( 'p', 'vezmopay-method-desc', desc ) );
 			row.appendChild( info );
 

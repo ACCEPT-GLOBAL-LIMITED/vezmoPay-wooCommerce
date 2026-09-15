@@ -891,12 +891,23 @@ final class Plugin {
 			array(
 				'ajaxUrl' => admin_url( 'admin-ajax.php' ),
 				'nonce'   => wp_create_nonce( 'vezmopay-admin' ),
+				// What this store actually serves shoppers. The panel describes the
+				// VezmoPay ACCOUNT, which is not the same thing — see the scope
+				// lines below — so it has to know which checkout this store runs.
+				'mode'    => $gateway->integration_mode(),
 				'i18n'    => array(
 					'loading'        => __( 'Loading your VezmoPay account settings…', 'vezmopay-woocommerce' ),
 					'loadFailed'     => __( 'We couldn\'t load your VezmoPay account settings. Make sure your API key has the account.read permission, or manage them in your VezmoPay console.', 'vezmopay-woocommerce' ),
 					'paymentMethods' => __( 'Payment methods', 'vezmopay-woocommerce' ),
-					'pmIntro'        => __( 'Choose which methods are offered to your customers at checkout (this store, payment links, invoices and products). Cards are always on.', 'vezmopay-woocommerce' ),
-					'pmFooter'       => __( 'Apple Pay and Google Pay appear automatically for eligible customers on supported devices when enabled. Disabling a method hides it everywhere immediately.', 'vezmopay-woocommerce' ),
+					'pmIntro'        => __( 'Choose which methods your VezmoPay account offers. Cards are always on.', 'vezmopay-woocommerce' ),
+					// The embedded form's method list is resolved by VezmoPay when the
+					// payment is created; POST /merchant/secure-payments takes no
+					// method restriction, so nothing the plugin sends can change it.
+					// A merchant reading this panel must not conclude otherwise.
+					'pmScope'        => __( 'These settings apply to your VezmoPay account — payment links, invoices and products. VezmoPay decides which methods the embedded payment form on this store offers, so a method shown here as unavailable can still appear at your checkout.', 'vezmopay-woocommerce' ),
+					'embedOnly'      => __( 'Hosted checkout only', 'vezmopay-woocommerce' ),
+					'embedOnlyDesc'  => __( 'Your checkout is set to the embedded payment form, which does not show wallet buttons on the current VezmoPay build — turning this on changes nothing for this store today. It still applies to payment links, invoices and products.', 'vezmopay-woocommerce' ),
+					'pmFooter'       => __( 'Apple Pay and Google Pay appear automatically for eligible customers on supported devices, wherever VezmoPay offers them. Disabling a method hides it everywhere immediately.', 'vezmopay-woocommerce' ),
 					'card'           => __( 'Cards', 'vezmopay-woocommerce' ),
 					'cardDesc'       => __( 'Visa, Mastercard, Amex and more. Always on — the baseline payment method for every checkout.', 'vezmopay-woocommerce' ),
 					'ach'            => __( 'Bank transfer (ACH)', 'vezmopay-woocommerce' ),
