@@ -410,8 +410,18 @@ final class Plugin {
 				(int) $health['count'],
 				human_time_diff( (int) $health['last'] )
 			);
-			$detail = Webhook::refusal_remedy( $health['reason'] )
-				. ' ' . __( 'Until then orders still complete, just more slowly — the plugin checks VezmoPay every five minutes. This notice clears itself as soon as one delivery is accepted.', 'vezmopay-woocommerce' );
+			$detail = Webhook::refusal_remedy( $health['reason'] );
+
+			// Both causes at once is worth naming on its own: some deliveries
+			// arriving unsigned while others are signed with a secret this store
+			// does not have is what TWO registered endpoints looks like — one
+			// created without a secret, one whose secret went somewhere else.
+			$seen = isset( $health['reasons'] ) && is_array( $health['reasons'] ) ? $health['reasons'] : array();
+			if ( ! empty( $seen['signature-required'] ) && ! empty( $seen['bad-signature'] ) ) {
+				$detail .= ' ' . __( 'Some of these arrived unsigned and others were signed with a secret this store does not have, which usually means more than one webhook endpoint is registered for this store. Remove the ones you are not using, then make sure the secret saved here belongs to the one you keep.', 'vezmopay-woocommerce' );
+			}
+
+			$detail .= ' ' . __( 'Until then orders still complete, just more slowly — the plugin checks VezmoPay every five minutes. This notice clears itself as soon as one delivery is accepted.', 'vezmopay-woocommerce' );
 		} else {
 			return;
 		}

@@ -416,12 +416,22 @@ class Webhook {
 	 */
 	private function note_refusal( $reason ) {
 		$health = get_transient( self::HEALTH_KEY );
-		$health = is_array( $health ) && isset( $health['reason'] ) && $health['reason'] === $reason
-			? $health
-			: array( 'reason' => $reason, 'count' => 0, 'first' => time() );
+		if ( ! is_array( $health ) || ! isset( $health['count'] ) ) {
+			$health = array( 'count' => 0, 'first' => time(), 'reasons' => array() );
+		}
 
-		$health['count'] = (int) $health['count'] + 1;
-		$health['last']  = time();
+		// The TOTAL since the last accepted delivery, not a count per cause:
+		// resetting on every change of reason made a store refusing dozens of
+		// deliveries report "1", because the causes alternate — which is itself
+		// the clue (see the notice: two causes at once means two endpoints).
+		$health['count']  = (int) $health['count'] + 1;
+		$health['reason'] = $reason;
+		$health['last']   = time();
+
+		$reasons              = isset( $health['reasons'] ) && is_array( $health['reasons'] ) ? $health['reasons'] : array();
+		$reasons[ $reason ]   = isset( $reasons[ $reason ] ) ? (int) $reasons[ $reason ] + 1 : 1;
+		$health['reasons']    = $reasons;
+
 		set_transient( self::HEALTH_KEY, $health, WEEK_IN_SECONDS );
 	}
 
