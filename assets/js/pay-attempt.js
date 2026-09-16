@@ -55,6 +55,8 @@ window.VezmoPayAttempt = function ( params ) {
 	// as long as it lasts and start again from the store's next answer for itself;
 	// the store breaks an abandoned reconcile lock on its own, so this cannot wait
 	// forever.
+	// A success has been seen; nothing the form says afterwards is an outcome.
+	var sawSuccess = false;
 	var storeBusy = false;
 	var busyMs = 0;
 	var lastTick = 0;
@@ -318,6 +320,14 @@ window.VezmoPayAttempt = function ( params ) {
 		if ( settled ) {
 			return;
 		}
+		// finalize() clears `settled` again when the confirm has not answered
+		// yet, so a late message from the form can still arrive here after the
+		// payment succeeded — "Card form not ready" above all, which is what the
+		// embed says once its success screen has replaced the card element.
+		// That is a fact about the form, not about the money.
+		if ( sawSuccess ) {
+			return;
+		}
 		stopPolling();
 		clearAttemptTimer();
 		awaitingAction = false;
@@ -362,6 +372,7 @@ window.VezmoPayAttempt = function ( params ) {
 			return;
 		}
 		settled = true;
+		sawSuccess = true;
 		clearAttemptTimer();
 		setMessage( statusMessage || params.i18n.processing, 'info' );
 		post( params.confirmUrl )

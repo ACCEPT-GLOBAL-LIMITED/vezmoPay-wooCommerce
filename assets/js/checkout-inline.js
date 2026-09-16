@@ -330,9 +330,29 @@
 						theme: params.theme,
 						wallets: 'authorize',
 					} );
-					vezmo.onWalletAuthorized( function ( details ) {
-						return onWalletAuthorized( details );
-					} );
+					// GUARDED. vezmo.js as deployed today has mount(), pay() and
+					// on() and nothing else — no wallet handshake — so calling
+					// this unconditionally threw a TypeError right here, and the
+					// damage was not the missing handshake:
+					//
+					//   * the throw landed in the .catch below, which mounted a
+					//     SECOND payment form beside the one the SDK had just
+					//     mounted, and
+					//   * every vezmo.on(...) registration below this line never
+					//     ran, so success, processing, error, cancel and expired
+					//     from the SDK's frame were all lost — the charge went
+					//     through and the checkout heard nothing, re-sending its
+					//     submit until the form answered "Card form not ready".
+					//
+					// A build without the handshake simply gets no wallet buttons
+					// (see the readiness push, which already says so).
+					if ( 'function' === typeof vezmo.onWalletAuthorized ) {
+						vezmo.onWalletAuthorized( function ( details ) {
+							return onWalletAuthorized( details );
+						} );
+					} else {
+						log( 'this VezmoPay SDK has no wallet handshake — wallet buttons stay hidden' );
+					}
 					// The SDK creates this frame and nothing labels it, so in the
 					// DEFAULT mode a screen reader announced an unlabelled frame
 					// containing the whole card form (WCAG 4.1.2). Only the
@@ -374,7 +394,7 @@
 					);
 					vezmo.on( 'ready', markReady );
 					vezmo.on( 'error', function ( evt ) {
-						setMessage( ( evt && evt.message ) || params.i18n.failed, 'error' );
+						noteFormAnswered();
 						failCharge( ( evt && evt.message ) || params.i18n.failed, 'declined' );
 					} );
 					vezmo.on( 'success', completeCharge );
@@ -392,8 +412,20 @@
 					vezmo.on( 'processing', noteProcessing );
 					window.setTimeout( markReady, 2500 );
 				} )
-				.catch( function () {
-					mountFrame( host );
+				.catch( function ( e ) {
+					// The SDK could not be loaded OR something threw after it had
+					// already mounted. Clear the host either way: falling back
+					// without clearing is what put two payment forms on the page,
+					// one of them charging and the other being listened to.
+					log( 'falling back to a plain frame:', ( e && e.message ) || e );
+					var live = container();
+					if ( live ) {
+						live.innerHTML = '';
+					}
+					vezmo = null;
+					sdkFrame = null;
+					mountFrame( live || host );
+					bindPayButton();
 				} );
 		}
 
@@ -995,9 +1027,10 @@
 		) {
 			completeCharge( data );
 		} else if ( 'vezmo:secure-payment:error' === data.type ) {
-			setMessage( data.message || params.i18n.failed, 'error' );
+			noteFormAnswered();
 			failCharge( data.message || params.i18n.failed, 'declined' );
 		} else if ( 'vezmo:secure-payment:cancel' === data.type ) {
+			noteFormAnswered();
 			failCharge( params.i18n.cancelled, 'cancelled' );
 		} else if ( 'vezmo:secure-payment:expired' === data.type ) {
 			failCharge( params.i18n.expired, 'expired' );
@@ -1274,6 +1307,9 @@
 					}
 					log( 'status poll:', res.data.status, res.data.redirect ? '(settled)' : '(still waiting)' );
 					if ( res.data.redirect ) {
+						// The STORE says this is settled. Whatever the form has or
+						// has not told us, stop asking it to charge.
+						noteFormAnswered();
 						finish( res.data.redirect );
 					} else if ( 'LOCKED' === res.data.status ) {
 						noteStoreBusy();
@@ -1549,6 +1585,27 @@
 		}, SUBMIT_RETRY_MS );
 	}
 
+	/**
+	 * The form has answered — anything at all. Stop re-sending the submit.
+	 *
+	 * The ladder used to end only on `processing`, which is the ONE answer a
+	 * store may never receive: the embed posts events only to a parent origin
+	 * the merchant has registered with VezmoPay, and where that is not set up
+	 * the outcome arrives through the store's poll instead. So a payment could
+	 * succeed while this kept firing — and a submit that lands after the form
+	 * has switched to its success screen finds no card element mounted and is
+	 * answered "Card form not ready", which is how a SUCCESSFUL payment ended
+	 * with an error on the shopper's screen.
+	 */
+	function noteFormAnswered() {
+		if ( ! charging || ! charging.submitTimer ) {
+			return;
+		}
+		window.clearTimeout( charging.submitTimer );
+		charging.submitTimer = null;
+		log( 'the form answered — no further submits' );
+	}
+
 	/** The form accepted the charge; stop re-sending. */
 	function noteProcessing() {
 		if ( ! charging || charging.sawProcessing ) {
@@ -1657,6 +1714,57 @@
 		if ( ! charging ) {
 			return;
 		}
+		// The payment already succeeded and we are confirming it. Anything the
+		// form says now is about the form, not about the money — most often
+		// "Card form not ready", because its card element is gone the moment it
+		// switches to its success screen. Showing it would tell a shopper whose
+		// order is completing that their payment failed.
+		if ( charging.sawSuccess ) {
+			log( 'ignoring a late failure after success:', message || '' );
+			return;
+		}
+
+		// ASK THE STORE BEFORE SAYING NO.
+		//
+		// A message from the form is not a statement about the money, and one
+		// case proves it: where the embed's events cannot reach this page (the
+		// store's origin is not registered with VezmoPay), a charge succeeds in
+		// silence, the submit retry fires because no `processing` ever arrived,
+		// and it lands on a form whose card element is gone — so the form
+		// answers "Card form not ready" for a payment that WORKED. Rendering
+		// that told a paid shopper their payment had failed.
+		//
+		// The store already knows: the failure report reconciles against the API
+		// and hands back a redirect when the money is in. So report first, show
+		// second. Everything else in this plugin decides money server-side; this
+		// was the last place that took the browser's word for it.
+		if ( ! charging.verifying ) {
+			charging.verifying = true;
+			var pending = charging;
+			reportFailedAttempt( reason || 'unknown', charging.orderId, charging.orderKey, function ( status ) {
+				if ( charging !== pending ) {
+					return;
+				}
+				charging.verifying = false;
+				log( 'the store says this attempt is', status, '— showing the failure' );
+				renderFailure( message, reason );
+			} );
+			return;
+		}
+
+		renderFailure( message, reason );
+	}
+
+	/**
+	 * Show a failure the store has agreed with (or could not answer for).
+	 *
+	 * @param {string} message What the form said, when it said anything.
+	 * @param {string} reason  Allow-listed reason code.
+	 */
+	function renderFailure( message, reason ) {
+		if ( ! charging ) {
+			return;
+		}
 		var text = message || params.i18n.failed;
 		var d = charging.deferred;
 		var orderId = charging.orderId;
@@ -1674,17 +1782,9 @@
 			// the same text in its own notice area.
 			d.reject( text );
 		}
-		// The store answers with what the API says. If it says this payment is
-		// FAILED, the mounted form cannot be charged again after all — rebuild
-		// then, on the store's word rather than a guess here.
-		var heldFor = mountedFor;
-		reportFailedAttempt( reason || 'unknown', orderId, orderKey, function ( status ) {
-			if ( 'FAILED' === status && mountedFor === heldFor ) {
-				log( 'the store says this payment is FAILED — replacing the form' );
-				rebuildForm( text );
-			}
-		} );
-
+		// No second report: failCharge() has already asked the store, which is
+		// what let us get this far, and that call is also what wrote the order
+		// note and reconciled the payment.
 		if ( REBUILD_REASONS.indexOf( reason ) !== -1 ) {
 			rebuildForm( text );
 			return;
@@ -1779,10 +1879,20 @@
 			} )
 			.then( function ( res ) {
 				if ( ! res || ! res.success || ! res.data ) {
+					// The store could not answer. Fall through to the failure:
+					// leaving the shopper on a spinner is worse than a message
+					// they can act on, and the order still reconciles on its own.
+					if ( onStatus ) {
+						onStatus( 'UNKNOWN' );
+					}
 					return;
 				}
 				if ( res.data.redirect ) {
+					// The money IS in. The shopper sees their order, not an error.
 					log( 'the store found this payment settled after all — forwarding' );
+					if ( charging ) {
+						charging.sawSuccess = true;
+					}
 					window.location.href = res.data.redirect;
 					return;
 				}
@@ -1791,7 +1901,11 @@
 				}
 			} )
 			.catch( function () {
-				// The order note is a nicety; never let it break the checkout.
+				// The order note is a nicety; never let it break the checkout —
+				// but the shopper must still be told something.
+				if ( onStatus ) {
+					onStatus( 'UNKNOWN' );
+				}
 			} );
 	}
 
