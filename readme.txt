@@ -4,7 +4,7 @@ Tags: payments, payment gateway, credit card, ach, woocommerce
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.3.12
+Stable tag: 0.3.13
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -112,6 +112,14 @@ This plugin connects your store to the VezmoPay payment platform, operated by Ve
 VezmoPay is operated by Vezmo Technology, Inc.: [https://vezmo.com](https://vezmo.com) — see the site for terms of service and privacy policy.
 
 == Changelog ==
+
+= 0.3.13 =
+
+Update promptly if you use Inline payment element mode — this fixes a successful payment telling the customer it had failed.
+
+* Fixed "Card form is not ready" appearing on a payment that had already gone through. In inline payment element mode the checkout was mounting two copies of the payment form and then listening to the wrong one, so it never heard that the card had been charged: it kept asking the form to charge again, and the form eventually answered with that error. The order completed regardless — the store checks VezmoPay directly — but the customer was told their payment failed on the way to the confirmation page. One form is mounted now, and its messages are received.
+* A payment failure is never shown until the store has checked with VezmoPay. Whatever the payment form says, the money is what the store can verify — so a customer whose payment actually succeeded now goes to their order instead of seeing an error. A genuine decline is unaffected and still appears immediately under the card fields.
+* On the block checkout, a completed payment now leaves the page once rather than twice.
 
 = 0.3.12 =
 
