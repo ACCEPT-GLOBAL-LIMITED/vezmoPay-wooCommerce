@@ -153,7 +153,22 @@
 				return inline
 					.charge( marker.orderId, marker.orderKey, marker )
 					.then( function ( url ) {
-						window.location.href = url;
+						// Hand the URL to Blocks and let IT navigate. This used to
+						// do both — assign window.location AND return redirectUrl —
+						// so two navigations raced while the Blocks checkout was
+						// still finishing its own success handling on a page that
+						// was already leaving. Returning the URL is the documented
+						// contract; doing it as well was never anything but a
+						// second, earlier navigation.
+						//
+						// The fallback stays, because a paid order must never be
+						// left sitting on the checkout: if Blocks has not moved us
+						// shortly after, go ourselves.
+						window.setTimeout( function () {
+							if ( window.location.href.indexOf( url ) === -1 ) {
+								window.location.href = url;
+							}
+						}, 2000 );
 						return { type: 'success', redirectUrl: url };
 					} )
 					.catch( function ( message ) {
