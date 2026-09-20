@@ -937,6 +937,15 @@ final class Plugin {
 		if ( self::GATEWAY_ID !== $section ) {
 			return;
 		}
+
+		// The panel copy branches on which checkout this store runs, so the
+		// gateway has to be resolved before the params are built. Safe here:
+		// admin_enqueue_scripts is long past the point where instantiating
+		// gateways could freeze the list for the request.
+		$gateway = $this->gateway();
+		if ( ! $gateway ) {
+			return;
+		}
 		wp_enqueue_style( 'vezmopay-admin', VEZMOPAY_WC_PLUGIN_URL . 'assets/css/vezmopay-admin.css', array(), self::asset_version( 'assets/css/vezmopay-admin.css' ) );
 		wp_enqueue_script( 'vezmopay-admin-account', VEZMOPAY_WC_PLUGIN_URL . 'assets/js/admin-account.js', array(), self::asset_version( 'assets/js/admin-account.js' ), true );
 		wp_localize_script(
