@@ -282,7 +282,13 @@ class Updater {
 	 */
 	private function token() {
 		$token = defined( 'VEZMOPAY_GITHUB_TOKEN' ) ? (string) constant( 'VEZMOPAY_GITHUB_TOKEN' ) : '';
-		/** Filter the GitHub token used for update checks. */
+		/**
+		 * Filter the GitHub token used for update checks.
+		 *
+		 * @since 0.2.10
+		 *
+		 * @param string $token GitHub token, or '' for anonymous checks.
+		 */
 		return (string) apply_filters( 'vezmopay_github_token', $token );
 	}
 

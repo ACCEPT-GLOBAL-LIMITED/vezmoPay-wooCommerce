@@ -33,7 +33,7 @@ final class Plugin {
 	 * @return string
 	 */
 	public static function asset_version( $relative ) {
-		$path = VEZMOPAY_WC_PLUGIN_DIR . ltrim( $relative, '/' );
+		$path  = VEZMOPAY_WC_PLUGIN_DIR . ltrim( $relative, '/' );
 		$mtime = @filemtime( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- missing file falls back to the plugin version.
 		return $mtime ? VEZMOPAY_WC_VERSION . '.' . $mtime : VEZMOPAY_WC_VERSION;
 	}
@@ -241,9 +241,6 @@ final class Plugin {
 	}
 
 	/**
-	 * AJAX: the SDK reported success/pending — verify against the API and finalize the order.
-	 */
-	/**
 	 * Classic checkout assets. Only on the checkout page, and only when the
 	 * gateway is actually available and set to an embedded mode.
 	 */
@@ -293,56 +290,56 @@ final class Plugin {
 			'vezmopay-checkout-inline',
 			'vezmopay_inline_params',
 			array(
-				'mode'        => $gateway->integration_mode(),
-				'theme'       => $gateway->checkout_theme(),
-				'apiBase'     => $gateway->api_client()->host(),
+				'mode'           => $gateway->integration_mode(),
+				'theme'          => $gateway->checkout_theme(),
+				'apiBase'        => $gateway->api_client()->host(),
 				// The frame's src is on the API origin and is redirected to this
 				// one, so this is the origin we actually exchange messages with.
 				'checkoutOrigin' => $gateway->checkout_origin(),
-				'sessionUrl'  => \WC_AJAX::get_endpoint( 'vezmopay_session' ),
+				'sessionUrl'     => \WC_AJAX::get_endpoint( 'vezmopay_session' ),
 				// The cart session starts with no customer on it; the checkout
 				// sends the billing fields here as they are filled, so a bank
 				// payment has the email its debit mandate requires.
-				'clientUrl'   => \WC_AJAX::get_endpoint( 'vezmopay_client' ),
-				'confirmUrl'  => \WC_AJAX::get_endpoint( 'vezmopay_confirm' ),
+				'clientUrl'      => \WC_AJAX::get_endpoint( 'vezmopay_client' ),
+				'confirmUrl'     => \WC_AJAX::get_endpoint( 'vezmopay_confirm' ),
 				// The charge is watched server-side too, so a message the frame
 				// cannot deliver never leaves the shopper waiting.
-				'statusUrl'   => \WC_AJAX::get_endpoint( 'vezmopay_status' ),
+				'statusUrl'      => \WC_AJAX::get_endpoint( 'vezmopay_status' ),
 				// Where the browser reports an attempt it has given up on, so the
 				// order carries a note and the store gets one last API read.
-				'failedUrl'   => \WC_AJAX::get_endpoint( 'vezmopay_failed' ),
+				'failedUrl'      => \WC_AJAX::get_endpoint( 'vezmopay_failed' ),
 				// Mirrors the gateway's Debug setting: with it on, the checkout
 				// traces the payment to the browser console, so a stuck payment
 				// can be diagnosed from what the shopper's browser saw.
-				'debug'       => 'yes' === $gateway->get_option( 'debug' ),
-				'nonce'       => wp_create_nonce( 'vezmopay-checkout' ),
-				'i18n'        => array(
+				'debug'          => 'yes' === $gateway->get_option( 'debug' ),
+				'nonce'          => wp_create_nonce( 'vezmopay-checkout' ),
+				'i18n'           => array(
 					/* translators: %s: order total, e.g. $500.00 */
-					'pay'         => __( 'Pay %s', 'vezmopay-woocommerce' ),
-					'processing'  => __( 'Processing your payment…', 'vezmopay-woocommerce' ),
-					'failed'      => __( 'Payment failed. Please check your card details and try again.', 'vezmopay-woocommerce' ),
-					'unavailable' => __( 'Secure payment fields could not be loaded. Please reload the page or choose another payment method.', 'vezmopay-woocommerce' ),
-					'incomplete'  => __( 'Please complete your card details before placing the order.', 'vezmopay-woocommerce' ),
-					'cancelled'   => __( 'The payment was cancelled. You can try again.', 'vezmopay-woocommerce' ),
-					'expired'     => __( 'The payment session expired. Please reload the page and try again.', 'vezmopay-woocommerce' ),
-					'verifying'   => __( 'Completing an extra verification step with your bank…', 'vezmopay-woocommerce' ),
-					'frameTitle'  => __( 'VezmoPay secure payment', 'vezmopay-woocommerce' ),
-					'notReady'    => __( 'The payment form did not finish loading, so your card was not charged. Reload the page and try again, or use the VezmoPay page link below.', 'vezmopay-woocommerce' ),
-					'slow'        => __( 'This is taking longer than usual. Your card has not been charged twice — you can finish the payment on the VezmoPay page below.', 'vezmopay-woocommerce' ),
+					'pay'             => __( 'Pay %s', 'vezmopay-woocommerce' ),
+					'processing'      => __( 'Processing your payment…', 'vezmopay-woocommerce' ),
+					'failed'          => __( 'Payment failed. Please check your card details and try again.', 'vezmopay-woocommerce' ),
+					'unavailable'     => __( 'Secure payment fields could not be loaded. Please reload the page or choose another payment method.', 'vezmopay-woocommerce' ),
+					'incomplete'      => __( 'Please complete your card details before placing the order.', 'vezmopay-woocommerce' ),
+					'cancelled'       => __( 'The payment was cancelled. You can try again.', 'vezmopay-woocommerce' ),
+					'expired'         => __( 'The payment session expired. Please reload the page and try again.', 'vezmopay-woocommerce' ),
+					'verifying'       => __( 'Completing an extra verification step with your bank…', 'vezmopay-woocommerce' ),
+					'frameTitle'      => __( 'VezmoPay secure payment', 'vezmopay-woocommerce' ),
+					'notReady'        => __( 'The payment form did not finish loading, so your card was not charged. Reload the page and try again, or use the VezmoPay page link below.', 'vezmopay-woocommerce' ),
+					'slow'            => __( 'This is taking longer than usual. Your card has not been charged twice — you can finish the payment on the VezmoPay page below.', 'vezmopay-woocommerce' ),
 					'continueOnVezmo' => __( 'Continue on the VezmoPay page →', 'vezmopay-woocommerce' ),
 					// Appended to a failure the mounted form CAN be retried from: the
 					// card details are still in it, so this is an invitation to
 					// press Pay again, not to start over.
-					'tryAgain'    => __( 'You can correct your card details and try again.', 'vezmopay-woocommerce' ),
+					'tryAgain'        => __( 'You can correct your card details and try again.', 'vezmopay-woocommerce' ),
 					// Appended only when the form had to be replaced (the payment
 					// behind it is dead), which is the one case where the card
 					// really does have to be entered again.
-					'retryHint'   => __( 'Please re-enter your card details below and try again.', 'vezmopay-woocommerce' ),
+					'retryHint'       => __( 'Please re-enter your card details below and try again.', 'vezmopay-woocommerce' ),
 					// The bounded attempt (see ATTEMPT_LIMIT_MS). VezmoPay reports
 					// nothing at all for a declined card, so this covers a decline
 					// as well as a payment that simply never resolved — the wording
 					// must be true of both.
-					'noResult'    => __( 'VezmoPay did not report a result for that payment. Please check your card details and try again — if the payment did go through, your order will be updated automatically.', 'vezmopay-woocommerce' ),
+					'noResult'        => __( 'VezmoPay did not report a result for that payment. Please check your card details and try again — if the payment did go through, your order will be updated automatically.', 'vezmopay-woocommerce' ),
 					// A payment the shopper made in the payment box WITHOUT pressing
 					// Place order, so there is no order to attach it to. The wallet
 					// buttons used to do this — they charge on their own gesture —
@@ -350,14 +347,14 @@ final class Plugin {
 					// this should never be seen. It exists because the alternative,
 					// which is what happened before, is saying nothing at all while
 					// the money is gone.
-					'unsolicited' => __( 'That payment went through, but your order has not been placed yet. Please do not pay again — contact the store to complete your order.', 'vezmopay-woocommerce' ),
+					'unsolicited'     => __( 'That payment went through, but your order has not been placed yet. Please do not pay again — contact the store to complete your order.', 'vezmopay-woocommerce' ),
 					// The wallet handshake. The shopper has approved Apple/Google
 					// Pay and the charge is being HELD while WooCommerce places
 					// the order; nothing has been charged in any of these cases.
-					'walletPlacing' => __( 'Payment approved — placing your order…', 'vezmopay-woocommerce' ),
-					'walletRefused' => __( 'Your order could not be placed, so nothing was charged. Please check the highlighted fields and try again.', 'vezmopay-woocommerce' ),
-					'walletSlow'    => __( 'Your order took too long to place, so nothing was charged. Please try again.', 'vezmopay-woocommerce' ),
-					'walletBusy'    => __( 'A payment is already in progress. Please wait for it to finish.', 'vezmopay-woocommerce' ),
+					'walletPlacing'   => __( 'Payment approved — placing your order…', 'vezmopay-woocommerce' ),
+					'walletRefused'   => __( 'Your order could not be placed, so nothing was charged. Please check the highlighted fields and try again.', 'vezmopay-woocommerce' ),
+					'walletSlow'      => __( 'Your order took too long to place, so nothing was charged. Please try again.', 'vezmopay-woocommerce' ),
+					'walletBusy'      => __( 'A payment is already in progress. Please wait for it to finish.', 'vezmopay-woocommerce' ),
 				),
 			)
 		);
@@ -640,6 +637,7 @@ final class Plugin {
 		);
 		foreach ( $fields as $field => $sanitizer ) {
 			if ( isset( $_POST[ $field ] ) ) {
+				// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- sanitized by $sanitizer, the allow-listed callback for this field.
 				$client[ $field ] = call_user_func( $sanitizer, wp_unslash( $_POST[ $field ] ) );
 			}
 		}
@@ -667,13 +665,18 @@ final class Plugin {
 		wp_send_json_success( array( 'attached' => true ) );
 	}
 
+	/**
+	 * AJAX: the SDK reported success/pending - verify against the API and finalize the order.
+	 */
 	public function ajax_confirm() {
 		$this->verify_checkout_request( 'confirm' );
 
+		// phpcs:disable WordPress.Security.NonceVerification.Missing -- verify_checkout_request() ran check_ajax_referer() above; get_authorized_order() below is the hard check (hash_equals on the order key).
 		$order_id  = isset( $_POST['order_id'] ) ? absint( $_POST['order_id'] ) : 0;
 		$order_key = isset( $_POST['order_key'] ) ? sanitize_text_field( wp_unslash( $_POST['order_key'] ) ) : '';
-		$order     = $this->get_authorized_order( $order_id, $order_key );
-		$gateway   = $this->gateway();
+		// phpcs:enable WordPress.Security.NonceVerification.Missing
+		$order   = $this->get_authorized_order( $order_id, $order_key );
+		$gateway = $this->gateway();
 
 		if ( ! $order || ! $gateway || $order->get_payment_method() !== self::GATEWAY_ID ) {
 			wp_send_json_error( array( 'message' => __( 'Invalid order.', 'vezmopay-woocommerce' ) ), 400 );
@@ -706,10 +709,12 @@ final class Plugin {
 	public function ajax_status() {
 		$this->verify_checkout_request( 'status' );
 
+		// phpcs:disable WordPress.Security.NonceVerification.Missing -- verify_checkout_request() ran check_ajax_referer() above; get_authorized_order() below is the hard check (hash_equals on the order key).
 		$order_id  = isset( $_POST['order_id'] ) ? absint( $_POST['order_id'] ) : 0;
 		$order_key = isset( $_POST['order_key'] ) ? sanitize_text_field( wp_unslash( $_POST['order_key'] ) ) : '';
-		$order     = $this->get_authorized_order( $order_id, $order_key );
-		$gateway   = $this->gateway();
+		// phpcs:enable WordPress.Security.NonceVerification.Missing
+		$order   = $this->get_authorized_order( $order_id, $order_key );
+		$gateway = $this->gateway();
 
 		if ( ! $order || ! $gateway || $order->get_payment_method() !== self::GATEWAY_ID ) {
 			wp_send_json_error( array( 'message' => __( 'Invalid order.', 'vezmopay-woocommerce' ) ), 400 );
@@ -764,10 +769,12 @@ final class Plugin {
 	public function ajax_attempt_failed() {
 		$this->verify_checkout_request( 'attempt-failed' );
 
+		// phpcs:disable WordPress.Security.NonceVerification.Missing -- verify_checkout_request() ran check_ajax_referer() above; get_authorized_order() below is the hard check (hash_equals on the order key).
 		$order_id  = isset( $_POST['order_id'] ) ? absint( $_POST['order_id'] ) : 0;
 		$order_key = isset( $_POST['order_key'] ) ? sanitize_text_field( wp_unslash( $_POST['order_key'] ) ) : '';
-		$order     = $this->get_authorized_order( $order_id, $order_key );
-		$gateway   = $this->gateway();
+		// phpcs:enable WordPress.Security.NonceVerification.Missing
+		$order   = $this->get_authorized_order( $order_id, $order_key );
+		$gateway = $this->gateway();
 
 		if ( ! $order || ! $gateway || $order->get_payment_method() !== self::GATEWAY_ID ) {
 			wp_send_json_error( array( 'message' => __( 'Invalid order.', 'vezmopay-woocommerce' ) ), 400 );
@@ -775,6 +782,7 @@ final class Plugin {
 
 		// Never a free-text message from the browser: an allow-list of reasons,
 		// each mapped to wording this plugin owns.
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- same guard as the order lookup above.
 		$reason = isset( $_POST['reason'] ) ? sanitize_key( wp_unslash( $_POST['reason'] ) ) : 'unknown';
 		if ( ! in_array( $reason, array( 'timeout', 'declined', 'cancelled', 'expired', 'status', 'not-ready' ), true ) ) {
 			$reason = 'unknown';
@@ -792,7 +800,12 @@ final class Plugin {
 			// carried "VezmoPay reported no result for this payment attempt
 			// (payment …, still LOCKED)" immediately above its own "payment
 			// captured" note.
-			wp_send_json_success( array( 'status' => 'UNKNOWN', 'redirect' => '' ) );
+			wp_send_json_success(
+				array(
+					'status'   => 'UNKNOWN',
+					'redirect' => '',
+				)
+			);
 		}
 
 		// It actually settled while the browser was giving up.
@@ -808,7 +821,12 @@ final class Plugin {
 
 		$gateway->note_failed_attempt( $order, $reason, (string) $status );
 
-		wp_send_json_success( array( 'status' => $status, 'redirect' => '' ) );
+		wp_send_json_success(
+			array(
+				'status'   => $status,
+				'redirect' => '',
+			)
+		);
 	}
 
 	/**
@@ -881,9 +899,6 @@ final class Plugin {
 	}
 
 	/**
-	 * AJAX: apply a settings change (payment-method toggle or 3-D Secure mode).
-	 */
-	/**
 	 * Drop the cached account panel (after a change, or a settings save).
 	 */
 	public function flush_account_panel_cache() {
@@ -891,6 +906,9 @@ final class Plugin {
 		delete_transient( 'vezmopay_account_panel_live' );
 	}
 
+	/**
+	 * AJAX: apply a settings change (payment-method toggle or 3-D Secure mode).
+	 */
 	public function ajax_account_update() {
 		// The guard FIRST — account_ajax_gateway() is where the nonce and the
 		// manage_woocommerce capability are checked. Flushing before it let any
@@ -901,6 +919,7 @@ final class Plugin {
 		// Whatever this changes, the cached panel is now stale.
 		$this->flush_account_panel_cache();
 
+		// phpcs:disable WordPress.Security.NonceVerification.Missing -- account_ajax_gateway() above is a hard check_ajax_referer( 'vezmopay-admin' ) plus a manage_woocommerce capability check.
 		$kind = isset( $_POST['kind'] ) ? sanitize_key( wp_unslash( $_POST['kind'] ) ) : '';
 
 		if ( 'payment-methods' === $kind ) {
@@ -911,8 +930,9 @@ final class Plugin {
 			$enabled = isset( $_POST['enabled'] ) && '1' === $_POST['enabled'];
 			$result  = $client->set_payment_methods( array( $method => $enabled ) );
 		} elseif ( '3ds' === $kind ) {
-			$mode = isset( $_POST['mode'] ) && 'on' === $_POST['mode'] ? 'on' : 'auto';
+			$mode   = isset( $_POST['mode'] ) && 'on' === $_POST['mode'] ? 'on' : 'auto';
 			$result = $client->set_three_ds( $mode );
+			// phpcs:enable WordPress.Security.NonceVerification.Missing
 		} else {
 			wp_send_json_error( array( 'message' => __( 'Invalid setting.', 'vezmopay-woocommerce' ) ), 400 );
 		}
@@ -1048,11 +1068,14 @@ final class Plugin {
 			array(
 				'limit'          => 25,
 				'status'         => array( 'pending', 'on-hold' ),
-				'payment_method' => Plugin::GATEWAY_ID,
+				'payment_method' => self::GATEWAY_ID,
 				'date_created'   => '>' . ( time() - 7 * DAY_IN_SECONDS ),
-				'meta_key'       => '_vezmopay_last_reconciled', // phpcs:ignore WordPress.DB.SlowMetaQuery.SlowMetaQuery -- ordering by this meta IS the fix; the alternative is starving older orders.
-				'orderby'        => array( 'meta_value_num' => 'ASC', 'ID' => 'ASC' ),
-				'meta_query'     => array( // phpcs:ignore WordPress.DB.SlowMetaQuery.SlowMetaQuery -- see above.
+				'meta_key'       => '_vezmopay_last_reconciled', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- ordering by this meta IS the fix; the alternative is starving older orders.
+				'orderby'        => array(
+					'meta_value_num' => 'ASC',
+					'ID'             => 'ASC',
+				),
+				'meta_query'     => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- see above.
 					'relation' => 'OR',
 					array(
 						'key'     => '_vezmopay_last_reconciled',
@@ -1107,7 +1130,7 @@ final class Plugin {
 	 * ever — so the cron re-read a dead link every five minutes for a week and
 	 * the merchant was never told. One note, once, then leave it alone.
 	 *
-	 * @param Gateway    $gateway Gateway.
+	 * @param Gateway   $gateway Gateway.
 	 * @param \WC_Order $order   Order.
 	 * @return bool Whether this order should be skipped from here on.
 	 */
@@ -1148,7 +1171,7 @@ final class Plugin {
 	 * @return array
 	 */
 	public function order_actions( $actions, $order = null ) {
-		if ( ! $order instanceof \WC_Order || $order->get_payment_method() === Plugin::GATEWAY_ID ) {
+		if ( ! $order instanceof \WC_Order || $order->get_payment_method() === self::GATEWAY_ID ) {
 			$actions['vezmopay_check_status'] = __( 'Check VezmoPay payment status', 'vezmopay-woocommerce' );
 		}
 		return $actions;
@@ -1161,7 +1184,7 @@ final class Plugin {
 	 */
 	public function order_action_check_status( $order ) {
 		$gateway = $this->gateway();
-		if ( ! $gateway || $order->get_payment_method() !== Plugin::GATEWAY_ID ) {
+		if ( ! $gateway || $order->get_payment_method() !== self::GATEWAY_ID ) {
 			return;
 		}
 		$result = $gateway->reconcile_for_browser( $order );

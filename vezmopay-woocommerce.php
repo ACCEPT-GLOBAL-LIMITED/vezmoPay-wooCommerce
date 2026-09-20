@@ -35,12 +35,12 @@ define( 'VEZMOPAY_WC_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
  * and VezmoPay\WooCommerce\Blocks_Support to includes/blocks/class-vezmopay-blocks-support.php.
  */
 spl_autoload_register(
-	function ( $class ) {
+	function ( $class_name ) {
 		$prefix = 'VezmoPay\\WooCommerce\\';
-		if ( 0 !== strpos( $class, $prefix ) ) {
+		if ( 0 !== strpos( $class_name, $prefix ) ) {
 			return;
 		}
-		$name = strtolower( str_replace( '_', '-', substr( $class, strlen( $prefix ) ) ) );
+		$name = strtolower( str_replace( '_', '-', substr( $class_name, strlen( $prefix ) ) ) );
 		$file = VEZMOPAY_WC_PLUGIN_DIR . 'includes/class-vezmopay-' . $name . '.php';
 		if ( ! file_exists( $file ) ) {
 			$file = VEZMOPAY_WC_PLUGIN_DIR . 'includes/blocks/class-vezmopay-' . $name . '.php';

@@ -6,13 +6,37 @@
 	<exclude-pattern>/vendor/*</exclude-pattern>
 	<exclude-pattern>/node_modules/*</exclude-pattern>
 	<exclude-pattern>/languages/*</exclude-pattern>
-	<exclude-pattern>/tests/sandbox/fixtures/*</exclude-pattern>
+	<!--
+	The sandbox is a development rig: a throwaway WordPress, a mock VezmoPay API
+	and the mu-plugins that wire them together. None of it ships (see
+	.gitattributes, which keeps /tests out of the release zip) and none of it
+	runs on a merchant's site, so holding it to the standards a payment gateway
+	is held to buys nothing and drowned the real backlog two-to-one.
+	-->
+	<exclude-pattern>/tests/*</exclude-pattern>
 
 	<arg name="extensions" value="php"/>
 	<arg name="colors"/>
 	<arg value="sp"/>
 
-	<rule ref="WooCommerce-Core"/>
+	<rule ref="WooCommerce-Core">
+		<!--
+		The class files are named for the AUTOLOADER, not for the sniff. Every
+		class lives under the VezmoPay\WooCommerce namespace and is resolved by
+		the loader in vezmopay-woocommerce.php, which maps Api_Client to
+		includes/class-vezmopay-api-client.php. The sniff wants
+		class-api-client.php — renaming to satisfy it stops the plugin loading.
+		-->
+		<exclude name="WordPress.Files.FileName.InvalidClassFileName"/>
+
+		<!--
+		The section dividers this codebase uses to break a long class into
+		labelled parts start their text on the opening line. The sniff's
+		autofix turns them into a bare slash-star followed by a row of
+		dashes, which is not what anyone reading the file needs.
+		-->
+		<exclude name="Squiz.Commenting.BlockComment.NoNewLine"/>
+	</rule>
 
 	<config name="minimum_supported_wp_version" value="6.0"/>
 	<config name="testVersion" value="7.4-"/>
@@ -20,7 +44,22 @@
 
 	<rule ref="WordPress.WP.I18n">
 		<properties>
-			<property name="text_domain" type="array" value="vezmopay-woocommerce"/>
+			<property name="text_domain" type="array">
+				<element value="vezmopay-woocommerce"/>
+			</property>
+		</properties>
+	</rule>
+
+	<!--
+	manage_woocommerce is a real WooCommerce capability, added by WooCommerce
+	itself; the sniff only knows core WordPress ones. It gates every admin
+	surface this plugin owns, so it has to be declared rather than silenced.
+	-->
+	<rule ref="WordPress.WP.Capabilities">
+		<properties>
+			<property name="custom_capabilities" type="array">
+				<element value="manage_woocommerce"/>
+			</property>
 		</properties>
 	</rule>
 </ruleset>

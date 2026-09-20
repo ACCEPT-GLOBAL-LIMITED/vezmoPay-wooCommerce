@@ -82,7 +82,7 @@ class Gateway extends \WC_Payment_Gateway {
 		// which explains that VezmoPay has no refund API. Without it the method
 		// was unreachable and the limitation was silently absent — the merchant
 		// saw no refund control and no reason why.
-		$this->supports           = array( 'products', 'refunds' );
+		$this->supports = array( 'products', 'refunds' );
 
 		$this->init_form_fields();
 		$this->init_settings();
@@ -212,6 +212,15 @@ class Gateway extends \WC_Payment_Gateway {
 			. 'order:-1;max-height:42px;width:auto;margin:0;float:none;}'
 			. '</style>';
 
+		/**
+		 * The WooCommerce core gateway-icon filter, applied to the VezmoPay icon
+		 * plus the inline style that sizes it in the payment-method list.
+		 *
+		 * @since 0.2.10
+		 *
+		 * @param string $html Icon markup.
+		 * @param string $id   Gateway id.
+		 */
 		return apply_filters( 'woocommerce_gateway_icon', $icon . $style, $this->id );
 	}
 
@@ -294,6 +303,8 @@ class Gateway extends \WC_Payment_Gateway {
 		 * is activated to accept payment-link payments. Defaults to the merchant's
 		 * "Hosted checkout override" setting.
 		 *
+		 * @since 0.3.2
+		 *
 		 * @param bool $force Whether to run hosted mode regardless.
 		 */
 		$forced = (bool) apply_filters( 'vezmopay_force_hosted_mode', $forced );
@@ -375,11 +386,11 @@ class Gateway extends \WC_Payment_Gateway {
 	 * used. Self-hosted deployments can allow their own host through the filter.
 	 *
 	 * @param string $base    Configured base.
-	 * @param string $default Shipped default for this environment.
+	 * @param string $fallback Shipped default for this environment.
 	 * @return string
 	 */
-	private function validated_api_base( $base, $default ) {
-		return $this->validated_vezmo_base( $base, $default, 'API base' );
+	private function validated_api_base( $base, $fallback ) {
+		return $this->validated_vezmo_base( $base, $fallback, 'API base' );
 	}
 
 	/**
@@ -395,19 +406,21 @@ class Gateway extends \WC_Payment_Gateway {
 	 * filter.
 	 *
 	 * @param string $base    Configured base.
-	 * @param string $default Shipped default for this environment.
+	 * @param string $fallback Shipped default for this environment.
 	 * @param string $context Human label for the log line ('API base', 'checkout base').
 	 * @return string
 	 */
-	private function validated_vezmo_base( $base, $default, $context ) {
+	private function validated_vezmo_base( $base, $fallback, $context ) {
 		$base = untrailingslashit( trim( (string) $base ) );
 		if ( '' === $base ) {
-			return $default;
+			return $fallback;
 		}
 
 		/**
 		 * Host suffixes a VezmoPay base URL may use — API and checkout alike. Add
 		 * your own for a self-hosted deployment; https is required regardless.
+		 *
+		 * @since 0.3.0
 		 *
 		 * @param string[] $suffixes Allowed host suffixes.
 		 */
@@ -415,9 +428,9 @@ class Gateway extends \WC_Payment_Gateway {
 
 		if ( ! self::host_matches_allowed( $base, $allowed ) ) {
 			$this->logger->error(
-				'Ignoring ' . $context . ' "' . $base . '": it must be an https URL on an allowed VezmoPay host. Using ' . $default . ' instead.'
+				'Ignoring ' . $context . ' "' . $base . '": it must be an https URL on an allowed VezmoPay host. Using ' . $fallback . ' instead.'
 			);
-			return $default;
+			return $fallback;
 		}
 		return $base;
 	}
@@ -456,7 +469,11 @@ class Gateway extends \WC_Payment_Gateway {
 		if ( '' === $url ) {
 			return '';
 		}
-		/** This filter is documented in validated_vezmo_base(). */
+		/**
+		 * This filter is documented in validated_vezmo_base().
+		 *
+		 * @since 0.3.0
+		 */
 		$allowed = (array) apply_filters( 'vezmopay_allowed_api_hosts', array( 'vezmo.com' ) );
 		if ( self::host_matches_allowed( $url, $allowed ) ) {
 			return $url;
@@ -484,6 +501,16 @@ class Gateway extends \WC_Payment_Gateway {
 		return '';
 	}
 
+	/**
+	 * Whether a URL is https on one of the allowed VezmoPay hosts.
+	 *
+	 * Matches the host exactly or as a dot-suffix, so "evilvezmo.com" does not
+	 * pass for "vezmo.com".
+	 *
+	 * @param string   $url     URL to test.
+	 * @param string[] $allowed Allowed host suffixes.
+	 * @return bool
+	 */
 	public static function host_matches_allowed( $url, array $allowed ) {
 		$scheme = strtolower( (string) wp_parse_url( $url, PHP_URL_SCHEME ) );
 		$host   = strtolower( (string) wp_parse_url( $url, PHP_URL_HOST ) );
@@ -682,7 +709,11 @@ class Gateway extends \WC_Payment_Gateway {
 			return '';
 		}
 
-		/** This filter is documented in validated_vezmo_base(). */
+		/**
+		 * This filter is documented in validated_vezmo_base().
+		 *
+		 * @since 0.3.0
+		 */
 		$allowed = (array) apply_filters( 'vezmopay_allowed_api_hosts', array( 'vezmo.com' ) );
 		if ( ! self::host_matches_allowed( $clean, $allowed ) ) {
 			throw new \Exception(
@@ -1200,6 +1231,7 @@ class Gateway extends \WC_Payment_Gateway {
 			// permalinks and English endpoint slugs; WooCommerce knows them.
 			$marker = rtrim(
 				strtr(
+					// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- URL-safe transport encoding for the JSON marker below, not obfuscation.
 					base64_encode(
 						wp_json_encode(
 							array(
@@ -1672,6 +1704,7 @@ class Gateway extends \WC_Payment_Gateway {
 	 * this treats "at least one enabled payment method" as the signal, and an
 	 * unreadable response as not-capable.
 	 *
+	 * @param bool $allow_fetch Whether an uncached answer may cost an API call.
 	 * @return bool
 	 */
 	public function paylink_capable( $allow_fetch = false ) {
@@ -1680,7 +1713,7 @@ class Gateway extends \WC_Payment_Gateway {
 		}
 
 		$cache_key = $this->capability_key();
-		$cached     = get_transient( $cache_key );
+		$cached    = get_transient( $cache_key );
 		if ( '1' === $cached || '0' === $cached ) {
 			return '1' === $cached;
 		}
@@ -1762,7 +1795,7 @@ class Gateway extends \WC_Payment_Gateway {
 		if ( abs( (float) $amount - (float) wc_format_decimal( $order->get_total(), 2 ) ) >= 0.005 ) {
 			return false;
 		}
-		return $currency === strtoupper( $order->get_currency() );
+		return strtoupper( $order->get_currency() ) === $currency;
 	}
 
 	/**
@@ -1848,7 +1881,10 @@ class Gateway extends \WC_Payment_Gateway {
 			'currency'   => $order->get_currency(),
 			'ttlMinutes' => self::TOKEN_TTL_MINUTES,
 			// Auto-return the shopper to the store after VezmoPay settles the
-			// payment. VezmoPay appends ?paymentId=…&status=success|failed.
+			// payment. VezmoPay appends ?paymentId=…&status=success|pending|failed
+			// — pending is a submitted ACH debit, which reconcile_order_received()
+			// reads as PROCESSING and holds the order for settlement. The status is
+			// never trusted: the order-received page reads the API either way.
 			'successUrl' => $this->get_return_url( $order ),
 			'cancelUrl'  => add_query_arg( 'vezmopay_retry', '1', $order->get_checkout_payment_url( true ) ),
 		);
@@ -1884,7 +1920,7 @@ class Gateway extends \WC_Payment_Gateway {
 		// 409/422 mean the previous attempt reached a terminal state or the body changed
 		// (e.g. cart total edited): advance the attempt counter and retry once.
 		if ( is_wp_error( $data ) && in_array( $data->get_error_code(), array( 'vezmopay_http_409', 'vezmopay_http_422' ), true ) ) {
-			$attempt++;
+			++$attempt;
 			$order->update_meta_data( '_vezmopay_attempt', $attempt );
 			// Persist the bump immediately: if the retry below also fails, the next
 			// request must not collide with the same terminal idempotency key again.
@@ -1916,7 +1952,13 @@ class Gateway extends \WC_Payment_Gateway {
 		$order->update_meta_data( '_vezmopay_token_expires', ! empty( $secure['expiresAt'] ) ? strtotime( $secure['expiresAt'] ) : time() + self::TOKEN_TTL_MINUTES * MINUTE_IN_SECONDS );
 		$order->save();
 
-		$this->logger->debug( 'Secure payment ready for order #' . $order->get_id(), array( 'payment_id' => $data['payment']['id'], 'attempt' => $attempt ) );
+		$this->logger->debug(
+			'Secure payment ready for order #' . $order->get_id(),
+			array(
+				'payment_id' => $data['payment']['id'],
+				'attempt'    => $attempt,
+			)
+		);
 
 		return true;
 	}
@@ -1939,7 +1981,8 @@ class Gateway extends \WC_Payment_Gateway {
 
 		// Returned here after a failed/cancelled payment (VezmoPay cancelUrl).
 		// Show a retry state instead of auto-forwarding, or we'd loop straight
-		// back to VezmoPay. phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		// back to VezmoPay.
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only glance at the provider's own return URL; nothing here is trusted or written.
 		$came_back_failed = isset( $_GET['vezmopay_retry'] ) || ( isset( $_GET['status'] ) && 'failed' === sanitize_key( wp_unslash( $_GET['status'] ) ) );
 
 		// Refresh the session if the token expired while the customer idled — and
@@ -1996,24 +2039,24 @@ class Gateway extends \WC_Payment_Gateway {
 		$sdk_url = (string) $order->get_meta( '_vezmopay_sdk_url' );
 
 		$params = array(
-			'mode'         => $mode,
-			'apiBase'      => $this->api_client()->host(),
+			'mode'           => $mode,
+			'apiBase'        => $this->api_client()->host(),
 			'checkoutOrigin' => $this->checkout_origin(),
-			'orderId'      => $order->get_id(),
-			'orderKey'     => $order->get_order_key(),
-			'clientToken'  => (string) $order->get_meta( '_vezmopay_client_token' ),
-			'iframeUrl'    => $iframe_url,
+			'orderId'        => $order->get_id(),
+			'orderKey'       => $order->get_order_key(),
+			'clientToken'    => (string) $order->get_meta( '_vezmopay_client_token' ),
+			'iframeUrl'      => $iframe_url,
 			// Target origin for the parent -> iframe submit message that drives the
 			// charge in iframe mode (element mode goes through the SDK's .pay()).
-			'secureOrigin' => $this->url_origin( $iframe_url ),
-			'confirmUrl'   => \WC_AJAX::get_endpoint( 'vezmopay_confirm' ),
-			'statusUrl'    => \WC_AJAX::get_endpoint( 'vezmopay_status' ),
+			'secureOrigin'   => $this->url_origin( $iframe_url ),
+			'confirmUrl'     => \WC_AJAX::get_endpoint( 'vezmopay_confirm' ),
+			'statusUrl'      => \WC_AJAX::get_endpoint( 'vezmopay_status' ),
 			// Where the browser reports an attempt it has given up on, so the
 			// order carries a note and the store gets one last API read.
-			'failedUrl'    => \WC_AJAX::get_endpoint( 'vezmopay_failed' ),
-			'nonce'        => wp_create_nonce( 'vezmopay-checkout' ),
-			'pollInterval' => 4000,
-			'i18n'         => array(
+			'failedUrl'      => \WC_AJAX::get_endpoint( 'vezmopay_failed' ),
+			'nonce'          => wp_create_nonce( 'vezmopay-checkout' ),
+			'pollInterval'   => 4000,
+			'i18n'           => array(
 				// wc_price() returns the currency symbol as an HTML entity
 				// (&#36;), and the script writes this label with textContent —
 				// so decode it here or a shopper who retries after a decline
@@ -2187,7 +2230,7 @@ class Gateway extends \WC_Payment_Gateway {
 		// reassures at the moment of paying, not before the form is filled in.
 		// The embedded page hides its own copy of this line, so there is exactly
 		// one, here. phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static inline SVG.
-		echo '<span class="vezmopay-powered">' . '<svg class="vezmopay-lock-mini" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 10V8a5 5 0 0 1 10 0v2m-11 0h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1Z"/></svg>' . ' ' . esc_html__( 'Payments secured by', 'vezmopay-woocommerce' ) . ' <img src="' . esc_url( $logo_url ) . '" alt="VezmoPay" /></span>';
+		echo '<span class="vezmopay-powered"><svg class="vezmopay-lock-mini" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 10V8a5 5 0 0 1 10 0v2m-11 0h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1Z"/></svg> ' . esc_html__( 'Payments secured by', 'vezmopay-woocommerce' ) . ' <img src="' . esc_url( $logo_url ) . '" alt="VezmoPay" /></span>';
 		echo '<span class="vezmopay-trust"><span>' . esc_html__( 'PCI DSS', 'vezmopay-woocommerce' ) . '</span><span>' . esc_html__( '3-D Secure', 'vezmopay-woocommerce' ) . '</span></span>';
 		echo '</div>';
 
@@ -2231,7 +2274,7 @@ class Gateway extends \WC_Payment_Gateway {
 		// reassures at the moment of paying, not before the form is filled in.
 		// The embedded page hides its own copy of this line, so there is exactly
 		// one, here. phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static inline SVG.
-		echo '<span class="vezmopay-powered">' . '<svg class="vezmopay-lock-mini" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 10V8a5 5 0 0 1 10 0v2m-11 0h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1Z"/></svg>' . ' ' . esc_html__( 'Payments secured by', 'vezmopay-woocommerce' ) . ' <img src="' . esc_url( $logo_url ) . '" alt="VezmoPay" /></span>';
+		echo '<span class="vezmopay-powered"><svg class="vezmopay-lock-mini" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 10V8a5 5 0 0 1 10 0v2m-11 0h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1Z"/></svg> ' . esc_html__( 'Payments secured by', 'vezmopay-woocommerce' ) . ' <img src="' . esc_url( $logo_url ) . '" alt="VezmoPay" /></span>';
 		echo '<span class="vezmopay-trust"><span>' . esc_html__( 'PCI DSS', 'vezmopay-woocommerce' ) . '</span><span>' . esc_html__( '3-D Secure', 'vezmopay-woocommerce' ) . '</span></span>';
 		echo '</div>';
 
@@ -2307,7 +2350,7 @@ class Gateway extends \WC_Payment_Gateway {
 	/**
 	 * Settle the order BEFORE the order-received page is rendered.
 	 *
-	 * woocommerce_thankyou_{id} fires from inside the thank-you template, after it
+	 * The woocommerce_thankyou_{id} hook fires from inside the thank-you template, after it
 	 * has already branched on the order's status — and on an object it read before
 	 * our hook ran, so reconciling there cannot change what the shopper sees. This
 	 * runs at template_redirect, so the page is built from the settled state.
@@ -2324,7 +2367,8 @@ class Gateway extends \WC_Payment_Gateway {
 		}
 
 		// The same ownership check WooCommerce makes before it renders any of the
-		// order's details on this page. phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only, key-authenticated.
+		// order's details on this page.
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only; the order key on the next line is the authentication, via hash_equals().
 		$key   = isset( $_GET['key'] ) ? wc_clean( wp_unslash( $_GET['key'] ) ) : '';
 		$order = wc_get_order( $order_id );
 		if ( ! $order || '' === $key || ! hash_equals( $order->get_order_key(), $key ) ) {
@@ -2416,8 +2460,8 @@ class Gateway extends \WC_Payment_Gateway {
 	}
 
 	/**
-	 * reconcile_order_with_api(), with a LOCKED result resolved against the
-	 * order's own state. What every browser-facing endpoint should call.
+	 * Wraps reconcile_order_with_api(), with a LOCKED result resolved against
+	 * the order's own state. What every browser-facing endpoint should call.
 	 *
 	 * @param \WC_Order $order Order.
 	 * @return string|\WP_Error
@@ -2451,7 +2495,7 @@ class Gateway extends \WC_Payment_Gateway {
 	private function reconcile_locked( $order ) {
 		// Re-read: another pass may have completed this order between the last
 		// read and the lock being taken.
-		$order       = wc_get_order( $order->get_id() );
+		$order = wc_get_order( $order->get_id() );
 		if ( ! $order ) {
 			return new \WP_Error( 'vezmopay_no_order', __( 'Order not found.', 'vezmopay-woocommerce' ) );
 		}
@@ -2502,7 +2546,7 @@ class Gateway extends \WC_Payment_Gateway {
 	/**
 	 * Park an order whose money is committed but not yet settled.
 	 *
-	 * on-hold is WooCommerce's own "awaiting payment" state: stock is reduced,
+	 * The on-hold status is WooCommerce's own "awaiting payment" state: stock is reduced,
 	 * the shopper is out of the checkout, and the order is not treated as paid.
 	 * The cron reconciles pending AND on-hold orders, so this is picked up again
 	 * when the payment finally captures or fails.
@@ -2659,7 +2703,7 @@ class Gateway extends \WC_Payment_Gateway {
 		if ( abs( $amount - (float) $order->get_total() ) >= 0.005 ) {
 			return false;
 		}
-		return $currency === strtoupper( $order->get_currency() );
+		return strtoupper( $order->get_currency() ) === $currency;
 	}
 
 	/**
@@ -2759,22 +2803,28 @@ class Gateway extends \WC_Payment_Gateway {
 
 		switch ( $reason ) {
 			case 'declined':
+				// translators: 1: the VezmoPay payment id, 2: the status VezmoPay reports for it.
 				$text = __( 'The VezmoPay payment form reported a failed attempt (payment %1$s, VezmoPay still reports %2$s). The customer was not charged and was asked to try again.', 'vezmopay-woocommerce' );
 				break;
 			case 'cancelled':
+				// translators: 1: the VezmoPay payment id, 2: the status VezmoPay reports for it.
 				$text = __( 'The customer cancelled the VezmoPay payment (payment %1$s, VezmoPay still reports %2$s).', 'vezmopay-woocommerce' );
 				break;
 			case 'expired':
+				// translators: 1: the VezmoPay payment id, 2: the status VezmoPay reports for it.
 				$text = __( 'The VezmoPay payment session expired before the payment completed (payment %1$s, VezmoPay still reports %2$s).', 'vezmopay-woocommerce' );
 				break;
 			case 'not-ready':
+				// translators: 1: the VezmoPay payment id, 2: the status VezmoPay reports for it.
 				$text = __( 'The VezmoPay payment form never finished loading, so the card was never submitted (payment %1$s, VezmoPay still reports %2$s).', 'vezmopay-woocommerce' );
 				break;
 			case 'status':
+				// translators: 1: the VezmoPay payment id, 2: the status VezmoPay reports for it.
 				$text = __( 'VezmoPay reported this payment attempt as failed (payment %1$s, status %2$s). The customer was asked to try again.', 'vezmopay-woocommerce' );
 				break;
 			case 'timeout':
 			default:
+				// translators: 1: the VezmoPay payment id, 2: the status VezmoPay reports for it.
 				$text = __( 'VezmoPay reported no result for this payment attempt within the time the checkout waits (payment %1$s, still %2$s). The customer was asked to try again. If VezmoPay later reports this payment as captured, the order will be updated automatically.', 'vezmopay-woocommerce' );
 				break;
 		}

@@ -56,7 +56,7 @@ class Blocks_Support extends AbstractPaymentMethodType {
 	 */
 	private function gateway() {
 		if ( null === $this->gateway_instance ) {
-			$registered = Plugin::instance()->gateway();
+			$registered             = Plugin::instance()->gateway();
 			$this->gateway_instance = $registered instanceof Gateway ? $registered : new Gateway();
 		}
 		return $this->gateway_instance;

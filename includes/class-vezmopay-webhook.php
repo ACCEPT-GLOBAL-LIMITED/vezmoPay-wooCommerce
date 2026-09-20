@@ -32,7 +32,7 @@ class Webhook {
 	/**
 	 * Deliveries allowed per sender per THROTTLE_WINDOW before 429s begin.
 	 */
-	const THROTTLE_MAX    = 60;
+	const THROTTLE_MAX = 60;
 
 	/**
 	 * Unconditional ceiling per sender per window, applied before any signature
@@ -40,7 +40,7 @@ class Webhook {
 	 * exists so the endpoint cannot be used to make the store compute HMACs.
 	 */
 	const THROTTLE_CEILING = 600;
-	const THROTTLE_WINDOW = 5 * MINUTE_IN_SECONDS;
+	const THROTTLE_WINDOW  = 5 * MINUTE_IN_SECONDS;
 
 	/**
 	 * How long an event claim is honoured before a retry may take it over.
@@ -84,7 +84,13 @@ class Webhook {
 	public function handle( \WP_REST_Request $request ) {
 		$gateway = Plugin::instance()->gateway();
 		if ( ! $gateway ) {
-			return new \WP_REST_Response( array( 'received' => false, 'reason' => 'gateway-unavailable' ), 503 );
+			return new \WP_REST_Response(
+				array(
+					'received' => false,
+					'reason'   => 'gateway-unavailable',
+				),
+				503
+			);
 		}
 		$logger = $gateway->logger();
 
@@ -92,7 +98,13 @@ class Webhook {
 		$body = json_decode( $raw, true );
 		if ( ! is_array( $body ) || empty( $body['event'] ) ) {
 			$this->log_refusal( $logger, 'malformed', 'Webhook rejected: malformed payload.' );
-			return new \WP_REST_Response( array( 'received' => false, 'reason' => 'malformed' ), 400 );
+			return new \WP_REST_Response(
+				array(
+					'received' => false,
+					'reason'   => 'malformed',
+				),
+				400
+			);
 		}
 
 		// Rate limit ahead of everything that costs money or time. The endpoint is
@@ -109,7 +121,13 @@ class Webhook {
 		// store above roughly twelve orders a minute.
 		if ( $this->is_throttled( $request, 'all', self::THROTTLE_CEILING ) ) {
 			$this->log_refusal( $logger, 'throttled', 'Webhook ceiling reached for ' . $this->client_fingerprint( $request ) . '; refusing until the window rolls.' );
-			return new \WP_REST_Response( array( 'received' => false, 'reason' => 'throttled' ), 429 );
+			return new \WP_REST_Response(
+				array(
+					'received' => false,
+					'reason'   => 'throttled',
+				),
+				429
+			);
 		}
 
 		$event    = sanitize_text_field( (string) $body['event'] );
@@ -132,10 +150,22 @@ class Webhook {
 		$refuse = function ( $reason, $message ) use ( $logger, $request ) {
 			if ( $this->is_throttled( $request, 'bad', self::THROTTLE_MAX ) ) {
 				$this->log_refusal( $logger, 'throttled', 'Too many unauthenticated webhook deliveries from ' . $this->client_fingerprint( $request ) . '.' );
-				return new \WP_REST_Response( array( 'received' => false, 'reason' => 'throttled' ), 429 );
+				return new \WP_REST_Response(
+					array(
+						'received' => false,
+						'reason'   => 'throttled',
+					),
+					429
+				);
 			}
 			$this->log_refusal( $logger, $reason, $message );
-			return new \WP_REST_Response( array( 'received' => false, 'reason' => $reason ), 401 );
+			return new \WP_REST_Response(
+				array(
+					'received' => false,
+					'reason'   => $reason,
+				),
+				401
+			);
 		};
 
 		if ( '' !== $secret ) {
@@ -173,14 +203,26 @@ class Webhook {
 
 		if ( ! in_array( $event, array( 'payment.success', 'payment.failed' ), true ) ) {
 			// Not a payment event (invoice.*, proposal.* etc.) — acknowledge and ignore.
-			return new \WP_REST_Response( array( 'received' => true, 'handled' => false ), 200 );
+			return new \WP_REST_Response(
+				array(
+					'received' => true,
+					'handled'  => false,
+				),
+				200
+			);
 		}
 
 		$order = $this->find_order( $data );
 		if ( ! $order ) {
 			$logger->debug( 'Webhook ' . $event . ' did not match any order; ignoring.', array( 'data_id' => isset( $data['id'] ) ? $data['id'] : null ) );
 			// 200 so the platform does not retry an event we can never match.
-			return new \WP_REST_Response( array( 'received' => true, 'handled' => false ), 200 );
+			return new \WP_REST_Response(
+				array(
+					'received' => true,
+					'handled'  => false,
+				),
+				200
+			);
 		}
 
 		// Idempotency, claimed before any work and with a primitive that really is
@@ -200,7 +242,14 @@ class Webhook {
 		$claim = $this->claim_event( $event_id );
 		if ( ! $claim ) {
 			$logger->debug( 'Webhook ' . $event_id . ' is already claimed; treating as a duplicate.' );
-			return new \WP_REST_Response( array( 'received' => true, 'handled' => true, 'duplicate' => true ), 200 );
+			return new \WP_REST_Response(
+				array(
+					'received'  => true,
+					'handled'   => true,
+					'duplicate' => true,
+				),
+				200
+			);
 		}
 
 		// Authoritative reconciliation via the API (never from the payload).
@@ -211,11 +260,23 @@ class Webhook {
 			$this->release_event( $claim );
 			if ( 'LOCKED' === $result ) {
 				$logger->debug( 'Webhook for order #' . $order->get_id() . ' arrived while a reconcile was running; asking for a retry.' );
-				return new \WP_REST_Response( array( 'received' => false, 'reason' => 'busy' ), 503 );
+				return new \WP_REST_Response(
+					array(
+						'received' => false,
+						'reason'   => 'busy',
+					),
+					503
+				);
 			}
 			$logger->error( 'Webhook reconciliation failed for order #' . $order->get_id() . ': ' . $result->get_error_message() );
 			// 500 → the platform retries later (up to 4 attempts over 24h).
-			return new \WP_REST_Response( array( 'received' => false, 'reason' => 'verify-failed' ), 500 );
+			return new \WP_REST_Response(
+				array(
+					'received' => false,
+					'reason'   => 'verify-failed',
+				),
+				500
+			);
 		}
 
 		// After a paylink order is confirmed paid, record the payment id for the
@@ -240,7 +301,14 @@ class Webhook {
 
 		$order->save();
 
-		return new \WP_REST_Response( array( 'received' => true, 'handled' => true, 'status' => $result ), 200 );
+		return new \WP_REST_Response(
+			array(
+				'received' => true,
+				'handled'  => true,
+				'status'   => $result,
+			),
+			200
+		);
 	}
 
 	/**
@@ -319,6 +387,7 @@ class Webhook {
 		}
 
 		$binary = hash_hmac( 'sha256', $raw, $secret, true );
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- base64 is the signature's wire format; this is a comparison, not obfuscation.
 		return hash_equals( base64_encode( $binary ), $signature );
 	}
 
@@ -417,7 +486,11 @@ class Webhook {
 	private function note_refusal( $reason ) {
 		$health = get_transient( self::HEALTH_KEY );
 		if ( ! is_array( $health ) || ! isset( $health['count'] ) ) {
-			$health = array( 'count' => 0, 'first' => time(), 'reasons' => array() );
+			$health = array(
+				'count'   => 0,
+				'first'   => time(),
+				'reasons' => array(),
+			);
 		}
 
 		// The TOTAL since the last accepted delivery, not a count per cause:
@@ -428,9 +501,9 @@ class Webhook {
 		$health['reason'] = $reason;
 		$health['last']   = time();
 
-		$reasons              = isset( $health['reasons'] ) && is_array( $health['reasons'] ) ? $health['reasons'] : array();
-		$reasons[ $reason ]   = isset( $reasons[ $reason ] ) ? (int) $reasons[ $reason ] + 1 : 1;
-		$health['reasons']    = $reasons;
+		$reasons            = isset( $health['reasons'] ) && is_array( $health['reasons'] ) ? $health['reasons'] : array();
+		$reasons[ $reason ] = isset( $reasons[ $reason ] ) ? (int) $reasons[ $reason ] + 1 : 1;
+		$health['reasons']  = $reasons;
 
 		set_transient( self::HEALTH_KEY, $health, WEEK_IN_SECONDS );
 	}
@@ -444,6 +517,17 @@ class Webhook {
 		}
 	}
 
+	/**
+	 * Log a refused delivery, once per reason per throttle window.
+	 *
+	 * A mismatched signature is never throttled: it is the one refusal that can
+	 * mean a real misconfiguration or an attack.
+	 *
+	 * @param \WC_Logger_Interface|object $logger  The gateway's logger.
+	 * @param string                      $reason  Refusal reason slug.
+	 * @param string                      $message Message to log.
+	 * @return void
+	 */
 	private function log_refusal( $logger, $reason, $message ) {
 		$this->note_refusal( $reason );
 		$remedy = self::refusal_remedy( $reason );
@@ -467,6 +551,14 @@ class Webhook {
 		$logger->error( $message );
 	}
 
+	/**
+	 * Whether this caller has already used up its allowance for the window.
+	 *
+	 * @param \WP_REST_Request $request The delivery.
+	 * @param string           $bucket  Counter bucket.
+	 * @param int              $max     Requests allowed per window.
+	 * @return bool
+	 */
 	private function is_throttled( \WP_REST_Request $request, $bucket = 'all', $max = self::THROTTLE_MAX ) {
 		// Approximate on purpose: get_transient/set_transient is a read-then-write,
 		// so two requests can read the same count and both pass. That makes the cap

@@ -54,6 +54,8 @@ final class Lock {
 	private $stolen;
 
 	/**
+	 * Hold a claim on an option-backed lock.
+	 *
 	 * @param string $name   Option name.
 	 * @param string $token  Claim token.
 	 * @param bool   $stolen Whether an abandoned claim was broken to get it.

@@ -1,0 +1,10 @@
+# Composer brings in the coding-standards toolchain (phpcs, WPCS, the
+# WooCommerce sniffs). CI installs it fresh on every run; it is never shipped
+# and never committed.
+/vendor/
+/node_modules/
+
+# PHPCS caches and the reports a local run leaves behind.
+.phpcs-cache
+.phpcs.xml
+phpcs.xml
