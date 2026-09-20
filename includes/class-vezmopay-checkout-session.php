@@ -254,9 +254,9 @@ class Checkout_Session {
 		if ( isset( WC()->session ) && WC()->session ) {
 			WC()->session->set( self::SESSION_KEY, $session );
 			// A brand new payment carries no customer, whatever we attached to
-			// the one it replaces. (attach_client() keys its record to the token
-			// as well, so this is hygiene rather than the thing that makes the
-			// replacement get its own attach.)
+			// the one it replaces. attach_client() keys its record to the token as
+			// well, so this is hygiene rather than the thing that makes the
+			// replacement get its own attach.
 			WC()->session->set( self::ATTACHED_KEY, null );
 		}
 		// The key is now spent on a real payment; it must never open a second one.

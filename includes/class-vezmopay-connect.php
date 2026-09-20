@@ -60,7 +60,7 @@ class Connect {
 	}
 
 	/**
-	 * admin-post callback: the VezmoPay consent page redirected back here.
+	 * The admin-post callback: the VezmoPay consent page redirected back here.
 	 *
 	 * Validates the state nonce, exchanges the one-time token for credentials
 	 * (server-to-server), saves them for the returned environment, and bounces
@@ -88,7 +88,7 @@ class Connect {
 		if ( false !== $state_user ) {
 			delete_transient( 'vezmopay_connect_state_' . $state );
 		}
-		if ( false === $state_user || (int) $state_user !== get_current_user_id() ) {
+		if ( false === $state_user || get_current_user_id() !== (int) $state_user ) {
 			self::back_to_settings( array( 'vezmopay_connect_error' => 'state' ) );
 		}
 

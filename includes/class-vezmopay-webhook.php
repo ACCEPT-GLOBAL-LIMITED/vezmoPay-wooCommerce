@@ -387,6 +387,7 @@ class Webhook {
 		}
 
 		$binary = hash_hmac( 'sha256', $raw, $secret, true );
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- base64 is the signature's wire format; this is a comparison, not obfuscation.
 		return hash_equals( base64_encode( $binary ), $signature );
 	}
 
@@ -516,6 +517,17 @@ class Webhook {
 		}
 	}
 
+	/**
+	 * Log a refused delivery, once per reason per throttle window.
+	 *
+	 * A mismatched signature is never throttled: it is the one refusal that can
+	 * mean a real misconfiguration or an attack.
+	 *
+	 * @param \WC_Logger_Interface|object $logger  The gateway's logger.
+	 * @param string                      $reason  Refusal reason slug.
+	 * @param string                      $message Message to log.
+	 * @return void
+	 */
 	private function log_refusal( $logger, $reason, $message ) {
 		$this->note_refusal( $reason );
 		$remedy = self::refusal_remedy( $reason );
@@ -539,6 +551,14 @@ class Webhook {
 		$logger->error( $message );
 	}
 
+	/**
+	 * Whether this caller has already used up its allowance for the window.
+	 *
+	 * @param \WP_REST_Request $request The delivery.
+	 * @param string           $bucket  Counter bucket.
+	 * @param int              $max     Requests allowed per window.
+	 * @return bool
+	 */
 	private function is_throttled( \WP_REST_Request $request, $bucket = 'all', $max = self::THROTTLE_MAX ) {
 		// Approximate on purpose: get_transient/set_transient is a read-then-write,
 		// so two requests can read the same count and both pass. That makes the cap

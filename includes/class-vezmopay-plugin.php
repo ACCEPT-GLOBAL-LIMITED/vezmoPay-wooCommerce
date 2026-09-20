@@ -241,9 +241,6 @@ final class Plugin {
 	}
 
 	/**
-	 * AJAX: the SDK reported success/pending — verify against the API and finalize the order.
-	 */
-	/**
 	 * Classic checkout assets. Only on the checkout page, and only when the
 	 * gateway is actually available and set to an embedded mode.
 	 */
@@ -640,6 +637,7 @@ final class Plugin {
 		);
 		foreach ( $fields as $field => $sanitizer ) {
 			if ( isset( $_POST[ $field ] ) ) {
+				// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- sanitized by $sanitizer, the allow-listed callback for this field.
 				$client[ $field ] = call_user_func( $sanitizer, wp_unslash( $_POST[ $field ] ) );
 			}
 		}
@@ -667,13 +665,18 @@ final class Plugin {
 		wp_send_json_success( array( 'attached' => true ) );
 	}
 
+	/**
+	 * AJAX: the SDK reported success/pending - verify against the API and finalize the order.
+	 */
 	public function ajax_confirm() {
 		$this->verify_checkout_request( 'confirm' );
 
+		// phpcs:disable WordPress.Security.NonceVerification.Missing -- verify_checkout_request() ran check_ajax_referer() above; get_authorized_order() below is the hard check (hash_equals on the order key).
 		$order_id  = isset( $_POST['order_id'] ) ? absint( $_POST['order_id'] ) : 0;
 		$order_key = isset( $_POST['order_key'] ) ? sanitize_text_field( wp_unslash( $_POST['order_key'] ) ) : '';
-		$order     = $this->get_authorized_order( $order_id, $order_key );
-		$gateway   = $this->gateway();
+		// phpcs:enable WordPress.Security.NonceVerification.Missing
+		$order   = $this->get_authorized_order( $order_id, $order_key );
+		$gateway = $this->gateway();
 
 		if ( ! $order || ! $gateway || $order->get_payment_method() !== self::GATEWAY_ID ) {
 			wp_send_json_error( array( 'message' => __( 'Invalid order.', 'vezmopay-woocommerce' ) ), 400 );
@@ -706,10 +709,12 @@ final class Plugin {
 	public function ajax_status() {
 		$this->verify_checkout_request( 'status' );
 
+		// phpcs:disable WordPress.Security.NonceVerification.Missing -- verify_checkout_request() ran check_ajax_referer() above; get_authorized_order() below is the hard check (hash_equals on the order key).
 		$order_id  = isset( $_POST['order_id'] ) ? absint( $_POST['order_id'] ) : 0;
 		$order_key = isset( $_POST['order_key'] ) ? sanitize_text_field( wp_unslash( $_POST['order_key'] ) ) : '';
-		$order     = $this->get_authorized_order( $order_id, $order_key );
-		$gateway   = $this->gateway();
+		// phpcs:enable WordPress.Security.NonceVerification.Missing
+		$order   = $this->get_authorized_order( $order_id, $order_key );
+		$gateway = $this->gateway();
 
 		if ( ! $order || ! $gateway || $order->get_payment_method() !== self::GATEWAY_ID ) {
 			wp_send_json_error( array( 'message' => __( 'Invalid order.', 'vezmopay-woocommerce' ) ), 400 );
@@ -764,10 +769,12 @@ final class Plugin {
 	public function ajax_attempt_failed() {
 		$this->verify_checkout_request( 'attempt-failed' );
 
+		// phpcs:disable WordPress.Security.NonceVerification.Missing -- verify_checkout_request() ran check_ajax_referer() above; get_authorized_order() below is the hard check (hash_equals on the order key).
 		$order_id  = isset( $_POST['order_id'] ) ? absint( $_POST['order_id'] ) : 0;
 		$order_key = isset( $_POST['order_key'] ) ? sanitize_text_field( wp_unslash( $_POST['order_key'] ) ) : '';
-		$order     = $this->get_authorized_order( $order_id, $order_key );
-		$gateway   = $this->gateway();
+		// phpcs:enable WordPress.Security.NonceVerification.Missing
+		$order   = $this->get_authorized_order( $order_id, $order_key );
+		$gateway = $this->gateway();
 
 		if ( ! $order || ! $gateway || $order->get_payment_method() !== self::GATEWAY_ID ) {
 			wp_send_json_error( array( 'message' => __( 'Invalid order.', 'vezmopay-woocommerce' ) ), 400 );
@@ -775,6 +782,7 @@ final class Plugin {
 
 		// Never a free-text message from the browser: an allow-list of reasons,
 		// each mapped to wording this plugin owns.
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- same guard as the order lookup above.
 		$reason = isset( $_POST['reason'] ) ? sanitize_key( wp_unslash( $_POST['reason'] ) ) : 'unknown';
 		if ( ! in_array( $reason, array( 'timeout', 'declined', 'cancelled', 'expired', 'status', 'not-ready' ), true ) ) {
 			$reason = 'unknown';
@@ -891,9 +899,6 @@ final class Plugin {
 	}
 
 	/**
-	 * AJAX: apply a settings change (payment-method toggle or 3-D Secure mode).
-	 */
-	/**
 	 * Drop the cached account panel (after a change, or a settings save).
 	 */
 	public function flush_account_panel_cache() {
@@ -901,6 +906,9 @@ final class Plugin {
 		delete_transient( 'vezmopay_account_panel_live' );
 	}
 
+	/**
+	 * AJAX: apply a settings change (payment-method toggle or 3-D Secure mode).
+	 */
 	public function ajax_account_update() {
 		// The guard FIRST — account_ajax_gateway() is where the nonce and the
 		// manage_woocommerce capability are checked. Flushing before it let any
@@ -911,6 +919,7 @@ final class Plugin {
 		// Whatever this changes, the cached panel is now stale.
 		$this->flush_account_panel_cache();
 
+		// phpcs:disable WordPress.Security.NonceVerification.Missing -- account_ajax_gateway() above is a hard check_ajax_referer( 'vezmopay-admin' ) plus a manage_woocommerce capability check.
 		$kind = isset( $_POST['kind'] ) ? sanitize_key( wp_unslash( $_POST['kind'] ) ) : '';
 
 		if ( 'payment-methods' === $kind ) {
@@ -923,6 +932,7 @@ final class Plugin {
 		} elseif ( '3ds' === $kind ) {
 			$mode   = isset( $_POST['mode'] ) && 'on' === $_POST['mode'] ? 'on' : 'auto';
 			$result = $client->set_three_ds( $mode );
+			// phpcs:enable WordPress.Security.NonceVerification.Missing
 		} else {
 			wp_send_json_error( array( 'message' => __( 'Invalid setting.', 'vezmopay-woocommerce' ) ), 400 );
 		}
@@ -1051,12 +1061,12 @@ final class Plugin {
 				'status'         => array( 'pending', 'on-hold' ),
 				'payment_method' => self::GATEWAY_ID,
 				'date_created'   => '>' . ( time() - 7 * DAY_IN_SECONDS ),
-				'meta_key'       => '_vezmopay_last_reconciled', // phpcs:ignore WordPress.DB.SlowMetaQuery.SlowMetaQuery -- ordering by this meta IS the fix; the alternative is starving older orders.
+				'meta_key'       => '_vezmopay_last_reconciled', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- ordering by this meta IS the fix; the alternative is starving older orders.
 				'orderby'        => array(
 					'meta_value_num' => 'ASC',
 					'ID'             => 'ASC',
 				),
-				'meta_query'     => array( // phpcs:ignore WordPress.DB.SlowMetaQuery.SlowMetaQuery -- see above.
+				'meta_query'     => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- see above.
 					'relation' => 'OR',
 					array(
 						'key'     => '_vezmopay_last_reconciled',
