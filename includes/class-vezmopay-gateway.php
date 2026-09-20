@@ -1848,7 +1848,10 @@ class Gateway extends \WC_Payment_Gateway {
 			'currency'   => $order->get_currency(),
 			'ttlMinutes' => self::TOKEN_TTL_MINUTES,
 			// Auto-return the shopper to the store after VezmoPay settles the
-			// payment. VezmoPay appends ?paymentId=…&status=success|failed.
+			// payment. VezmoPay appends ?paymentId=…&status=success|pending|failed
+			// — pending is a submitted ACH debit, which reconcile_order_received()
+			// reads as PROCESSING and holds the order for settlement. The status is
+			// never trusted: the order-received page reads the API either way.
 			'successUrl' => $this->get_return_url( $order ),
 			'cancelUrl'  => add_query_arg( 'vezmopay_retry', '1', $order->get_checkout_payment_url( true ) ),
 		);
