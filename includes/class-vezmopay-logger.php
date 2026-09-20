@@ -91,9 +91,25 @@ class Logger {
 		// read by support, shipped in bug reports and backed up — it is not a
 		// place to keep somebody's name, address and phone number.
 		$sensitive = array(
-			'xapikey', 'xapisecret', 'authorization', 'token', 'accesstoken', 'refreshtoken',
-			'secret', 'apisecret', 'apikey', 'clienttoken', 'webhooksecret',
-			'name', 'email', 'phone', 'line1', 'line2', 'address', 'postalcode', 'company',
+			'xapikey',
+			'xapisecret',
+			'authorization',
+			'token',
+			'accesstoken',
+			'refreshtoken',
+			'secret',
+			'apisecret',
+			'apikey',
+			'clienttoken',
+			'webhooksecret',
+			'name',
+			'email',
+			'phone',
+			'line1',
+			'line2',
+			'address',
+			'postalcode',
+			'company',
 		);
 		foreach ( $data as $key => $value ) {
 			if ( is_array( $value ) ) {

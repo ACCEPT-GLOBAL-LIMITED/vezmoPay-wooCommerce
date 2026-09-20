@@ -82,7 +82,7 @@ class Gateway extends \WC_Payment_Gateway {
 		// which explains that VezmoPay has no refund API. Without it the method
 		// was unreachable and the limitation was silently absent — the merchant
 		// saw no refund control and no reason why.
-		$this->supports           = array( 'products', 'refunds' );
+		$this->supports = array( 'products', 'refunds' );
 
 		$this->init_form_fields();
 		$this->init_settings();
@@ -1680,7 +1680,7 @@ class Gateway extends \WC_Payment_Gateway {
 		}
 
 		$cache_key = $this->capability_key();
-		$cached     = get_transient( $cache_key );
+		$cached    = get_transient( $cache_key );
 		if ( '1' === $cached || '0' === $cached ) {
 			return '1' === $cached;
 		}
@@ -1887,7 +1887,7 @@ class Gateway extends \WC_Payment_Gateway {
 		// 409/422 mean the previous attempt reached a terminal state or the body changed
 		// (e.g. cart total edited): advance the attempt counter and retry once.
 		if ( is_wp_error( $data ) && in_array( $data->get_error_code(), array( 'vezmopay_http_409', 'vezmopay_http_422' ), true ) ) {
-			$attempt++;
+			++$attempt;
 			$order->update_meta_data( '_vezmopay_attempt', $attempt );
 			// Persist the bump immediately: if the retry below also fails, the next
 			// request must not collide with the same terminal idempotency key again.
@@ -1919,7 +1919,13 @@ class Gateway extends \WC_Payment_Gateway {
 		$order->update_meta_data( '_vezmopay_token_expires', ! empty( $secure['expiresAt'] ) ? strtotime( $secure['expiresAt'] ) : time() + self::TOKEN_TTL_MINUTES * MINUTE_IN_SECONDS );
 		$order->save();
 
-		$this->logger->debug( 'Secure payment ready for order #' . $order->get_id(), array( 'payment_id' => $data['payment']['id'], 'attempt' => $attempt ) );
+		$this->logger->debug(
+			'Secure payment ready for order #' . $order->get_id(),
+			array(
+				'payment_id' => $data['payment']['id'],
+				'attempt'    => $attempt,
+			)
+		);
 
 		return true;
 	}
@@ -1999,24 +2005,24 @@ class Gateway extends \WC_Payment_Gateway {
 		$sdk_url = (string) $order->get_meta( '_vezmopay_sdk_url' );
 
 		$params = array(
-			'mode'         => $mode,
-			'apiBase'      => $this->api_client()->host(),
+			'mode'           => $mode,
+			'apiBase'        => $this->api_client()->host(),
 			'checkoutOrigin' => $this->checkout_origin(),
-			'orderId'      => $order->get_id(),
-			'orderKey'     => $order->get_order_key(),
-			'clientToken'  => (string) $order->get_meta( '_vezmopay_client_token' ),
-			'iframeUrl'    => $iframe_url,
+			'orderId'        => $order->get_id(),
+			'orderKey'       => $order->get_order_key(),
+			'clientToken'    => (string) $order->get_meta( '_vezmopay_client_token' ),
+			'iframeUrl'      => $iframe_url,
 			// Target origin for the parent -> iframe submit message that drives the
 			// charge in iframe mode (element mode goes through the SDK's .pay()).
-			'secureOrigin' => $this->url_origin( $iframe_url ),
-			'confirmUrl'   => \WC_AJAX::get_endpoint( 'vezmopay_confirm' ),
-			'statusUrl'    => \WC_AJAX::get_endpoint( 'vezmopay_status' ),
+			'secureOrigin'   => $this->url_origin( $iframe_url ),
+			'confirmUrl'     => \WC_AJAX::get_endpoint( 'vezmopay_confirm' ),
+			'statusUrl'      => \WC_AJAX::get_endpoint( 'vezmopay_status' ),
 			// Where the browser reports an attempt it has given up on, so the
 			// order carries a note and the store gets one last API read.
-			'failedUrl'    => \WC_AJAX::get_endpoint( 'vezmopay_failed' ),
-			'nonce'        => wp_create_nonce( 'vezmopay-checkout' ),
-			'pollInterval' => 4000,
-			'i18n'         => array(
+			'failedUrl'      => \WC_AJAX::get_endpoint( 'vezmopay_failed' ),
+			'nonce'          => wp_create_nonce( 'vezmopay-checkout' ),
+			'pollInterval'   => 4000,
+			'i18n'           => array(
 				// wc_price() returns the currency symbol as an HTML entity
 				// (&#36;), and the script writes this label with textContent —
 				// so decode it here or a shopper who retries after a decline
@@ -2454,7 +2460,7 @@ class Gateway extends \WC_Payment_Gateway {
 	private function reconcile_locked( $order ) {
 		// Re-read: another pass may have completed this order between the last
 		// read and the lock being taken.
-		$order       = wc_get_order( $order->get_id() );
+		$order = wc_get_order( $order->get_id() );
 		if ( ! $order ) {
 			return new \WP_Error( 'vezmopay_no_order', __( 'Order not found.', 'vezmopay-woocommerce' ) );
 		}
