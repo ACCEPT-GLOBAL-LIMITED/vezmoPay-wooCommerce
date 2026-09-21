@@ -350,6 +350,29 @@ class Api_Client {
 	}
 
 	/**
+	 * Resolve a paylink through the PUBLIC route the hosted checkout page itself
+	 * uses — the only place the platform answers "can this link actually be paid
+	 * right now?".
+	 *
+	 * GET /paylinks/{code} adds a `checkout` member to the paylink row
+	 * ({ accepting, connectedAccountId, publishableKey, enabledMethods }), where
+	 * `accepting: false` is exactly the state that renders "No payment method
+	 * available" to the shopper. The merchant route (get_paylink) does NOT carry
+	 * it, which is why hosted mode reads this one before redirecting anybody.
+	 *
+	 * Public: no Authorization header, no token exchange, no 401 retry.
+	 *
+	 * @param string $code Paylink short code.
+	 * @return array|\WP_Error Paylink row incl. `checkout`.
+	 */
+	public function resolve_paylink_public( $code ) {
+		if ( '' === $this->base_url ) {
+			return new \WP_Error( 'vezmopay_config', __( 'VezmoPay API credentials are not configured.', 'vezmopay-woocommerce' ) );
+		}
+		return $this->raw_request( 'GET', '/paylinks/' . rawurlencode( (string) $code ), null, array() );
+	}
+
+	/**
 	 * Fetch a payment record — the source of truth for order state.
 	 *
 	 * @param string $payment_id VezmoPay payment id.

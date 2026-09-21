@@ -64,13 +64,6 @@ class Gateway extends \WC_Payment_Gateway {
 	private $reconciled = array();
 
 	/**
-	 * Re-entrancy guard for get_form_fields().
-	 *
-	 * @var bool
-	 */
-	private $building_form_fields = false;
-
-	/**
 	 * Constructor.
 	 */
 	public function __construct() {
@@ -103,11 +96,15 @@ class Gateway extends \WC_Payment_Gateway {
 		$this->has_fields = 'hosted' !== $this->integration_mode();
 
 		add_action( 'woocommerce_update_options_payment_gateways_' . $this->id, array( $this, 'process_admin_options' ) );
-		// A saved change of mode, credentials or the hosted override must re-ask,
-		// not wait out the TTL.
+		// A saved change of mode or credentials must re-ask whether the account
+		// can actually be paid on a link, not wait out the TTL.
 		add_action(
 			'woocommerce_update_options_payment_gateways_' . $this->id,
 			function () {
+				delete_transient( 'vezmopay_paylink_accepting_test' );
+				delete_transient( 'vezmopay_paylink_accepting_live' );
+				// Left behind by ≤0.3.2, which gated hosted mode on a flag the
+				// platform never sent. Nothing reads these any more.
 				delete_transient( 'vezmopay_paylink_capable_test' );
 				delete_transient( 'vezmopay_paylink_capable_live' );
 			},
@@ -273,6 +270,16 @@ class Gateway extends \WC_Payment_Gateway {
 	 * see render_embedded_checkout() and receipt_page(). The 0.2.13-only
 	 * 'embedded' value normalises to 'element', the richer of the two embeds.
 	 *
+	 * Hosted is returned exactly as configured. 0.3.2 downgraded it to 'element'
+	 * unless an account "paylink capability" flag came back true — but no such
+	 * flag exists on the merchant API (GET /merchant/account/payment-methods
+	 * reports which methods are switched on, nothing more), so the answer was
+	 * always false and a merchant who chose the redirect got the embedded iframe
+	 * instead. The real "can this link be paid?" signal is per-link and public —
+	 * GET /paylinks/{code} returns checkout.accepting — so the check now happens
+	 * in process_payment_hosted(), after the link exists and BEFORE the shopper
+	 * is sent anywhere.
+	 *
 	 * @return string 'element'|'iframe'|'hosted'
 	 */
 	public function integration_mode() {
@@ -283,49 +290,23 @@ class Gateway extends \WC_Payment_Gateway {
 		if ( ! in_array( $mode, array( 'element', 'iframe', 'hosted' ), true ) ) {
 			$mode = 'element';
 		}
-
-		// Hosted mode is a one-way trip: the order is created, the cart emptied,
-		// stock reduced and the shopper redirected. An account that cannot take a
-		// paylink payment sends them to "No payment method available" and the
-		// order strands behind a webhook that never comes — so hosted runs only
-		// when the account is CONFIRMED capable. Cache only: checkout must never
-		// wait on an API call to pick a mode.
-		$capable = get_transient( $this->capability_key() );
-
-		// The merchant's own override, because the only people who can answer
-		// "is this account activated?" today are merchants, and a settings
-		// checkbox is something a store owner can actually reach — a PHP filter
-		// in a child theme is not.
-		$forced = 'yes' === $this->get_option( 'force_hosted', 'no' );
-
-		/**
-		 * Force hosted checkout on when the platform cannot yet confirm the account
-		 * is activated to accept payment-link payments. Defaults to the merchant's
-		 * "Hosted checkout override" setting.
-		 *
-		 * @since 0.3.2
-		 *
-		 * @param bool $force Whether to run hosted mode regardless.
-		 */
-		$forced = (bool) apply_filters( 'vezmopay_force_hosted_mode', $forced );
-
-		if ( 'hosted' === $mode && '1' !== $capable && ! $forced ) {
-			return 'element';
-		}
 		return $mode;
 	}
 
 	/**
-	 * Transient key for the paylink capability answer.
+	 * Transient key for the "this account's payment links can be paid" answer.
 	 *
 	 * @return string
 	 */
-	private function capability_key() {
-		return 'vezmopay_paylink_capable_' . $this->environment();
+	private function accepting_key() {
+		return 'vezmopay_paylink_accepting_' . $this->environment();
 	}
 
 	/**
-	 * The mode the merchant actually chose, before any capability downgrade.
+	 * The mode the merchant actually chose.
+	 *
+	 * Identical to integration_mode() since the capability downgrade was removed;
+	 * kept because the admin screens read "what was configured" explicitly.
 	 *
 	 * @return string
 	 */
@@ -561,9 +542,11 @@ class Gateway extends \WC_Payment_Gateway {
 	const EMBED_CHECK_TTL = 10 * MINUTE_IN_SECONDS;
 
 	/**
-	 * Transient TTL for the account capability lookup behind hosted mode.
+	 * Transient TTL for the "payment links on this account can be paid" answer.
+	 * Only a positive answer is cached, so activating an account takes effect on
+	 * the very next checkout.
 	 */
-	const CAPABILITY_TTL = 15 * MINUTE_IN_SECONDS;
+	const ACCEPTING_TTL = 10 * MINUTE_IN_SECONDS;
 
 	/**
 	 * This store's origin, in the form VezmoPay stores trusted origins as.
@@ -814,54 +797,6 @@ class Gateway extends \WC_Payment_Gateway {
 	 * ------------------------------------------------------------------- */
 
 	/**
-	 * Form fields, minus anything that does not apply to this configuration.
-	 *
-	 * Filtering here rather than in admin_options() means a hidden field is
-	 * neither rendered NOR processed on save, so its stored value survives —
-	 * unsetting it at render time only would have let the next save read the
-	 * absent checkbox as "no" and silently drop a merchant's override.
-	 *
-	 * @return array
-	 */
-	public function get_form_fields() {
-		$fields = parent::get_form_fields();
-
-		// Deciding whether to hide a field reads a SETTING, and on a store that has
-		// never saved this gateway WC_Settings_API::init_settings() calls
-		// get_form_fields() to build its defaults — before $this->settings exists.
-		// Reading a setting from here then re-enters init_settings(), which calls
-		// get_form_fields() again: unbounded recursion that exhausts PHP's memory
-		// limit on the FIRST page load after activation (and on any saved store
-		// whose stored array predates the integration_mode key). Serve the
-		// unfiltered set to that inner call — it only needs keys and defaults.
-		if ( $this->building_form_fields ) {
-			return $fields;
-		}
-
-		$this->building_form_fields = true;
-		try {
-			if ( isset( $fields['force_hosted'] ) && ! $this->show_force_hosted() ) {
-				unset( $fields['force_hosted'] );
-			}
-		} finally {
-			$this->building_form_fields = false;
-		}
-
-		return $fields;
-	}
-
-	/**
-	 * Whether the hosted-checkout override is worth showing: hosted is the
-	 * configured mode, and the platform has not confirmed the account can take
-	 * payment-link payments.
-	 *
-	 * @return bool
-	 */
-	private function show_force_hosted() {
-		return 'hosted' === $this->configured_mode() && '1' !== get_transient( $this->capability_key() );
-	}
-
-	/**
 	 * Settings screen with an unmistakable environment banner.
 	 */
 	public function admin_options() {
@@ -905,27 +840,15 @@ class Gateway extends \WC_Payment_Gateway {
 			echo '</p></div>';
 		}
 
-		// Hosted mode selected but the account cannot take a paylink payment: this
-		// is the one check worth an API call, because the alternative is orders
-		// that strand. Warmed here so checkout only ever reads the cache.
-		if ( 'hosted' === $this->configured_mode() && ! $this->paylink_capable( true ) ) {
-			// Which of the two is true depends on the override, exactly as
-			// integration_mode() computes it. Reading configured_mode() alone told
-			// a merchant who had already ticked the box that hosted was not active
-			// and instructed them to tick it — both halves false.
-			if ( 'hosted' === $this->integration_mode() ) {
-				echo '<div class="notice notice-warning inline"><p><strong>';
-				echo esc_html__( 'Hosted checkout is active by your override.', 'vezmopay-woocommerce' );
-				echo '</strong> ';
-				echo esc_html__( 'VezmoPay still does not report whether this account is activated for payment-link payments, so the plugin cannot check it for you. If payment links do not actually work on your account, customers will be sent to a page that cannot take their money and their orders will sit unpaid — the plugin has no way to detect that. Untick the override to serve the embedded payment form instead.', 'vezmopay-woocommerce' );
-				echo '</p></div>';
-			} else {
-				echo '<div class="notice notice-error inline"><p><strong>';
-				echo esc_html__( 'Hosted checkout is not active.', 'vezmopay-woocommerce' );
-				echo '</strong> ';
-				echo esc_html__( 'VezmoPay does not yet report whether this account is activated for payment-link payments, so customers are being served the embedded payment form instead of a page they may not be able to pay on. If payment links already work on your account, tick “My VezmoPay account is activated for payment links” below to use the redirect anyway.', 'vezmopay-woocommerce' );
-				echo '</p></div>';
-			}
+		// Hosted mode redirects to a VezmoPay payment link. Say so plainly, so a
+		// merchant is never left wondering why the embedded form stopped
+		// appearing — and name the one thing that can still go wrong there.
+		if ( 'hosted' === $this->configured_mode() ) {
+			echo '<div class="notice notice-info inline"><p><strong>';
+			echo esc_html__( 'Hosted checkout is active.', 'vezmopay-woocommerce' );
+			echo '</strong> ';
+			echo esc_html__( 'Customers are redirected to a VezmoPay payment-link page to pay, and the order is completed by webhook. If your account is not yet activated to receive payments, the plugin detects that when it creates the link and keeps the customer on your checkout with an error instead of sending them to a page they cannot pay on.', 'vezmopay-woocommerce' );
+			echo '</p></div>';
 		}
 
 		// Explain a silent downgrade: element/iframe selected, but this origin is
@@ -1655,27 +1578,39 @@ class Gateway extends \WC_Payment_Gateway {
 			if ( ! empty( $paylink['id'] ) ) {
 				$order->update_meta_data( '_vezmopay_paylink_id', (string) $paylink['id'] );
 			}
-			// The promise depends on whether VezmoPay has confirmed this account can
-			// take a payment-link payment. On a store running hosted by merchant
-			// override it has not, and an account that is not activated renders an
-			// "UNAVAILABLE" page the shopper cannot pay on — no webhook is ever
-			// sent, and GET /merchant/paylinks/{code} keeps reporting INITIATED, so
-			// nothing here can detect it. Do not tell the merchant to wait for a
-			// delivery that may not exist.
 			$order->add_order_note(
-				$this->paylink_capable()
-					? sprintf(
-						/* translators: %s: paylink code */
-						__( 'VezmoPay paylink created (%s). Customer redirected to the hosted checkout. The order will be completed by webhook when VezmoPay confirms payment.', 'vezmopay-woocommerce' ),
-						$code
-					)
-					: sprintf(
-						/* translators: %s: paylink code */
-						__( 'VezmoPay paylink created (%s). Customer redirected to the hosted checkout. Hosted mode is running by merchant override — VezmoPay has not confirmed this account can take payment-link payments, so if the link shows “unavailable” to the customer no payment and no webhook will follow, and this order will need chasing manually.', 'vezmopay-woocommerce' ),
-						$code
-					)
+				sprintf(
+					/* translators: %s: paylink code */
+					__( 'VezmoPay paylink created (%s). Customer redirected to the hosted checkout. The order will be completed by webhook when VezmoPay confirms payment.', 'vezmopay-woocommerce' ),
+					$code
+				)
 			);
 			$existing = $code;
+		}
+
+		// The link exists — but a link on an account that is not activated to
+		// receive money renders "No payment method available" to the shopper,
+		// takes no payment and fires no webhook, while the order sits pending
+		// behind a delivery that never comes. GET /paylinks/{code} answers this
+		// (checkout.accepting) on the same public route the hosted page itself
+		// reads, so check BEFORE emptying the cart and sending anyone away.
+		if ( false === $this->paylink_accepting( $existing ) ) {
+			$order->add_order_note(
+				sprintf(
+					/* translators: %s: paylink code */
+					__( 'VezmoPay reports that payment link %s cannot take a payment — this account is not activated to receive payments yet. The customer was kept on the checkout instead of being redirected to a page that cannot charge them.', 'vezmopay-woocommerce' ),
+					$existing
+				)
+			);
+			$order->save();
+
+			$message = __( 'This store cannot take VezmoPay payments right now. Please choose a different payment method.', 'vezmopay-woocommerce' );
+			if ( current_user_can( 'manage_woocommerce' ) ) {
+				$message .= ' ' . __( '[Store managers only] VezmoPay reports this account is not yet activated to receive payments, so its payment links cannot be paid. Finish account verification in your VezmoPay console (Request production access), or switch Integration mode away from Hosted checkout.', 'vezmopay-woocommerce' );
+			}
+			wc_add_notice( $message, 'error' );
+
+			return array( 'result' => 'failure' );
 		}
 
 		// Awaiting payment on the external page. Routed through await_payment()
@@ -1694,86 +1629,50 @@ class Gateway extends \WC_Payment_Gateway {
 	}
 
 	/**
-	 * Whether the account can actually take a paylink payment.
+	 * Whether VezmoPay will take a payment on this link right now.
 	 *
-	 * Read from the same account endpoint the settings panel already uses, cached
-	 * so checkout never pays for it. Fails CLOSED for hosted mode only, where a
-	 * wrong answer costs a stranded order rather than a fallback.
+	 * The public checkout route resolves the merchant's routing for the link and
+	 * reports `checkout.accepting`; false is precisely the state that renders
+	 * "No payment method available" to the payer (unapproved account, charges
+	 * disabled, kill-switch, inactive link). It is the only readable signal —
+	 * POST /merchant/paylinks hands back a usable shortCode regardless, and
+	 * GET /merchant/paylinks/{code} keeps reporting INITIATED forever.
 	 *
-	 * TODO(platform): confirm which field signals paylink readiness. Until then
-	 * this treats "at least one enabled payment method" as the signal, and an
-	 * unreadable response as not-capable.
+	 * Tri-state on purpose:
+	 *   true  — confirmed payable, redirect.
+	 *   false — confirmed NOT payable, keep the shopper on the checkout.
+	 *   null  — unreadable (transport error, unexpected shape). Redirect anyway:
+	 *           hosted is what the merchant asked for, and a flaky probe must not
+	 *           silently turn their chosen checkout into a dead end.
 	 *
-	 * @param bool $allow_fetch Whether an uncached answer may cost an API call.
-	 * @return bool
+	 * A positive answer is cached per environment (the routing it reflects is
+	 * account-wide); a negative one never is, so activating the account takes
+	 * effect on the next attempt.
+	 *
+	 * @param string $code Paylink short code.
+	 * @return bool|null
 	 */
-	public function paylink_capable( $allow_fetch = false ) {
-		if ( ! $this->api_client()->is_configured() ) {
-			return false;
+	private function paylink_accepting( $code ) {
+		if ( '1' === get_transient( $this->accepting_key() ) ) {
+			return true;
 		}
 
-		$cache_key = $this->capability_key();
-		$cached    = get_transient( $cache_key );
-		if ( '1' === $cached || '0' === $cached ) {
-			return '1' === $cached;
+		$resolved = $this->api_client()->resolve_paylink_public( $code );
+		if ( is_wp_error( $resolved ) ) {
+			$this->logger->error( 'Could not resolve paylink ' . $code . ' before redirect: ' . $resolved->get_error_message() );
+			return null;
 		}
-		if ( ! $allow_fetch ) {
-			// Fails SAFE. Serving the embedded form when hosted would have worked is a
-			// mode the merchant did not pick; sending a shopper to a page that cannot
-			// take their money loses the sale and strands the order behind a webhook
-			// that never comes. The admin screen and the settings save both warm this
-			// with $allow_fetch = true, so a configured store answers from cache.
-			return false;
+		if ( ! isset( $resolved['checkout'] ) || ! is_array( $resolved['checkout'] ) || ! array_key_exists( 'accepting', $resolved['checkout'] ) ) {
+			// An older platform build that does not send `checkout` yet: unknown,
+			// not "no".
+			return null;
 		}
 
-		$methods = $this->api_client()->get_payment_methods();
-		$capable = false;
-		if ( ! is_wp_error( $methods ) && is_array( $methods ) ) {
-			$capable = $this->methods_confirm_paylink( $methods );
-		} elseif ( is_wp_error( $methods ) ) {
-			$this->logger->error( 'Could not read account payment methods: ' . $methods->get_error_message() );
+		$accepting = (bool) $resolved['checkout']['accepting'];
+		if ( $accepting ) {
+			set_transient( $this->accepting_key(), '1', self::ACCEPTING_TTL );
 		}
-
-		set_transient( $cache_key, $capable ? '1' : '0', self::CAPABILITY_TTL );
-		return $capable;
-	}
-
-	/**
-	 * Whether the account is CONFIRMED able to take a payment-link payment.
-	 *
-	 * Only an explicit flag counts. The previous version treated "some payment
-	 * method is toggled on" as capability, which is a different question:
-	 * GET /merchant/account/payment-methods reports the methods a merchant has
-	 * switched on, not whether the account is verified and activated to receive
-	 * money. On an unactivated account card reads enabled, so the old fallback
-	 * returned true, hosted mode passed the gate, and the shopper was redirected
-	 * to a page reading "No payment method available … contact the merchant
-	 * directly" while the order sat pending behind a webhook that never came.
-	 *
-	 * So this now answers "confirmed" rather than "nothing contradicted it", and
-	 * returns false until the platform sends one of these flags — which is the
-	 * correct state today, because today hosted mode does not work on an
-	 * unactivated account. A merchant whose account IS activated can force the
-	 * redirect with the vezmopay_force_hosted_mode filter.
-	 *
-	 * TODO(platform): this needs an account activation/verification flag on the
-	 * merchant API — e.g. GET /merchant/account returning
-	 * { activated, canAcceptPayments, verificationStatus }, or paylinkEnabled
-	 * added to the payment-methods response. Nothing currently reports it:
-	 * POST /merchant/paylinks returns a usable shortCode regardless, so creation
-	 * success is not a signal either. Only this method needs to change once the
-	 * flag exists.
-	 *
-	 * @param array $methods Decoded `data` payload.
-	 * @return bool
-	 */
-	private function methods_confirm_paylink( array $methods ) {
-		foreach ( array( 'paylinkEnabled', 'paylinksEnabled', 'canCreatePaylinks' ) as $flag ) {
-			if ( isset( $methods[ $flag ] ) ) {
-				return (bool) $methods[ $flag ];
-			}
-		}
-		return false;
+		return $accepting;
 	}
 
 	/**

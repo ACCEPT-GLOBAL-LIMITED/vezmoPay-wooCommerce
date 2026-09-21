@@ -75,7 +75,7 @@ total after the form mounts, or open `/checkout/order-pay/{id}/?key={key}` direc
 - [ ] **T-2.18** **[P]** Set it to "xyz.com storefront" → pay → **Origin** reads "xyz.com storefront"; the customer-facing checkout never shows it.
 - [ ] **T-2.19** Paste a 100-character label → it is stored and the session is created without an API error (the plugin caps the sent value at 64 characters).
 - [ ] **T-2.20** Change the label, then pay from a cart that already had a session open → the NEW label appears only once a fresh session is created; an in-flight session keeps the label it was made with.
-- [ ] **T-2.14** **[S]** "Hosted checkout override" checkbox is visible **only** when hosted mode is selected and VezmoPay has not confirmed payment-link capability; ticking it makes hosted mode take effect; a save while the field is hidden does **not** silently clear it.
+- [ ] **T-2.14** **[S]** Selecting Hosted checkout and saving shows the "Hosted checkout is active" notice, and no "Hosted checkout override" checkbox exists any more (removed in 0.3.14). A store upgrading from ≤0.3.13 with the override ticked behaves identically to one without it.
 
 ## 3. Gateway availability
 
@@ -144,9 +144,10 @@ Reach it as described in section 0.
 
 ## 9. Hosted mode
 
-- [ ] **T-9.1** **[P]** With an account VezmoPay confirms can take payment links → order redirects to `…/checkout/payments-links/{code}`; order Pending with the paylink note; stock reduced; cart emptied.
+- [ ] **T-9.1** **[P]** With an activated account → order redirects to `…/checkout/payments-links/{code}`; order Pending with the paylink note; stock reduced; cart emptied. Selecting Hosted checkout must never render the embedded form/iframe on either checkout.
 - [ ] **T-9.2** **[P]** Paying on the hosted page completes the order via webhook/cron. The customer is **not** redirected back — a known platform gap — and still receives the WooCommerce email.
-- [ ] **T-9.3** **[S]** With capability **unconfirmed**, hosted mode downgrades to the embedded form rather than sending the shopper to a page that cannot take money — unless the override (T-2.14) or `vezmopay_force_hosted_mode` is set.
+- [ ] **T-9.3** **[S]** On an account that is **not activated** to receive payments (`GET /api/v1/paylinks/{code}` → `checkout.accepting: false`) → no redirect: the shopper stays on the checkout with "This store cannot take VezmoPay payments right now", the order carries the note naming the link, the cart is **not** emptied, and a store manager also sees the activation hint.
+- [ ] **T-9.3a** **[S]** With the resolve call unreachable (block `/api/v1/paylinks/*`, or point the API URL at a host that times out after the link is created) → the redirect still happens; a line in WooCommerce → Status → Logs says the resolve failed.
 - [ ] **T-9.4** Retry the same order → the **same** paylink code is reused; no duplicate paylink.
 - [ ] **T-9.5** Order total changes after the paylink was created → a new paylink is issued for the new amount; the stale one can never pay the order in full.
 - [ ] **T-9.6** Hosted mode renders no payment fields on either checkout (no spinner, no empty container).

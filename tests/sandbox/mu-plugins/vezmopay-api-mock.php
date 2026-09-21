@@ -103,6 +103,20 @@ add_filter( "pre_http_request", function ( $pre, $args, $url ) {
 		) ) );
 	}
 
+	// GET /paylinks/{code} — PUBLIC resolve. Hosted mode reads `checkout.accepting`
+	// here before it redirects anyone; set the `mockpay_not_accepting` option to
+	// play an account that is not activated to receive money.
+	if ( preg_match( "#/api/v1/paylinks/([a-z0-9]+)$#i", $url, $pm ) ) {
+		$meta = (array) get_transient( "mocklink_" . $pm[1] );
+		return $json( array( "success" => true, "data" => array(
+			"shortCode" => $pm[1],
+			"status"    => "INITIATED",
+			"amount"    => isset( $meta["amount"] ) ? $meta["amount"] : 0,
+			"currency"  => isset( $meta["currency"] ) ? $meta["currency"] : "USD",
+			"checkout"  => array( "accepting" => ! get_option( "mockpay_not_accepting" ) ),
+		) ) );
+	}
+
 	// GET /merchant/payment/{id} — INITIATED until charged, then CAPTURED.
 	if ( preg_match( "#/merchant/payment/(pay_mock_[a-z0-9]+)#i", $url, $m ) ) {
 		$meta   = (array) get_transient( "mockpay_" . $m[1] );

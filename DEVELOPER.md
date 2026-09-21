@@ -11,7 +11,7 @@ plugin assumes a capability that isn't verified there.
 | `vezmopay-woocommerce.php` | — | Plugin header, PSR-ish autoloader for `VezmoPay\WooCommerce\*`, HPOS + Blocks compatibility declarations, boots `Plugin` on `plugins_loaded` (priority 11). |
 | `includes/class-vezmopay-plugin.php` | `Plugin` | Singleton orchestrator. Registers the gateway, the REST webhook route, Blocks support, the `wc_ajax_vezmopay_session` / `_confirm` / `_status` checkout AJAX endpoints (guest-safe: the order key must match, compared with `hash_equals`; `_session` is rate-limited and keeps a hard nonce check, `_confirm`/`_status` log a stale nonce rather than refusing a charge that already happened), the admin account/test-connection AJAX actions, the reconciliation cron, and the Settings action link. |
 | `includes/class-vezmopay-gateway.php` | `Gateway` | `WC_Payment_Gateway` implementation. Mode selection, credential resolution (constants > options), availability guards, `process_payment()`, the pay-page renderer (`receipt_page`), reconciliation (`reconcile_order_with_api`, `apply_payment_state`, `mark_order_paid`), and the explanatory `process_refund()` stub. |
-| `includes/class-vezmopay-api-client.php` | `Api_Client` | Thin HTTP client over `wp_remote_request`. Login, token caching, 401 retry, envelope unwrapping, and the four endpoint helpers (`create_secure_payment`, `create_paylink`, `get_paylink`, `get_payment`, plus `list_payments`). |
+| `includes/class-vezmopay-api-client.php` | `Api_Client` | Thin HTTP client over `wp_remote_request`. Login, token caching, 401 retry, envelope unwrapping, and the four endpoint helpers (`create_secure_payment`, `create_paylink`, `get_paylink`, `resolve_paylink_public`, `get_payment`, plus `list_payments`). |
 | `includes/class-vezmopay-settings.php` | `Settings` | Static definition of the gateway form fields, default host constants, and the `ZERO_DECIMAL_CURRENCIES` list. |
 | `includes/class-vezmopay-webhook.php` | `Webhook` | REST controller for `POST /wp-json/vezmopay/v1/webhook`. Signature check (**mandatory once a webhook secret is configured**), per-sender throttle, order lookup by stored meta, atomic event-id claim, and delegation to `Gateway::reconcile_order_with_api()`. |
 | `includes/class-vezmopay-connect.php` | `Connect` | Manual-key onboarding: the "Test connection" AJAX handler (performs the real login exchange). Placeholder home for an OAuth handshake if the platform ever ships one. |
@@ -28,7 +28,6 @@ plugin assumes a capability that isn't verified there.
 
 | Filter | Default | Purpose |
 |---|---|---|
-| `vezmopay_force_hosted_mode` | `false` | Run hosted checkout even though the platform cannot confirm the account is activated for payment-link payments. Hosted mode otherwise downgrades to the embedded form, because an unactivated account returns a usable paylink whose page reads "No payment method available" — the order is created, the cart emptied and stock reduced, and no webhook ever arrives. Set this only if you have confirmed in the VezmoPay dashboard that the account can take payments. |
 | `vezmopay_allowed_api_hosts` | `[ 'vezmo.com' ]` | Host suffixes an API base setting may use, for self-hosted deployments. https is required regardless. |
 | `vezmopay_github_token` | `''` | Read-only token for update checks against a private repository. |
 
@@ -124,8 +123,13 @@ completes the order and the customer is told to expect the confirmation email (n
 ```
 process_payment()
   → POST /merchant/paylinks (title, amount, currency, description)
-  → store _vezmopay_paylink_code / _vezmopay_paylink_id, note the order,
-    set status pending, reduce stock, empty cart
+  → store _vezmopay_paylink_code / _vezmopay_paylink_id, note the order
+  → GET /paylinks/{shortCode} (PUBLIC, unauthenticated) → checkout.accepting
+      false  → no redirect: checkout error + order note, cart kept, result=failure
+      true   → carry on (cached 10 min per environment)
+      error / field absent → carry on, logged; a flaky probe must not override
+                             the merchant's chosen mode
+  → set status pending, reduce stock, empty cart
   → redirect to {checkout_base}/checkout/payments-links/{shortCode}
   → customer pays on the VezmoPay page — the platform has NO return-URL support,
     so the customer is NOT redirected back (platform gap, flagged in the contract doc)
@@ -136,6 +140,14 @@ process_payment()
 
 The paylink is created once and reused on re-attempts (`_vezmopay_paylink_code` check), so a
 customer clicking "Place order" twice pays the same link.
+
+`checkout.accepting` is the only pre-redirect signal the platform exposes: `POST
+/merchant/paylinks` returns a usable `shortCode` on an account that cannot be paid, and
+`GET /merchant/paylinks/{code}` reports `INITIATED` for ever. ≤0.3.13 instead gated hosted mode
+on an account-level "paylink capability" flag that no endpoint sends, so `integration_mode()`
+returned `element` for every hosted store — the redirect never happened. Do not reintroduce a
+mode downgrade here: the configured mode is served, and only a CONFIRMED-negative per-link
+answer stops a redirect.
 
 ## Webhook trust model
 

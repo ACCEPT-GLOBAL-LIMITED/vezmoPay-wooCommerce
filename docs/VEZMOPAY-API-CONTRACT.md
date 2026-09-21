@@ -94,6 +94,12 @@ Response `data`:
   `currency?`, `description?`, `dueDate?`, `clientId?`. Returns paylink incl. `shortCode`.
 - Customer checkout page: `{CHECKOUT_HOST}/checkout/payments-links/{shortCode}`.
 - `GET /api/v1/merchant/paylinks/:code` — scope `paylink.read` — resolve status.
+- `GET /api/v1/paylinks/:code` — **public, no auth** — the same row plus a `checkout` member
+  `{ accepting, connectedAccountId, publishableKey, enabledMethods }`, resolved by
+  `PaylinkStripeService.resolveCheckoutAccount()`. `accepting: false` is exactly the state that
+  renders "No payment method available" to the payer (merchant not approved / charges disabled /
+  kill-switch / link inactive). The merchant route does **not** carry it. The plugin reads this
+  after creating the link and before redirecting anyone — the only readable pre-redirect signal.
 - ⚠️ **No success/cancel/return URL support** — the customer is not redirected back to the store.
   A `CreatePaylinkCheckoutDto` with successUrl/cancelUrl exists in the API repo but is wired to
   nothing. The plugin compensates with webhook + polling reconciliation and an order-received
@@ -150,7 +156,7 @@ Response `data`:
 
 | Capability | Status in velzovo-api |
 |---|---|
-| Account activation / verification status | No merchant endpoint reports whether the account is activated to receive money. `GET /merchant/account/payment-methods` reports toggled methods only, and `POST /merchant/paylinks` succeeds regardless — so the plugin cannot tell that a hosted-checkout redirect will dead-end. **Flagged.** |
+| Account activation / verification status | No merchant endpoint reports whether the account is activated to receive money: `GET /merchant/account/payment-methods` reports toggled methods only, and `POST /merchant/paylinks` succeeds regardless. Per **link**, the public `GET /paylinks/:code` → `checkout.accepting` does answer it, which is what hosted mode checks; there is still no account-level answer, so the settings screen cannot warn ahead of a real checkout. **Flagged.** |
 | Refund API (full/partial) | Internal-only; no merchant endpoint. Refund from the Vezmo/Stripe dashboard. |
 | Authorize-then-capture / void | No `capture_method: manual` anywhere; no capture/cancel endpoints. |
 | Tokenization / saved cards / customer vault | No SetupIntent/vault endpoints exposed. |
