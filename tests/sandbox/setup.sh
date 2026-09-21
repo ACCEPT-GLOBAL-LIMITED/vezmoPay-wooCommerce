@@ -42,7 +42,7 @@ update_option( "woocommerce_vezmopay_settings", array(
   "test_api_key" => "vzm_mock", "test_api_secret" => "mock_secret",
   "webhook_secret" => "test_secret_for_audit", "debug" => "yes",
   "title" => "VezmoPay", "description" => "Pay securely by card or US bank account via VezmoPay.",
-  "checkout_theme" => "light", "force_hosted" => "no",
+  "checkout_theme" => "light",
 ) );
 echo "settings written\n";'
 

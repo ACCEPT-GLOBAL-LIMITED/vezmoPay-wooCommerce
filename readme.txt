@@ -4,7 +4,7 @@ Tags: payments, payment gateway, credit card, ach, woocommerce
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.3.13
+Stable tag: 0.3.14
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -112,6 +112,12 @@ This plugin connects your store to the VezmoPay payment platform, operated by Ve
 VezmoPay is operated by Vezmo Technology, Inc.: [https://vezmo.com](https://vezmo.com) — see the site for terms of service and privacy policy.
 
 == Changelog ==
+
+= 0.3.14 =
+
+* Fixed Hosted checkout serving the embedded payment form instead of redirecting to VezmoPay. Choosing "Hosted checkout (redirect to the VezmoPay paylink page)" gave customers an iframe on your own pay page: 0.3.2 made hosted mode wait for VezmoPay to confirm the account was activated for payment links, and VezmoPay has no such confirmation to give, so the answer was always no and the mode silently fell back. Hosted mode now does what it says — the customer goes to the VezmoPay payment-link page and pays there.
+* The check that fallback existed for is now done properly, per payment, against the same public route the VezmoPay payment page itself reads. If VezmoPay will not take a payment on the link — an account not yet activated to receive money — the customer stays on your checkout with an error and the order records why, instead of being sent to a page reading "No payment method available" and leaving the order stranded. If that check cannot be reached, the redirect still happens: your chosen mode is not overruled by a failed lookup.
+* The "My VezmoPay account is activated for payment links" setting and the `vezmopay_force_hosted_mode` filter are gone. Both existed only to defeat the fallback; nothing falls back now, and a store that had ticked the box needs no action.
 
 = 0.3.13 =
 
