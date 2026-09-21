@@ -968,6 +968,13 @@ final class Plugin {
 		}
 		wp_enqueue_style( 'vezmopay-admin', VEZMOPAY_WC_PLUGIN_URL . 'assets/css/vezmopay-admin.css', array(), self::asset_version( 'assets/css/vezmopay-admin.css' ) );
 		wp_enqueue_script( 'vezmopay-admin-account', VEZMOPAY_WC_PLUGIN_URL . 'assets/js/admin-account.js', array(), self::asset_version( 'assets/js/admin-account.js' ), true );
+
+		// The registry can still be empty here on some admin requests (another
+		// plugin filtering woocommerce_payment_gateways, WC not fully booted).
+		// The panel is cosmetic, so fall back to the gateway's own default mode
+		// rather than fataling the whole settings screen.
+		$gateway = $this->gateway();
+		$mode    = $gateway ? $gateway->integration_mode() : 'element';
 		wp_localize_script(
 			'vezmopay-admin-account',
 			'vezmopay_admin_params',
@@ -977,7 +984,7 @@ final class Plugin {
 				// What this store actually serves shoppers. The panel describes the
 				// VezmoPay ACCOUNT, which is not the same thing — see the scope
 				// lines below — so it has to know which checkout this store runs.
-				'mode'    => $gateway->integration_mode(),
+				'mode'    => $mode,
 				'i18n'    => array(
 					'loading'        => __( 'Loading your VezmoPay account settings…', 'vezmopay-woocommerce' ),
 					'loadFailed'     => __( 'We couldn\'t load your VezmoPay account settings. Make sure your API key has the account.read permission, or manage them in your VezmoPay console.', 'vezmopay-woocommerce' ),
@@ -1056,6 +1063,19 @@ final class Plugin {
 		$gateway = $this->gateway();
 		if ( ! $gateway ) {
 			return;
+		}
+
+		// Keep the hosted-mode capability answer warm. integration_mode() reads
+		// that transient and downgrades hosted to the embedded form whenever it
+		// is missing, and the only thing that used to populate it was a merchant
+		// loading the gateway settings screen. With a 15-minute TTL that meant
+		// hosted mode stopped redirecting a quarter of an hour after anyone last
+		// looked at the settings, silently and for good. This cron runs every
+		// five minutes, so the answer is always cached and checkout still never
+		// waits on an API call. paylink_capable() returns the cached value
+		// without a request, so this costs one call per TTL, not one per run.
+		if ( 'hosted' === $gateway->configured_mode() ) {
+			$gateway->paylink_capable( true );
 		}
 
 		// Least-recently-checked first. Taking the NEWEST 25 every run, with no
