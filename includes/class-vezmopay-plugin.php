@@ -1036,6 +1036,19 @@ final class Plugin {
 			return;
 		}
 
+		// Keep the hosted-mode capability answer warm. integration_mode() reads
+		// that transient and downgrades hosted to the embedded form whenever it
+		// is missing, and the only thing that used to populate it was a merchant
+		// loading the gateway settings screen. With a 15-minute TTL that meant
+		// hosted mode stopped redirecting a quarter of an hour after anyone last
+		// looked at the settings, silently and for good. This cron runs every
+		// five minutes, so the answer is always cached and checkout still never
+		// waits on an API call. paylink_capable() returns the cached value
+		// without a request, so this costs one call per TTL, not one per run.
+		if ( 'hosted' === $gateway->configured_mode() ) {
+			$gateway->paylink_capable( true );
+		}
+
 		// Least-recently-checked first. Taking the NEWEST 25 every run, with no
 		// record of what had been checked, meant abandoned orders sat in the
 		// window and occupied the same slots forever: a store taking more than 25
