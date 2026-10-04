@@ -86,7 +86,7 @@ if (surface === 'box') {
   await page.waitForTimeout(2500);
   await page.evaluate(() => { const r = document.querySelector('#radio-control-wc-payment-method-options-vezmopay'); if (r && !r.checked) r.click(); });
   await page.waitForTimeout(4000);
-  await page.locator('.vezmopay-inline-pay').first().click();
+  await page.locator('.wc-block-components-checkout-place-order-button').first().click();
 } else {
   [id, key] = await seedOrder(surface === 'payform' ? 'failed' : 'pending');
   const q = surface === 'payform' ? `?pay_for_order=true&key=${key}` : `?key=${key}`;
