@@ -79,6 +79,11 @@
 	var loading = false;
 	var ready = false;
 	var charging = null;     // { orderId, orderKey } while a charge is running
+	// The order the most recent charge was for, kept after `charging` is cleared.
+	// The form's outcome can land after we gave up on the attempt — the bank-link
+	// window of an instant ACH payment can take longer than ATTEMPT_LIMIT_MS just
+	// to load — and that outcome still belongs to this order. See completeCharge().
+	var lastCharge = null;   // { orderId, orderKey, marker }
 	// Set when a charge fails: the message to put back on screen once the
 	// replacement form has mounted, so the reason survives the re-mount.
 	var pendingNotice = '';
@@ -1478,18 +1483,9 @@
 		window.location.href = url;
 	}
 
-	function startCharge( orderId, orderKey, deferred, marker ) {
-		if ( charging ) {
-			// A second attempt while one is running. Returning silently left the
-			// Blocks checkout awaiting a promise nobody would ever settle, with no
-			// notice and no way out but a page reload.
-			log( 'ignoring a second charge attempt for order', orderId, '- one is already running' );
-			if ( deferred ) {
-				deferred.reject( params.i18n.processing );
-			}
-			return;
-		}
-		charging = {
+	/** Fresh state for a charge on this order. */
+	function newChargeState( orderId, orderKey, deferred, marker ) {
+		return {
 			orderId: orderId,
 			orderKey: orderKey,
 			deferred: deferred || null,
@@ -1505,6 +1501,21 @@
 			returnUrl: ( marker && marker.returnUrl ) || '',
 			payUrl: ( marker && marker.payUrl ) || '',
 		};
+	}
+
+	function startCharge( orderId, orderKey, deferred, marker ) {
+		if ( charging ) {
+			// A second attempt while one is running. Returning silently left the
+			// Blocks checkout awaiting a promise nobody would ever settle, with no
+			// notice and no way out but a page reload.
+			log( 'ignoring a second charge attempt for order', orderId, '- one is already running' );
+			if ( deferred ) {
+				deferred.reject( params.i18n.processing );
+			}
+			return;
+		}
+		charging = newChargeState( orderId, orderKey, deferred, marker );
+		lastCharge = { orderId: orderId, orderKey: orderKey, marker: marker || null };
 		log( 'charge starting for order', orderId, vezmo ? 'via SDK pay()' : 'via frame submit message' );
 		setMessage( params.i18n.processing, 'info' );
 		refreshPayButton();
@@ -1622,6 +1633,18 @@
 
 	/** Ask the STORE whether the order is paid; never trust this page's word. */
 	function completeCharge() {
+		if ( ! charging && lastCharge ) {
+			// An outcome for the order we last charged, arriving after we stopped
+			// waiting for it. Nothing new is charged here — the money already
+			// moved inside the form — so pick that order back up and confirm it
+			// exactly as an on-time outcome would be. The timeout's failure
+			// message was a guess, and this is the answer to it.
+			log( 'a late outcome for order', lastCharge.orderId, '— confirming it with the store' );
+			charging = newChargeState( lastCharge.orderId, lastCharge.orderKey, null, lastCharge.marker );
+			charging.sawProcessing = true;
+			refreshPayButton();
+			startPolling();
+		}
 		if ( ! charging ) {
 			// A payment settled that we never asked for, so there is no order to
 			// confirm it against — the shopper paid in the payment box without
@@ -1835,6 +1858,9 @@
 		if ( 'hosted' === params.mode ) {
 			return;
 		}
+		// The replacement form carries a new payment, so nothing it reports can
+		// belong to the order we last charged.
+		lastCharge = null;
 		// Only a message from the FRAME needs the instruction appended; this
 		// plugin's own strings already end with "try again", and appending gave
 		// the shopper "Payment failed. Please check your card details and try
