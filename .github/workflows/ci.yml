@@ -35,13 +35,8 @@ jobs:
           node --check tests/sandbox/fixtures/mock-vezmo.js
 
   standards:
-    name: Coding standards (advisory)
+    name: Coding standards
     runs-on: ubuntu-latest
-    # ADVISORY FOR NOW. DEVELOPER.md has documented WordPress/WooCommerce
-    # standards since the first release but nothing has ever enforced them, so
-    # the existing backlog is unknown. Read the annotations, clear the backlog,
-    # then delete this line and let it block.
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 
