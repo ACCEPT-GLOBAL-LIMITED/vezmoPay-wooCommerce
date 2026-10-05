@@ -55,12 +55,12 @@ These reflect the VezmoPay platform as it exists today (verified against the pla
 == Installation ==
 
 1. Upload the plugin to `/wp-content/plugins/` (or install via Plugins → Add New) and activate it. WooCommerce 8.0+ must be active.
-2. In your **VezmoPay dashboard**, create an API key (Settings → API Keys) with these permissions: `secure-payment.create`, `paylink.create`, `paylink.read`, `payment.read`, plus `account.read` and `account.update` for the in-plugin account settings panel. Note that creating a new key deactivates your previous key.
-3. In WordPress, go to **WooCommerce → Settings → Payments → VezmoPay**. Choose your environment (Test or Live), paste the API key and secret, save, and click **Test connection**.
-   * Alternatively, define `VEZMOPAY_TEST_API_KEY`, `VEZMOPAY_TEST_API_SECRET`, `VEZMOPAY_LIVE_API_KEY` and `VEZMOPAY_LIVE_API_SECRET` in `wp-config.php` to keep secrets out of the database.
-4. In the VezmoPay dashboard, register a **webhook endpoint** pointing at `https://your-store.example/wp-json/vezmopay/v1/webhook`, subscribed to the `payment.success` and `payment.failed` events. Copy the `whsec_…` secret (shown only once) into the plugin's **Webhook secret** field and save.
-5. If you use the **inline payment element** mode, add your store's origin (e.g. `https://your-store.example`) to the **trusted origins** list in the VezmoPay dashboard (merchant settings) so the payment element can send success events to your page. If you skip this, payments still complete via the plugin's polling fallback — just slightly slower.
-6. Pick your integration mode, enable the gateway, and place a test order.
+2. In WordPress, go to **WooCommerce → Settings → Payments → VezmoPay**, set **Environment** to Test, and click **Connect with VezmoPay**. Sign in and approve: the plugin creates and saves your API key, adds your store as a trusted origin, and (on an `https://` store) registers the webhook and saves its secret. Nothing needs to be copied by hand.
+3. Prefer to set it up yourself? In the VezmoPay dashboard under **Developers**:
+   * **API keys:** create a key with the permissions `secure-payment.create`, `paylink.create`, `paylink.read`, `payment.read`, `account.read` and `account.update`, paste the key and secret into the plugin, save, and click **Test connection**. Creating a new key deactivates your previous key. To keep secrets out of the database, define `VEZMOPAY_TEST_API_KEY`, `VEZMOPAY_TEST_API_SECRET`, `VEZMOPAY_LIVE_API_KEY` and `VEZMOPAY_LIVE_API_SECRET` in `wp-config.php` instead.
+   * **Webhooks:** register an endpoint pointing at `https://your-store.example/wp-json/vezmopay/v1/webhook`, subscribed to `payment.success` and `payment.failed`, and copy its `whsec_…` secret (shown only once) into the plugin's **Webhook secret** field. Without a secret the plugin refuses every delivery, and orders settle by polling and the five-minute reconciliation instead.
+   * **Trusted origins** (inline element and iframe modes): add your store's origin, e.g. `https://your-store.example`. Until it is trusted, customers are sent to the VezmoPay secure page to pay instead of seeing the form on your checkout.
+4. Pick your integration mode, enable the gateway, and place a test order.
 
 == Frequently Asked Questions ==
 
@@ -76,9 +76,9 @@ Set the Environment to **Test** and use a VezmoPay API key that was created as a
 
 In all three modes the card form is served by VezmoPay (a Stripe Payment Element inside a VezmoPay-hosted page or iframe). Card numbers never touch your server or your page's DOM, which keeps a typical store at SAQ-A, the lightest PCI SAQ level. 3-D Secure challenges also run inside the VezmoPay-hosted surface.
 
-= Are webhooks secure? I read that VezmoPay signing is disabled. =
+= Are webhooks secure? =
 
-Correct — the platform does not currently sign webhook deliveries. The plugin is designed so this does not matter for order integrity: it never trusts webhook payload data. Every incoming event is only used as a hint; the plugin re-fetches the payment from the VezmoPay API (authenticated with your credentials) and updates the order from that authoritative record. It also deduplicates event ids and holds any order whose paid amount does not match the order total. If VezmoPay enables signing, the plugin verifies the `X-Webhook-Signature` HMAC automatically using your saved `whsec_` secret.
+Yes. Every delivery must carry a valid `X-Webhook-Signature` HMAC for your `whsec_` secret; unsigned or mis-signed deliveries are refused, and with no secret saved nothing is processed (the settings screen shows a notice explaining which). Even a correctly signed event is only a hint: the plugin re-fetches the payment from the VezmoPay API, authenticated with your credentials, and updates the order from that record. It also deduplicates event ids and holds any order whose paid amount does not match the order total.
 
 = Why doesn't the gateway show for my JPY (or KRW, VND, …) store? =
 
